@@ -6,6 +6,7 @@ export interface Student {
   departmentId: string;
   programId: string;
   batch: 'Spring' | 'Summer' | 'Fall';
+  semester?: string;
 }
 
 export interface GA {

@@ -17,10 +17,15 @@ import {
   AlertCircle,
   RefreshCw,
   Clock,
-  Calendar
+  Calendar,
+  Upload,
+  FileSpreadsheet
 } from 'lucide-react';
 import { apiService } from '../services/apiService';
 import { Student, Department, Program } from '../types';
+import * as XLSX from 'xlsx';
+import StudentDirectory from './admission/StudentDirectory';
+import StudentDelete from './admission/StudentDelete';
 
 interface AdmissionDashboardProps {
   onLogout: () => void;
@@ -44,6 +49,7 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
   const [selectedDeptId, setSelectedDeptId] = useState('');
   const [selectedProgId, setSelectedProgId] = useState('');
   const [selectedBatch, setSelectedBatch] = useState<'Spring' | 'Summer' | 'Fall'>('Fall');
+  const [selectedSemester, setSelectedSemester] = useState<string>('1st');
   const [formError, setFormError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
@@ -51,6 +57,32 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
   const [filterDeptId, setFilterDeptId] = useState<string>('all');
   const [filterProgId, setFilterProgId] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Tab State
+  const [activeTab, setActiveTab] = useState<'directory' | 'add' | 'edit' | 'delete' | 'import'>('directory');
+
+  // Edit Tab Search States
+  const [editSearchQuery, setEditSearchQuery] = useState('');
+  const [editSearchError, setEditSearchError] = useState<string | null>(null);
+
+  // Delete Tab Search States
+  const [deleteSearchQuery, setDeleteSearchQuery] = useState('');
+  const [studentToDelete, setStudentToDelete] = useState<Student | null>(null);
+
+  // Excel/CSV Import States
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [previewData, setPreviewData] = useState<any[]>([]);
+  const [importStatus, setImportStatus] = useState<{ type: 'idle' | 'success' | 'error', message: string }>({ type: 'idle', message: '' });
+
+  // Filter and Search Logic for Delete Tab Directory
+  const deleteFilteredStudents = useMemo(() => {
+    return students.filter(student => {
+      const q = deleteSearchQuery.toLowerCase().trim();
+      return q === '' || 
+        student.name.toLowerCase().includes(q) || 
+        student.regNo.toLowerCase().includes(q);
+    });
+  }, [students, deleteSearchQuery]);
 
   // Fetch data on mount
   useEffect(() => {
@@ -146,9 +178,12 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
     setSelectedDeptId(departments[0]?.id || '');
     setSelectedProgId('');
     setSelectedBatch('Fall');
+    setSelectedSemester('1st');
     setFormError(null);
     setIsEditing(false);
     setEditRegNo(null);
+    setEditSearchQuery('');
+    setEditSearchError(null);
   };
 
   // Add / Edit Student Form Submission
@@ -190,7 +225,8 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
       name: cleanName,
       departmentId: selectedDeptId,
       programId: selectedProgId,
-      batch: selectedBatch
+      batch: selectedBatch,
+      semester: selectedSemester
     };
 
     try {
@@ -230,33 +266,196 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
     setSelectedDeptId(student.departmentId);
     setSelectedProgId(student.programId);
     setSelectedBatch(student.batch);
+    setSelectedSemester(student.semester || '1st');
     setFormError(null);
     setSuccessMsg(null);
-    
-    // Smooth scroll to form on mobile devices
-    const formEl = document.getElementById('admission-form-container');
-    if (formEl) {
-      formEl.scrollIntoView({ behavior: 'smooth' });
+    setActiveTab('edit'); // Switch to Edit Tab in the Navbar
+  };
+
+  // Look up student by registration number directly inside Edit tab
+  const handleEditSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    setEditSearchError(null);
+    const cleanQuery = editSearchQuery.trim().toUpperCase();
+    if (!cleanQuery) {
+      setEditSearchError("Please enter a registration number");
+      return;
+    }
+    const matched = students.find(s => s.regNo.toUpperCase() === cleanQuery);
+    if (matched) {
+      handleEditClick(matched);
+    } else {
+      setEditSearchError(`No student found with registration number "${cleanQuery}"`);
     }
   };
 
   // Delete student record
-  const handleDeleteClick = async (student: Student) => {
-    const confirmDelete = window.confirm(`Are you sure you want to permanently delete student "${student.name}" (${student.regNo})? This action is irreversible.`);
-    if (!confirmDelete) return;
+  const handleDeleteClick = (student: Student) => {
+    setStudentToDelete(student);
+  };
+
+  const confirmDeleteStudent = async () => {
+    if (!studentToDelete) return;
 
     try {
-      await apiService.deleteStudent(student.regNo);
-      setStudents(prev => prev.filter(s => s.regNo !== student.regNo));
-      setSuccessMsg(`Student record for "${student.name}" deleted successfully.`);
+      setLoading(true);
+      await apiService.deleteStudent(studentToDelete.regNo);
+      setStudents(prev => prev.filter(s => s.regNo !== studentToDelete.regNo));
+      setSuccessMsg(`Student record for "${studentToDelete.name}" deleted successfully.`);
       setTimeout(() => setSuccessMsg(null), 4000);
       
       // If we are currently editing the deleted student, reset the form
-      if (editRegNo === student.regNo) {
+      if (editRegNo === studentToDelete.regNo) {
         resetForm();
       }
     } catch (err: any) {
-      alert("Error deleting student record. Please try again.");
+      setFormError("Error deleting student record. Please try again.");
+    } finally {
+      setLoading(false);
+      setStudentToDelete(null);
+    }
+  };
+
+  // Excel/CSV Importer handlers
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImportFile(file);
+    setImportStatus({ type: 'idle', message: '' });
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const bstr = event.target?.result;
+        const wb = XLSX.read(bstr, { type: 'binary' });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        const data = XLSX.utils.sheet_to_json(ws);
+        
+        const parsedStudents = data.map((row: any, index) => {
+          const getVal = (keys: string[]) => {
+            for (const k of keys) {
+              const matchedKey = Object.keys(row).find(rk => rk.toLowerCase().trim().replace(/[\s_-]+/g, '') === k.toLowerCase());
+              if (matchedKey) return String(row[matchedKey]).trim();
+            }
+            return '';
+          };
+
+          const regNoVal = getVal(['regno', 'registrationnumber', 'rollno', 'registrationid', 'id']);
+          const nameVal = getVal(['name', 'studentname', 'fullname']);
+          const deptVal = getVal(['departmentid', 'deptid', 'department', 'dept']);
+          const progVal = getVal(['programid', 'progid', 'program', 'progcode', 'code']);
+          const batchVal = getVal(['batch', 'admissionbatch']);
+          const semesterVal = getVal(['semester', 'currentsemester', 'sem']);
+
+          let cleanedBatch: 'Spring' | 'Summer' | 'Fall' = 'Fall';
+          const bLower = batchVal.toLowerCase();
+          if (bLower.includes('spring')) cleanedBatch = 'Spring';
+          else if (bLower.includes('summer')) cleanedBatch = 'Summer';
+
+          let cleanedSemester = semesterVal || '1st';
+          if (/^\d+$/.test(cleanedSemester)) {
+            const num = parseInt(cleanedSemester);
+            const suffixes = ["th", "st", "nd", "rd", "th", "th", "th", "th", "th", "th", "th"];
+            cleanedSemester = num + (suffixes[num] || "th");
+          }
+
+          const errors: string[] = [];
+          if (!regNoVal) errors.push("Missing Registration No.");
+          if (!nameVal) errors.push("Missing Student Name.");
+          if (!deptVal) errors.push("Missing Department ID.");
+          if (!progVal) errors.push("Missing Program ID.");
+
+          const validDept = departments.some(d => d.id.toLowerCase() === deptVal.toLowerCase());
+          const matchedDeptId = departments.find(d => d.id.toLowerCase() === deptVal.toLowerCase())?.id || deptVal;
+          if (!validDept && deptVal) {
+            errors.push(`Invalid Dept ID "${deptVal}". Expected one of: ${departments.map(d => d.id).join(', ')}`);
+          }
+
+          const validProg = programs.some(p => p.id.toLowerCase() === progVal.toLowerCase());
+          const matchedProgId = programs.find(p => p.id.toLowerCase() === progVal.toLowerCase())?.id || progVal;
+          if (!validProg && progVal) {
+            errors.push(`Invalid Program ID "${progVal}". Expected one of: ${programs.map(p => p.id).join(', ')}`);
+          }
+
+          const isDupInSystem = students.some(s => s.regNo.toUpperCase() === regNoVal.toUpperCase());
+          if (isDupInSystem) {
+            errors.push(`Reg No. "${regNoVal}" already exists in system.`);
+          }
+
+          return {
+            rowNum: index + 2,
+            regNo: regNoVal.toUpperCase(),
+            name: nameVal,
+            departmentId: matchedDeptId,
+            programId: matchedProgId,
+            batch: cleanedBatch,
+            semester: cleanedSemester,
+            errors,
+            isValid: errors.length === 0
+          };
+        });
+
+        setPreviewData(parsedStudents);
+      } catch (err: any) {
+        console.error(err);
+        setImportStatus({ type: 'error', message: 'Failed to parse Excel file. Please ensure it is a valid .xlsx or .xls sheet.' });
+      }
+    };
+    reader.readAsBinaryString(file);
+  };
+
+  const handleDownloadTemplate = () => {
+    const headers = [
+      ["Registration Number", "Student Name", "Department ID", "Program ID", "Admission Batch", "Semester"],
+      ["FA22-BSCS-0045", "Syeda Fatima Alvi", "computing", "bscs", "Fall", "6th"],
+      ["SP23-BBA-0120", "Zayan Ahmed Khan", "business", "bba", "Spring", "5th"],
+      ["FA25-BECE-0010", "Abdur Rehman Khalid", "engineering", "be_ce", "Fall", "1st"]
+    ];
+    
+    const ws = XLSX.utils.aoa_to_sheet(headers);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "StudentsTemplate");
+    XLSX.writeFile(wb, "Student_Registration_Template.xlsx");
+  };
+
+  const handleImportSubmit = async () => {
+    const validStudentsOnly = previewData.filter(p => p.isValid);
+    if (validStudentsOnly.length === 0) {
+      setImportStatus({ type: 'error', message: 'No valid records found to import. Please fix any validation errors in your sheet.' });
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const createdPromises = validStudentsOnly.map(async (ps) => {
+        const payload: Student = {
+          regNo: ps.regNo,
+          name: ps.name,
+          departmentId: ps.departmentId,
+          programId: ps.programId,
+          batch: ps.batch,
+          semester: ps.semester
+        };
+        return await apiService.createStudent(payload);
+      });
+
+      const results = await Promise.all(createdPromises);
+      setStudents(prev => {
+        const filterRegs = results.map(r => r.regNo);
+        return [...prev.filter(s => !filterRegs.includes(s.regNo)), ...results];
+      });
+
+      setImportStatus({
+        type: 'success',
+        message: `Successfully registered ${results.length} new students! Any rows with errors were skipped.`
+      });
+      setPreviewData([]);
+      setImportFile(null);
+    } catch (err: any) {
+      setImportStatus({ type: 'error', message: err.message || 'An error occurred while importing records.' });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -275,84 +474,119 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-slate-50 text-slate-800 font-sans">
       {/* Premium Corporate Top Header */}
-      <header id="admission-header" className="bg-[#1e1b4b] text-white border-b border-indigo-950 px-6 py-4 shrink-0 flex items-center justify-between shadow-md">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white font-bold text-xl shadow-lg border border-indigo-400">
-            IU
-          </div>
-          <div>
-            <h1 className="text-xl font-bold font-display tracking-tight flex items-center gap-2">
-              <span>Iqra University OBE</span>
-              <span className="bg-indigo-500/20 text-indigo-300 text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full border border-indigo-500/30">
-                Admission Control
-              </span>
-            </h1>
-            <p className="text-[11px] text-indigo-200/80 font-sans">Student Registry & Academic Enrollment Directory</p>
-          </div>
+      <header id="admission-header" className="bg-[#1e1b4b] text-white border-b border-indigo-950 px-6 py-2.5 shrink-0 flex items-center justify-between shadow-sm">
+        <div className="flex items-center gap-2">
+          <h1 className="text-base font-bold font-display tracking-tight flex items-center gap-2">
+            <span>Iqra University OBE</span>
+            <span className="bg-indigo-500/20 text-indigo-300 text-xs font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full border border-indigo-500/30">
+              Admission Control
+            </span>
+          </h1>
         </div>
 
-        <div className="flex items-center gap-4">
-          <div className="hidden sm:flex flex-col text-right">
-            <span className="text-xs text-indigo-200">Logged in as</span>
-            <span className="text-sm font-bold text-white">{admissionName}</span>
-          </div>
+        <div className="flex items-center gap-2">
           <button
             id="btn-logout"
             onClick={onLogout}
-            className="p-2.5 bg-indigo-950 hover:bg-red-950/60 text-indigo-200 hover:text-white rounded-xl transition-all border border-indigo-900/50 hover:border-red-900/40 flex items-center gap-2 cursor-pointer"
+            className="p-1.5 bg-indigo-950 hover:bg-red-950/60 text-indigo-200 hover:text-white rounded-lg transition-all border border-indigo-900/50 hover:border-red-900/40 flex items-center gap-1.5 cursor-pointer"
             title="Sign out of Admission Module"
           >
-            <LogOut className="w-4 h-4" />
-            <span className="hidden md:inline text-xs font-semibold">Logout</span>
+            <LogOut className="w-3.5 h-3.5" />
+            <span className="text-xs font-semibold">Logout</span>
           </button>
         </div>
       </header>
 
+      {/* Sub-Navbar Navigation */}
+      <div id="sub-navbar" className="bg-white border-b border-slate-200 px-6 py-2 shrink-0 flex items-center gap-4 shadow-xs">
+        <div className="flex flex-wrap items-center gap-1">
+          <button
+            id="tab-directory"
+            onClick={() => {
+              setActiveTab('directory');
+              setFormError(null);
+              setSuccessMsg(null);
+            }}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+              activeTab === 'directory'
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+            }`}
+          >
+            <Users className="w-4 h-4" />
+            <span>Student Directory</span>
+          </button>
+
+          <button
+            id="tab-add"
+            onClick={() => {
+              setIsEditing(false);
+              setEditRegNo(null);
+              resetForm();
+              setActiveTab('add');
+            }}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+              activeTab === 'add'
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+            }`}
+          >
+            <UserPlus className="w-4 h-4" />
+            <span>Add Student</span>
+          </button>
+
+          <button
+            id="tab-edit"
+            onClick={() => {
+              setActiveTab('edit');
+            }}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+              activeTab === 'edit'
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+            }`}
+          >
+            <Edit className="w-4 h-4" />
+            <span>Edit Student {editRegNo ? `(${editRegNo})` : ''}</span>
+          </button>
+
+          <button
+            id="tab-delete"
+            onClick={() => {
+              setActiveTab('delete');
+              setDeleteSearchQuery('');
+            }}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+              activeTab === 'delete'
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+            }`}
+          >
+            <Trash2 className="w-4 h-4" />
+            <span>Delete Student</span>
+          </button>
+
+          <button
+            id="tab-import"
+            onClick={() => {
+              setActiveTab('import');
+              setFormError(null);
+              setSuccessMsg(null);
+            }}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+              activeTab === 'import'
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+            }`}
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            <span>Import Excel/CSV</span>
+          </button>
+        </div>
+      </div>
+
       {/* Main Content Area */}
       <main className="flex-1 overflow-hidden p-6 max-w-[1700px] mx-auto w-full flex flex-col gap-6">
-        
-        {/* Statistics Panels */}
-        <div id="stats-panel" className="grid grid-cols-2 lg:grid-cols-4 gap-4 shrink-0">
-          <div className="bg-white p-4 rounded-2xl shadow-xs border border-slate-200 flex items-center gap-4">
-            <div className="w-11 h-11 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
-              <Users className="w-5 h-5" />
-            </div>
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Total Enrolled</p>
-              <p className="text-2xl font-bold text-indigo-950">{stats.total} <span className="text-xs font-medium text-slate-500">Students</span></p>
-            </div>
-          </div>
-
-          <div className="bg-white p-4 rounded-2xl shadow-xs border border-slate-200 flex items-center gap-4">
-            <div className="w-11 h-11 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center">
-              <Calendar className="w-5 h-5" />
-            </div>
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Spring Semester</p>
-              <p className="text-2xl font-bold text-slate-800">{stats.spring} <span className="text-xs font-medium text-slate-500">Active</span></p>
-            </div>
-          </div>
-
-          <div className="bg-white p-4 rounded-2xl shadow-xs border border-slate-200 flex items-center gap-4">
-            <div className="w-11 h-11 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
-              <Clock className="w-5 h-5" />
-            </div>
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Summer Semester</p>
-              <p className="text-2xl font-bold text-slate-800">{stats.summer} <span className="text-xs font-medium text-slate-500">Active</span></p>
-            </div>
-          </div>
-
-          <div className="bg-white p-4 rounded-2xl shadow-xs border border-slate-200 flex items-center gap-4">
-            <div className="w-11 h-11 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center">
-              <Calendar className="w-5 h-5" />
-            </div>
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Fall Semester</p>
-              <p className="text-2xl font-bold text-slate-800">{stats.fall} <span className="text-xs font-medium text-slate-500">Active</span></p>
-            </div>
-          </div>
-        </div>
 
         {/* Loading and Error Overlays */}
         {loading ? (
@@ -374,396 +608,835 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
             </button>
           </div>
         ) : (
-          /* Dual Columns Split Screen Workspace */
-          <div className="flex-1 flex flex-col lg:flex-row gap-6 min-h-0 overflow-hidden">
-            
-            {/* COLUMN 1: Student Registration Form */}
-            <div id="admission-form-container" className="w-full lg:w-[400px] shrink-0 flex flex-col bg-white border border-slate-200 rounded-[24px] shadow-sm overflow-hidden h-fit max-h-full">
-              <div className="p-5 border-b border-slate-100 bg-slate-50/70 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isEditing ? 'bg-amber-100 text-amber-700' : 'bg-indigo-100 text-indigo-700'}`}>
-                    {isEditing ? <Edit className="w-4 h-4" /> : <UserPlus className="w-4 h-4" />}
-                  </div>
-                  <h2 className="font-display font-bold text-slate-800 text-base">
-                    {isEditing ? 'Edit Student Record' : 'Register New Student'}
-                  </h2>
-                </div>
-                {isEditing && (
-                  <button
-                    onClick={resetForm}
-                    className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
-                    title="Cancel Edit Mode"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
-
-              <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto max-h-[calc(100vh-320px)] lg:max-h-none">
-                {/* Form Message Prompts */}
-                {formError && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -5 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="bg-red-50 text-red-700 text-xs p-3 rounded-xl border border-red-100 flex items-start gap-2 font-medium"
-                  >
-                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-500" />
-                    <span>{formError}</span>
-                  </motion.div>
-                )}
-
-                {successMsg && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -5 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="bg-emerald-50 text-emerald-800 text-xs p-3 rounded-xl border border-emerald-100 flex items-start gap-2 font-medium"
-                  >
-                    <Check className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600" />
-                    <span>{successMsg}</span>
-                  </motion.div>
-                )}
-
-                {/* Field 1: Reg Number */}
-                <div>
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5 ml-0.5">
-                    Registration Number <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    id="input-regno"
-                    type="text"
-                    value={regNo}
-                    onChange={(e) => setRegNo(e.target.value)}
-                    placeholder="e.g. FA22-BSCS-0045"
-                    disabled={isEditing} // Cannot edit Registration Number once saved to retain entity integrity
-                    className="w-full px-4 py-3 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border border-slate-200 focus:ring-2 focus:ring-indigo-600/10 focus:border-indigo-600 rounded-xl font-sans text-sm text-slate-800 placeholder:text-slate-400 outline-none transition-all disabled:opacity-60 disabled:cursor-not-allowed font-medium uppercase"
-                    required
+          <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+            <AnimatePresence mode="wait">
+              {activeTab === 'directory' && (
+                <motion.div
+                  key="directory-tab"
+                  initial={{ opacity: 0, y: 15 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -15 }}
+                  transition={{ duration: 0.15 }}
+                  className="flex-1 flex flex-col min-h-0"
+                >
+                  <StudentDirectory
+                    students={students}
+                    departments={departments}
+                    programs={programs}
+                    filterDeptId={filterDeptId}
+                    setFilterDeptId={setFilterDeptId}
+                    filterProgId={filterProgId}
+                    setFilterProgId={setFilterProgId}
+                    searchQuery={searchQuery}
+                    setSearchQuery={setSearchQuery}
+                    onEditClick={handleEditClick}
+                    onDeleteClick={handleDeleteClick}
+                    getDeptName={getDeptName}
+                    getProgCode={getProgCode}
                   />
-                  {isEditing && (
-                    <p className="text-[10px] text-slate-400 font-medium mt-1">
-                      Registration number cannot be changed to protect academic transcript links.
-                    </p>
-                  )}
-                </div>
+                </motion.div>
+              )}
 
-                {/* Field 2: Student Name */}
-                <div>
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5 ml-0.5">
-                    Student Full Name <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    id="input-name"
-                    type="text"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="e.g. Syeda Fatima Alvi"
-                    className="w-full px-4 py-3 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border border-slate-200 focus:ring-2 focus:ring-indigo-600/10 focus:border-indigo-600 rounded-xl font-sans text-sm text-slate-800 placeholder:text-slate-400 outline-none transition-all font-medium"
-                    required
-                  />
-                </div>
-
-                {/* Field 3: Department Selection */}
-                <div>
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5 ml-0.5">
-                    Academic Department <span className="text-red-500">*</span>
-                  </label>
-                  <div className="relative">
-                    <select
-                      id="select-dept"
-                      value={selectedDeptId}
-                      onChange={(e) => {
-                        setSelectedDeptId(e.target.value);
-                      }}
-                      className="w-full px-4 py-3 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border border-slate-200 focus:ring-2 focus:ring-indigo-600/10 focus:border-indigo-600 rounded-xl font-sans text-sm text-slate-800 outline-none cursor-pointer transition-all appearance-none font-medium pr-10"
-                      required
-                    >
-                      <option value="" disabled>Choose Department...</option>
-                      {departments.map(d => (
-                        <option key={d.id} value={d.id}>{d.name}</option>
-                      ))}
-                    </select>
-                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-400">
-                      <Building className="w-4 h-4" />
+              {activeTab === 'add' && (
+                <motion.div
+                  key="add-tab"
+                  initial={{ opacity: 0, y: 15 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -15 }}
+                  transition={{ duration: 0.15 }}
+                  className="flex-1 overflow-y-auto"
+                >
+                  <div className="max-w-2xl mx-auto w-full bg-white border border-slate-200 rounded-[24px] shadow-sm overflow-hidden mb-6">
+                    <div className="p-6 border-b border-slate-100 bg-slate-50/70">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center">
+                          <UserPlus className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <h2 className="font-display font-bold text-slate-800 text-lg">Enroll New Student</h2>
+                          <p className="text-xs text-slate-500">Create a new academic identity and assign initial departmental parameters.</p>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
 
-                {/* Field 4: Program Selection (Chained to Department) */}
-                <div>
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5 ml-0.5">
-                    Degree Program <span className="text-red-500">*</span>
-                  </label>
-                  <div className="relative">
-                    <select
-                      id="select-program"
-                      value={selectedProgId}
-                      onChange={(e) => setSelectedProgId(e.target.value)}
-                      disabled={!selectedDeptId}
-                      className="w-full px-4 py-3 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border border-slate-200 focus:ring-2 focus:ring-indigo-600/10 focus:border-indigo-600 rounded-xl font-sans text-sm text-slate-800 outline-none cursor-pointer transition-all appearance-none font-medium pr-10 disabled:opacity-50 disabled:cursor-not-allowed"
-                      required
-                    >
-                      <option value="" disabled>Choose Degree Program...</option>
-                      {formPrograms.map(p => (
-                        <option key={p.id} value={p.id}>{p.code} — {p.name}</option>
-                      ))}
-                    </select>
-                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-400">
-                      <BookOpen className="w-4 h-4" />
-                    </div>
-                  </div>
-                  {!selectedDeptId && (
-                    <p className="text-[10px] text-indigo-900/60 mt-1 font-medium">
-                      Select Department first to reveal associated programs.
-                    </p>
-                  )}
-                </div>
+                    <form onSubmit={handleSubmit} className="p-8 space-y-6">
+                      {formError && (
+                        <div className="bg-red-50 text-red-700 text-sm p-4 rounded-xl border border-red-100 flex items-start gap-2.5 font-medium">
+                          <AlertCircle className="w-5 h-5 shrink-0 text-red-500 mt-0.5" />
+                          <span>{formError}</span>
+                        </div>
+                      )}
 
-                {/* Field 5: Batch Selection */}
-                <div>
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5 ml-0.5">
-                    Admission Batch <span className="text-red-500">*</span>
-                  </label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {['Spring', 'Summer', 'Fall'].map((b) => (
-                      <button
-                        key={b}
-                        type="button"
-                        onClick={() => setSelectedBatch(b as 'Spring' | 'Summer' | 'Fall')}
-                        className={`py-2 text-xs font-semibold rounded-xl border transition-all cursor-pointer ${
-                          selectedBatch === b 
-                            ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm shadow-indigo-600/10' 
-                            : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
-                        }`}
-                      >
-                        {b}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+                      {successMsg && (
+                        <div className="bg-emerald-50 text-emerald-800 text-sm p-4 rounded-xl border border-emerald-100 flex flex-col gap-2 font-medium">
+                          <div className="flex items-start gap-2.5">
+                            <Check className="w-5 h-5 shrink-0 text-emerald-600 mt-0.5" />
+                            <span>{successMsg}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSuccessMsg(null);
+                              setActiveTab('directory');
+                            }}
+                            className="mt-2 self-start text-xs font-bold text-emerald-700 hover:text-emerald-950 underline transition-colors cursor-pointer"
+                          >
+                            &rarr; Go to Directory to view student
+                          </button>
+                        </div>
+                      )}
 
-                {/* Form Actions */}
-                <div className="pt-2 flex gap-3">
-                  {isEditing && (
-                    <button
-                      type="button"
-                      onClick={resetForm}
-                      className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition-all cursor-pointer text-center"
-                    >
-                      Cancel
-                    </button>
-                  )}
-                  <button
-                    id="btn-submit"
-                    type="submit"
-                    className={`flex-1 py-3 text-white font-semibold text-xs rounded-xl transition-all shadow-md cursor-pointer text-center ${
-                      isEditing 
-                        ? 'bg-amber-600 hover:bg-amber-700 shadow-amber-600/10' 
-                        : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-600/10'
-                    }`}
-                  >
-                    {isEditing ? 'Save Profile' : 'Enroll Student'}
-                  </button>
-                </div>
-              </form>
-            </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {/* Reg Number */}
+                        <div>
+                          <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2 ml-0.5">
+                            Registration Number <span className="text-red-500">*</span>
+                          </label>
+                          <input
+                            id="input-regno"
+                            type="text"
+                            value={regNo}
+                            onChange={(e) => setRegNo(e.target.value)}
+                            placeholder="e.g. FA22-BSCS-0045"
+                            className="w-full px-4 py-3 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border border-slate-200 focus:ring-2 focus:ring-indigo-600/10 focus:border-indigo-600 rounded-xl font-sans text-sm text-slate-800 placeholder:text-slate-400 outline-none transition-all font-medium uppercase"
+                            required
+                          />
+                        </div>
 
-            {/* COLUMN 2: Student Directory Listing with Filters */}
-            <div className="flex-1 flex flex-col bg-white border border-slate-200 rounded-[24px] shadow-sm overflow-hidden">
-              
-              {/* Filter and Search Panel Header */}
-              <div id="filter-header" className="p-5 border-b border-slate-100 bg-slate-50/40 flex flex-col gap-4 shrink-0">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                  <div className="flex items-center gap-2">
-                    <GraduationCap className="w-5 h-5 text-indigo-600" />
-                    <h2 className="font-display font-bold text-slate-800 text-base">Student Records Directory</h2>
-                  </div>
-                  
-                  {/* Total Records Filtered Display */}
-                  <div className="text-xs font-semibold text-slate-400 bg-slate-100 px-3 py-1 rounded-full">
-                    Showing <span className="text-indigo-950 font-bold">{filteredStudents.length}</span> of {students.length} Records
-                  </div>
-                </div>
+                        {/* Student Name */}
+                        <div>
+                          <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2 ml-0.5">
+                            Student Full Name <span className="text-red-500">*</span>
+                          </label>
+                          <input
+                            id="input-name"
+                            type="text"
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
+                            placeholder="e.g. Syeda Fatima Alvi"
+                            className="w-full px-4 py-3 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border border-slate-200 focus:ring-2 focus:ring-indigo-600/10 focus:border-indigo-600 rounded-xl font-sans text-sm text-slate-800 placeholder:text-slate-400 outline-none transition-all font-medium"
+                            required
+                          />
+                        </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  {/* Search bar */}
-                  <div className="relative">
-                    <input
-                      id="search-input"
-                      type="text"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="Search by Name or Reg No..."
-                      className="w-full pl-9 pr-4 py-2.5 bg-white border border-slate-200 focus:ring-2 focus:ring-indigo-600/10 focus:border-indigo-600 rounded-xl font-sans text-xs text-slate-800 outline-none transition-all placeholder:text-slate-400 font-medium"
-                    />
-                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3.5" />
-                  </div>
-
-                  {/* Dept filter */}
-                  <div className="relative">
-                    <select
-                      id="filter-dept"
-                      value={filterDeptId}
-                      onChange={(e) => setFilterDeptId(e.target.value)}
-                      className="w-full pl-8 pr-4 py-2.5 bg-white border border-slate-200 focus:ring-2 focus:ring-indigo-600/10 focus:border-indigo-600 rounded-xl font-sans text-xs text-slate-700 outline-none cursor-pointer transition-all appearance-none font-bold"
-                    >
-                      <option value="all">All Departments</option>
-                      {departments.map(d => (
-                        <option key={d.id} value={d.id}>{d.name}</option>
-                      ))}
-                    </select>
-                    <Building className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-3.5" />
-                  </div>
-
-                  {/* Program filter */}
-                  <div className="relative">
-                    <select
-                      id="filter-program"
-                      value={filterProgId}
-                      onChange={(e) => setFilterProgId(e.target.value)}
-                      className="w-full pl-8 pr-4 py-2.5 bg-white border border-slate-200 focus:ring-2 focus:ring-indigo-600/10 focus:border-indigo-600 rounded-xl font-sans text-xs text-slate-700 outline-none cursor-pointer transition-all appearance-none font-bold"
-                    >
-                      <option value="all">All Programs</option>
-                      {filterPrograms.map(p => (
-                        <option key={p.id} value={p.id}>{p.code} — {p.name}</option>
-                      ))}
-                    </select>
-                    <BookOpen className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-3.5" />
-                  </div>
-                </div>
-              </div>
-
-              {/* Grid / Directory Directory Table */}
-              <div className="flex-1 overflow-auto min-h-0">
-                {filteredStudents.length === 0 ? (
-                  <div className="h-full flex flex-col items-center justify-center p-8 text-center bg-slate-50/20">
-                    <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 mb-4 border border-slate-200/50">
-                      <Search className="w-6 h-6" />
-                    </div>
-                    <h3 className="font-display font-bold text-slate-700 text-sm mb-1">No Matching Records Found</h3>
-                    <p className="text-slate-400 text-xs max-w-sm font-medium mb-4">
-                      Try resetting filters, matching another Registration ID, or register a new student using the left-hand console.
-                    </p>
-                    <button
-                      onClick={() => {
-                        setSearchQuery('');
-                        setFilterDeptId('all');
-                        setFilterProgId('all');
-                      }}
-                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl transition-all cursor-pointer shadow-md"
-                    >
-                      Clear Search Filters
-                    </button>
-                  </div>
-                ) : (
-                  <div className="min-w-full inline-block align-middle">
-                    <table className="min-w-full divide-y divide-slate-200 border-collapse table-auto">
-                      <thead className="bg-slate-50 sticky top-0 z-10 shadow-xs border-b border-slate-200">
-                        <tr>
-                          <th scope="col" className="px-6 py-3.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                            Reg Number
-                          </th>
-                          <th scope="col" className="px-6 py-3.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                            Name
-                          </th>
-                          <th scope="col" className="px-6 py-3.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                            Department
-                          </th>
-                          <th scope="col" className="px-6 py-3.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                            Program
-                          </th>
-                          <th scope="col" className="px-6 py-3.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                            Batch
-                          </th>
-                          <th scope="col" className="px-6 py-3.5 text-right text-[11px] font-bold uppercase tracking-wider text-slate-400 pr-8">
-                            Actions
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-slate-100">
-                        <AnimatePresence initial={false}>
-                          {filteredStudents.map((student) => (
-                            <motion.tr
-                              key={student.regNo}
-                              initial={{ opacity: 0, y: 10 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              exit={{ opacity: 0, scale: 0.95 }}
-                              transition={{ duration: 0.15 }}
-                              className="hover:bg-indigo-50/20 group transition-all"
+                        {/* Department */}
+                        <div>
+                          <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2 ml-0.5">
+                            Academic Department <span className="text-red-500">*</span>
+                          </label>
+                          <div className="relative">
+                            <select
+                              id="select-dept"
+                              value={selectedDeptId}
+                              onChange={(e) => {
+                                setSelectedDeptId(e.target.value);
+                              }}
+                              className="w-full px-4 py-3 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border border-slate-200 focus:ring-2 focus:ring-indigo-600/10 focus:border-indigo-600 rounded-xl font-sans text-sm text-slate-800 outline-none cursor-pointer transition-all appearance-none font-medium pr-10"
+                              required
                             >
-                              {/* Reg No Badge */}
-                              <td className="px-6 py-4.5 whitespace-nowrap">
-                                <span className="px-2.5 py-1 bg-indigo-100 text-indigo-800 text-[11px] font-bold font-mono rounded-lg border border-indigo-200 tracking-tight">
-                                  {student.regNo}
-                                </span>
-                              </td>
+                              <option value="" disabled>Choose Department...</option>
+                              {departments.map(d => (
+                                <option key={d.id} value={d.id}>{d.name}</option>
+                              ))}
+                            </select>
+                            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-400">
+                              <Building className="w-4 h-4" />
+                            </div>
+                          </div>
+                        </div>
 
-                              {/* Student Name */}
-                              <td className="px-6 py-4.5 whitespace-nowrap">
-                                <p className="text-sm font-bold text-slate-800 group-hover:text-indigo-950 transition-colors">
-                                  {student.name}
-                                </p>
-                              </td>
+                        {/* Program */}
+                        <div>
+                          <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2 ml-0.5">
+                            Degree Program <span className="text-red-500">*</span>
+                          </label>
+                          <div className="relative">
+                            <select
+                              id="select-program"
+                              value={selectedProgId}
+                              onChange={(e) => setSelectedProgId(e.target.value)}
+                              disabled={!selectedDeptId}
+                              className="w-full px-4 py-3 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border border-slate-200 focus:ring-2 focus:ring-indigo-600/10 focus:border-indigo-600 rounded-xl font-sans text-sm text-slate-800 outline-none cursor-pointer transition-all appearance-none font-medium pr-10 disabled:opacity-50 disabled:cursor-not-allowed"
+                              required
+                            >
+                              <option value="" disabled>Choose Degree Program...</option>
+                              {formPrograms.map(p => (
+                                <option key={p.id} value={p.id}>{p.code} — {p.name}</option>
+                              ))}
+                            </select>
+                            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-400">
+                              <BookOpen className="w-4 h-4" />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
 
-                              {/* Department */}
-                              <td className="px-6 py-4.5 whitespace-nowrap">
-                                <p className="text-xs font-semibold text-slate-500 max-w-[200px] truncate" title={getDeptName(student.departmentId)}>
-                                  {getDeptName(student.departmentId)}
-                                </p>
-                              </td>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+                        {/* Batch Selection */}
+                        <div>
+                          <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2 ml-0.5">
+                            Admission Batch <span className="text-red-500">*</span>
+                          </label>
+                          <div className="grid grid-cols-3 gap-3">
+                            {['Spring', 'Summer', 'Fall'].map((b) => (
+                              <button
+                                key={b}
+                                type="button"
+                                onClick={() => setSelectedBatch(b as 'Spring' | 'Summer' | 'Fall')}
+                                className={`py-3 text-xs font-bold rounded-xl border transition-all cursor-pointer ${
+                                  selectedBatch === b 
+                                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' 
+                                    : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                                }`}
+                              >
+                                {b}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
 
-                              {/* Program Code */}
-                              <td className="px-6 py-4.5 whitespace-nowrap">
-                                <span className="px-2 py-0.5 bg-slate-100 border border-slate-200 text-slate-700 text-[10px] font-extrabold rounded-md">
-                                  {getProgCode(student.programId)}
-                                </span>
-                              </td>
+                        {/* Current Semester */}
+                        <div>
+                          <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2 ml-0.5">
+                            Current Semester <span className="text-red-500">*</span>
+                          </label>
+                          <div className="relative">
+                            <select
+                              id="select-semester"
+                              value={selectedSemester}
+                              onChange={(e) => setSelectedSemester(e.target.value)}
+                              className="w-full px-4 py-3 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border border-slate-200 focus:ring-2 focus:ring-indigo-600/10 focus:border-indigo-600 rounded-xl font-sans text-sm text-slate-800 outline-none cursor-pointer transition-all appearance-none font-medium pr-10"
+                              required
+                            >
+                              {['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th'].map(sem => (
+                                <option key={sem} value={sem}>{sem} Semester</option>
+                              ))}
+                            </select>
+                            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-400">
+                              <Calendar className="w-4 h-4" />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
 
-                              {/* Batch */}
-                              <td className="px-6 py-4.5 whitespace-nowrap">
-                                <span className={`px-2 py-0.5 text-[10px] font-bold rounded-md ${
-                                  student.batch === 'Spring' 
-                                    ? 'bg-teal-50 text-teal-700 border border-teal-200' 
-                                    : student.batch === 'Summer' 
-                                      ? 'bg-amber-50 text-amber-700 border border-amber-200' 
-                                      : 'bg-rose-50 text-rose-700 border border-rose-200'
-                                }`}>
-                                  {student.batch}
-                                </span>
-                              </td>
-
-                              {/* Actions */}
-                              <td className="px-6 py-4.5 whitespace-nowrap text-right text-sm font-medium pr-8">
-                                <div className="flex items-center justify-end gap-2.5">
-                                  <button
-                                    id={`btn-edit-${student.regNo}`}
-                                    onClick={() => handleEditClick(student)}
-                                    className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-all cursor-pointer"
-                                    title={`Edit ${student.name}'s profile`}
-                                  >
-                                    <Edit className="w-4 h-4" />
-                                  </button>
-                                  <button
-                                    id={`btn-delete-${student.regNo}`}
-                                    onClick={() => handleDeleteClick(student)}
-                                    className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all cursor-pointer"
-                                    title={`Delete ${student.name}'s record`}
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
-                                </div>
-                              </td>
-                            </motion.tr>
-                          ))}
-                        </AnimatePresence>
-                      </tbody>
-                    </table>
+                      {/* Form Actions */}
+                      <div className="pt-4 border-t border-slate-100 flex gap-4">
+                        <button
+                          type="button"
+                          onClick={resetForm}
+                          className="px-5 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all cursor-pointer text-center"
+                        >
+                          Reset Form
+                        </button>
+                        <button
+                          id="btn-submit"
+                          type="submit"
+                          className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl transition-all shadow-md cursor-pointer text-center"
+                        >
+                          Enroll Student Profile
+                        </button>
+                      </div>
+                    </form>
                   </div>
-                )}
-              </div>
+                </motion.div>
+              )}
 
-            </div>
+              {activeTab === 'edit' && (
+                <motion.div
+                  key="edit-tab"
+                  initial={{ opacity: 0, y: 15 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -15 }}
+                  transition={{ duration: 0.15 }}
+                  className="flex-1 overflow-y-auto"
+                >
+                  <div className="max-w-2xl mx-auto w-full bg-white border border-slate-200 rounded-[24px] shadow-sm overflow-hidden mb-6">
+                    {isEditing && editRegNo ? (
+                      <>
+                        <div className="p-6 border-b border-slate-100 bg-amber-50/30">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center">
+                              <Edit className="w-5 h-5" />
+                            </div>
+                            <div>
+                              <h2 className="font-display font-bold text-slate-800 text-lg flex items-center gap-2">
+                                <span>Edit Student Profile</span>
+                                <span className="text-xs bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded">
+                                  {editRegNo}
+                                </span>
+                              </h2>
+                              <p className="text-xs text-slate-500">Modify information for registered student {name}.</p>
+                            </div>
+                          </div>
+                        </div>
 
+                        <form onSubmit={handleSubmit} className="p-8 space-y-6">
+                          <div className="bg-amber-50 text-amber-800 text-xs p-3.5 rounded-xl border border-amber-100 font-medium">
+                            You are editing the profile of <span className="font-bold">{name}</span>. The registration number cannot be changed to prevent academic transcript linking conflicts.
+                          </div>
+
+                          {formError && (
+                            <div className="bg-red-50 text-red-700 text-sm p-4 rounded-xl border border-red-100 flex items-start gap-2.5 font-medium">
+                              <AlertCircle className="w-5 h-5 shrink-0 text-red-500 mt-0.5" />
+                              <span>{formError}</span>
+                            </div>
+                          )}
+
+                          {successMsg && (
+                            <div className="bg-emerald-50 text-emerald-800 text-sm p-4 rounded-xl border border-emerald-100 flex flex-col gap-2 font-medium">
+                              <div className="flex items-start gap-2.5">
+                                <Check className="w-5 h-5 shrink-0 text-emerald-600 mt-0.5" />
+                                <span>{successMsg}</span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSuccessMsg(null);
+                                  setActiveTab('directory');
+                                }}
+                                className="mt-2 self-start text-xs font-bold text-emerald-700 hover:text-emerald-950 underline transition-colors cursor-pointer"
+                              >
+                                &rarr; Back to Student Directory
+                              </button>
+                            </div>
+                          )}
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            {/* Reg Number (Disabled) */}
+                            <div>
+                              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2 ml-0.5">
+                                Registration Number
+                              </label>
+                              <input
+                                type="text"
+                                value={regNo}
+                                disabled
+                                className="w-full px-4 py-3 bg-slate-100 border border-slate-200 rounded-xl font-mono text-sm text-slate-500 outline-none cursor-not-allowed font-bold"
+                              />
+                            </div>
+
+                            {/* Student Name */}
+                            <div>
+                              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2 ml-0.5">
+                                Student Full Name <span className="text-red-500">*</span>
+                              </label>
+                              <input
+                                id="input-name"
+                                type="text"
+                                value={name}
+                                onChange={(e) => setName(e.target.value)}
+                                placeholder="e.g. Syeda Fatima Alvi"
+                                className="w-full px-4 py-3 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border border-slate-200 focus:ring-2 focus:ring-indigo-600/10 focus:border-indigo-600 rounded-xl font-sans text-sm text-slate-800 placeholder:text-slate-400 outline-none transition-all font-medium"
+                                required
+                              />
+                            </div>
+
+                            {/* Department */}
+                            <div>
+                              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2 ml-0.5">
+                                Academic Department <span className="text-red-500">*</span>
+                              </label>
+                              <div className="relative">
+                                <select
+                                  id="select-dept"
+                                  value={selectedDeptId}
+                                  onChange={(e) => setSelectedDeptId(e.target.value)}
+                                  className="w-full px-4 py-3 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border border-slate-200 focus:ring-2 focus:ring-indigo-600/10 focus:border-indigo-600 rounded-xl font-sans text-sm text-slate-800 outline-none cursor-pointer transition-all appearance-none font-medium pr-10"
+                                  required
+                                >
+                                  <option value="" disabled>Choose Department...</option>
+                                  {departments.map(d => (
+                                    <option key={d.id} value={d.id}>{d.name}</option>
+                                  ))}
+                                </select>
+                                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-400">
+                                  <Building className="w-4 h-4" />
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Program */}
+                            <div>
+                              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2 ml-0.5">
+                                Degree Program <span className="text-red-500">*</span>
+                              </label>
+                              <div className="relative">
+                                <select
+                                  id="select-program"
+                                  value={selectedProgId}
+                                  onChange={(e) => setSelectedProgId(e.target.value)}
+                                  className="w-full px-4 py-3 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border border-slate-200 focus:ring-2 focus:ring-indigo-600/10 focus:border-indigo-600 rounded-xl font-sans text-sm text-slate-800 outline-none cursor-pointer transition-all appearance-none font-medium pr-10"
+                                  required
+                                >
+                                  <option value="" disabled>Choose Degree Program...</option>
+                                  {formPrograms.map(p => (
+                                    <option key={p.id} value={p.id}>{p.code} — {p.name}</option>
+                                  ))}
+                                </select>
+                                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-400">
+                                  <BookOpen className="w-4 h-4" />
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+                             {/* Batch Selection */}
+                             <div>
+                               <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2 ml-0.5">
+                                 Admission Batch <span className="text-red-500">*</span>
+                               </label>
+                               <div className="grid grid-cols-3 gap-3">
+                                 {['Spring', 'Summer', 'Fall'].map((b) => (
+                                   <button
+                                     key={b}
+                                     type="button"
+                                     onClick={() => setSelectedBatch(b as 'Spring' | 'Summer' | 'Fall')}
+                                     className={`py-3 text-xs font-bold rounded-xl border transition-all cursor-pointer ${
+                                       selectedBatch === b 
+                                         ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' 
+                                         : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                                     }`}
+                                   >
+                                     {b}
+                                   </button>
+                                 ))}
+                               </div>
+                             </div>
+
+                             {/* Current Semester */}
+                             <div>
+                               <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2 ml-0.5">
+                                 Current Semester <span className="text-red-500">*</span>
+                               </label>
+                               <div className="relative">
+                                 <select
+                                   id="edit-select-semester"
+                                   value={selectedSemester}
+                                   onChange={(e) => setSelectedSemester(e.target.value)}
+                                   className="w-full px-4 py-3 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border border-slate-200 focus:ring-2 focus:ring-indigo-600/10 focus:border-indigo-600 rounded-xl font-sans text-sm text-slate-800 outline-none cursor-pointer transition-all appearance-none font-medium pr-10"
+                                   required
+                                 >
+                                   {['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th'].map(sem => (
+                                     <option key={sem} value={sem}>{sem} Semester</option>
+                                   ))}
+                                 </select>
+                                 <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-400">
+                                   <Calendar className="w-4 h-4" />
+                                 </div>
+                               </div>
+                             </div>
+                           </div>
+
+                          {/* Form Actions */}
+                          <div className="pt-4 border-t border-slate-100 flex gap-4">
+                            <button
+                              type="button"
+                              onClick={resetForm}
+                              className="px-5 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all cursor-pointer text-center"
+                            >
+                              Cancel Edit
+                            </button>
+                            <button
+                              id="btn-submit"
+                              type="submit"
+                              className="flex-1 py-3 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl transition-all shadow-md shadow-amber-600/10 cursor-pointer text-center"
+                            >
+                              Save Profile Changes
+                            </button>
+                          </div>
+                        </form>
+                      </>
+                    ) : (
+                      <div className="p-8 text-center flex flex-col items-center justify-center">
+                        <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 mb-4 border border-slate-200/50">
+                          <Edit className="w-6 h-6 text-indigo-600" />
+                        </div>
+                        <h3 className="font-display font-bold text-slate-800 text-lg mb-2">No Student Selected for Editing</h3>
+                        <p className="text-slate-500 text-sm max-w-md mb-8">
+                          To edit a student's profile, select "Edit" in the Student Directory tab, or look them up directly below using their unique Registration Number.
+                        </p>
+
+                        {/* Lookup form */}
+                        <form onSubmit={handleEditSearch} className="w-full max-w-md bg-slate-50 p-6 rounded-2xl border border-slate-200/70 space-y-4 mb-6">
+                          <div className="text-left">
+                            <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5 ml-0.5">
+                              Search Registration Number
+                            </label>
+                            <div className="flex gap-2">
+                              <input
+                                type="text"
+                                placeholder="e.g. FA22-BSCS-0012"
+                                value={editSearchQuery}
+                                onChange={(e) => setEditSearchQuery(e.target.value)}
+                                className="flex-1 px-4 py-2.5 bg-white border border-slate-200 focus:ring-2 focus:ring-indigo-600/10 focus:border-indigo-600 rounded-xl font-mono text-xs text-slate-800 outline-none transition-all uppercase font-semibold"
+                              />
+                              <button
+                                type="submit"
+                                className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm cursor-pointer"
+                              >
+                                Load Profile
+                              </button>
+                            </div>
+                            {editSearchError && (
+                              <p className="text-red-600 text-xs font-semibold mt-1.5 flex items-center gap-1">
+                                <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                                <span>{editSearchError}</span>
+                              </p>
+                            )}
+                          </div>
+                        </form>
+
+                        {/* Select dropdown */}
+                        <div className="w-full max-w-md text-left">
+                          <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5 ml-0.5">
+                            Or Select from Enrolled Directory
+                          </label>
+                          <select
+                            onChange={(e) => {
+                              const matched = students.find(s => s.regNo === e.target.value);
+                              if (matched) handleEditClick(matched);
+                            }}
+                            className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl font-sans text-xs text-slate-700 outline-none cursor-pointer focus:ring-2 focus:ring-indigo-600/10 focus:border-indigo-600"
+                          >
+                            <option value="">-- Select student from list --</option>
+                            {students.map(s => (
+                              <option key={s.regNo} value={s.regNo}>{s.regNo} — {s.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+              )}
+
+              {activeTab === 'delete' && (
+                <motion.div
+                  key="delete-tab"
+                  initial={{ opacity: 0, y: 15 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -15 }}
+                  transition={{ duration: 0.15 }}
+                  className="flex-1 flex flex-col min-h-0"
+                >
+                  <StudentDelete
+                    students={students}
+                    deleteSearchQuery={deleteSearchQuery}
+                    setDeleteSearchQuery={setDeleteSearchQuery}
+                    onDeleteClick={handleDeleteClick}
+                    getDeptName={getDeptName}
+                    getProgCode={getProgCode}
+                  />
+                </motion.div>
+              )}
+
+              {activeTab === 'import' && (
+                <motion.div
+                  key="import-tab"
+                  initial={{ opacity: 0, y: 15 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -15 }}
+                  transition={{ duration: 0.15 }}
+                  className="flex-1 overflow-y-auto"
+                >
+                  <div className="max-w-4xl mx-auto w-full space-y-6 mb-6">
+                    {/* Importer Section */}
+                    <div className="bg-white border border-slate-200 rounded-[24px] shadow-sm overflow-hidden">
+                      <div className="p-6 border-b border-slate-100 bg-slate-50/70 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center">
+                            <Upload className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <h2 className="font-display font-bold text-slate-800 text-lg">Excel / CSV Batch Registration</h2>
+                            <p className="text-xs text-slate-500">Register bulk student profiles instantly via Excel spreadsheet uploads.</p>
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={handleDownloadTemplate}
+                          className="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 hover:text-indigo-900 border border-indigo-200 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-2xs"
+                        >
+                          <FileSpreadsheet className="w-4.5 h-4.5 text-indigo-600" />
+                          <span>Get Excel Template</span>
+                        </button>
+                      </div>
+
+                      <div className="p-8 space-y-8">
+                        {/* Status Message */}
+                        {importStatus.type !== 'idle' && (
+                          <div className={`p-4 rounded-xl border flex items-start gap-2.5 font-semibold text-sm ${
+                            importStatus.type === 'success' 
+                              ? 'bg-emerald-50 text-emerald-800 border-emerald-100' 
+                              : 'bg-red-50 text-red-700 border-red-100'
+                          }`}>
+                            {importStatus.type === 'success' ? (
+                              <Check className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+                            ) : (
+                              <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+                            )}
+                            <div className="space-y-1">
+                              <span>{importStatus.message}</span>
+                              {importStatus.type === 'success' && (
+                                <button
+                                  onClick={() => setActiveTab('directory')}
+                                  className="block text-xs text-emerald-700 hover:text-emerald-950 underline transition-colors cursor-pointer mt-1"
+                                >
+                                  Go to Student Directory &rarr;
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Dropzone Area */}
+                        <div className="border-2 border-dashed border-slate-200 hover:border-indigo-500 rounded-[20px] bg-slate-50/50 hover:bg-indigo-50/10 p-8 transition-all relative group flex flex-col items-center justify-center text-center">
+                          <input
+                            type="file"
+                            accept=".xlsx, .xls, .csv"
+                            onChange={handleFileUpload}
+                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                          />
+                          <div className="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center mb-3 group-hover:scale-105 transition-transform duration-200">
+                            <Upload className="w-6 h-6" />
+                          </div>
+                          <p className="text-sm font-bold text-slate-700 mb-1">
+                            {importFile ? importFile.name : 'Drag and drop your spreadsheet here'}
+                          </p>
+                          <p className="text-xs text-slate-400 font-medium">
+                            {importFile ? `${(importFile.size / 1024).toFixed(1)} KB` : 'Supports Microsoft Excel (.xlsx, .xls) or comma-separated CSV'}
+                          </p>
+                        </div>
+
+                        {/* Guidelines & Formats */}
+                        <div className="p-6 bg-slate-50 border border-slate-200/60 rounded-2xl">
+                          <h3 className="font-display font-bold text-slate-800 text-xs uppercase tracking-wider mb-3">
+                            Spreadsheet Column Mapping & Guide
+                          </h3>
+                          <p className="text-xs text-slate-500 mb-4 leading-relaxed font-semibold">
+                            Ensure your spreadsheet columns strictly correspond to the system variables listed below. Column header naming variations (such as "ID" instead of "Registration Number") will be automatically aligned.
+                          </p>
+
+                          <div className="overflow-x-auto">
+                            <table className="min-w-full divide-y divide-slate-200 text-left border border-slate-100 rounded-lg overflow-hidden bg-white">
+                              <thead className="bg-slate-100">
+                                <tr>
+                                  <th className="px-4 py-2.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Column Name</th>
+                                  <th className="px-4 py-2.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Example Value</th>
+                                  <th className="px-4 py-2.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Acceptable Parameters / IDs</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-600">
+                                <tr>
+                                  <td className="px-4 py-3 font-bold text-indigo-600 font-mono">Registration Number</td>
+                                  <td className="px-4 py-3 font-mono">FA22-BSCS-0045</td>
+                                  <td className="px-4 py-3">Alphanumeric formats with dashes. Must be unique.</td>
+                                </tr>
+                                <tr>
+                                  <td className="px-4 py-3 font-bold text-indigo-600 font-mono">Student Name</td>
+                                  <td className="px-4 py-3">Syeda Fatima Alvi</td>
+                                  <td className="px-4 py-3">Letters, spaces, periods.</td>
+                                </tr>
+                                <tr>
+                                  <td className="px-4 py-3 font-bold text-indigo-600 font-mono">Department ID</td>
+                                  <td className="px-4 py-3 font-mono">computing</td>
+                                  <td className="px-4 py-3">
+                                    <div className="flex flex-wrap gap-1">
+                                      {departments.map(d => (
+                                        <span key={d.id} className="px-1.5 py-0.5 bg-slate-100 text-[9px] font-bold font-mono rounded text-slate-700 uppercase">{d.id}</span>
+                                      ))}
+                                    </div>
+                                  </td>
+                                </tr>
+                                <tr>
+                                  <td className="px-4 py-3 font-bold text-indigo-600 font-mono">Program ID</td>
+                                  <td className="px-4 py-3 font-mono">bscs</td>
+                                  <td className="px-4 py-3">
+                                    <div className="flex flex-wrap gap-1 max-w-sm">
+                                      {programs.map(p => (
+                                        <span key={p.id} className="px-1.5 py-0.5 bg-slate-100 text-[9px] font-bold font-mono rounded text-slate-700 uppercase" title={p.name}>{p.id}</span>
+                                      ))}
+                                    </div>
+                                  </td>
+                                </tr>
+                                <tr>
+                                  <td className="px-4 py-3 font-bold text-indigo-600 font-mono">Admission Batch</td>
+                                  <td className="px-4 py-3">Fall</td>
+                                  <td className="px-4 py-3">
+                                    <span className="px-1.5 py-0.5 bg-slate-100 text-[9px] font-bold font-mono rounded text-slate-700">Spring</span>
+                                    <span className="px-1.5 py-0.5 bg-slate-100 text-[9px] font-bold font-mono rounded text-slate-700 ml-1">Summer</span>
+                                    <span className="px-1.5 py-0.5 bg-slate-100 text-[9px] font-bold font-mono rounded text-slate-700 ml-1">Fall</span>
+                                  </td>
+                                </tr>
+                                <tr>
+                                  <td className="px-4 py-3 font-bold text-indigo-600 font-mono">Semester</td>
+                                  <td className="px-4 py-3 font-mono">6th</td>
+                                  <td className="px-4 py-3">
+                                    <span className="text-slate-500 font-sans">e.g. 1st, 2nd, 3rd, 4th, 5th, 6th, 7th, 8th, 9th, 10th or numeric indices.</span>
+                                  </td>
+                                </tr>
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+
+                        {/* Import Preview Area */}
+                        {previewData.length > 0 && (
+                          <div className="space-y-4 pt-4 border-t border-slate-100">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <h3 className="font-display font-bold text-slate-800 text-sm">Spreadsheet Records Preview</h3>
+                                <p className="text-xs text-slate-500">Review data compatibility before importing to the database.</p>
+                              </div>
+                              <div className="text-right text-xs font-semibold flex items-center gap-2">
+                                <span className="text-emerald-600">{previewData.filter(r => r.isValid).length} Valid Records</span>
+                                <span className="text-slate-300">|</span>
+                                <span className="text-red-500">{previewData.filter(r => !r.isValid).length} Warnings</span>
+                              </div>
+                            </div>
+
+                            <div className="border border-slate-200 rounded-xl overflow-hidden max-h-[300px] overflow-y-auto">
+                              <table className="min-w-full divide-y divide-slate-200">
+                                <thead className="bg-slate-50 text-[10px] uppercase font-bold tracking-wider text-slate-400">
+                                  <tr>
+                                    <th className="px-4 py-2.5 text-left">Row</th>
+                                    <th className="px-4 py-2.5 text-left">Reg Number</th>
+                                    <th className="px-4 py-2.5 text-left">Student Name</th>
+                                    <th className="px-4 py-2.5 text-left">Dept ID</th>
+                                    <th className="px-4 py-2.5 text-left">Program ID</th>
+                                    <th className="px-4 py-2.5 text-left">Batch</th>
+                                    <th className="px-4 py-2.5 text-left">Semester</th>
+                                    <th className="px-4 py-2.5 text-left">Status / Errors</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100 text-xs font-semibold bg-white text-slate-700">
+                                  {previewData.map((row, idx) => (
+                                    <tr key={idx} className={row.isValid ? 'hover:bg-slate-50' : 'bg-red-50/20'}>
+                                      <td className="px-4 py-3 font-mono text-slate-400">{row.rowNum}</td>
+                                      <td className="px-4 py-3 font-bold font-mono text-indigo-600">{row.regNo || '—'}</td>
+                                      <td className="px-4 py-3 text-slate-900">{row.name || '—'}</td>
+                                      <td className="px-4 py-3 font-mono text-[10px] uppercase">{row.departmentId || '—'}</td>
+                                      <td className="px-4 py-3 font-mono text-[10px] uppercase">{row.programId || '—'}</td>
+                                      <td className="px-4 py-3">{row.batch}</td>
+                                      <td className="px-4 py-3 text-slate-500">{row.semester}</td>
+                                      <td className="px-4 py-3">
+                                        {row.isValid ? (
+                                          <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 text-[10px] font-bold rounded-md border border-emerald-100 flex items-center gap-1 w-max">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                                            <span>Ready</span>
+                                          </span>
+                                        ) : (
+                                          <div className="flex flex-col gap-0.5 max-w-xs">
+                                            {row.errors.map((e: string, i: number) => (
+                                              <span key={i} className="text-[10px] font-bold text-red-600 flex items-center gap-1">
+                                                <span className="w-1 h-1 rounded-full bg-red-500 shrink-0"></span>
+                                                <span>{e}</span>
+                                              </span>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+
+                            <div className="flex items-center justify-end gap-3 pt-3">
+                              <button
+                                onClick={() => {
+                                  setPreviewData([]);
+                                  setImportFile(null);
+                                }}
+                                className="px-4 py-2.5 text-xs font-bold text-slate-500 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all cursor-pointer"
+                              >
+                                Clear uploaded file
+                              </button>
+                              <button
+                                onClick={handleImportSubmit}
+                                className="px-5 py-2.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-all shadow-md cursor-pointer flex items-center gap-1.5"
+                                disabled={previewData.filter(r => r.isValid).length === 0}
+                              >
+                                <Check className="w-4 h-4" />
+                                <span>Register {previewData.filter(r => r.isValid).length} Valid Students</span>
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         )}
+
+        <AnimatePresence>
+          {studentToDelete && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+              {/* Backdrop */}
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setStudentToDelete(null)}
+                className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs"
+              />
+              
+              {/* Modal Dialog Content */}
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0, y: 10 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.95, opacity: 0, y: 10 }}
+                transition={{ type: "spring", duration: 0.3 }}
+                className="relative w-full max-w-md bg-white border border-slate-200 rounded-[28px] shadow-2xl p-6 overflow-hidden z-10"
+              >
+                <div className="flex flex-col items-center text-center">
+                  {/* Warning Icon Container */}
+                  <div className="w-14 h-14 rounded-full bg-red-50 text-red-600 flex items-center justify-center border border-red-100 mb-4 animate-pulse">
+                    <Trash2 className="w-7 h-7" />
+                  </div>
+
+                  <h3 className="font-display font-bold text-slate-800 text-lg mb-2">
+                    Confirm Student Deletion
+                  </h3>
+
+                  <p className="text-xs text-slate-500 mb-6 leading-relaxed max-w-xs font-semibold">
+                    Are you sure you want to permanently delete <span className="text-slate-800 font-bold">"{studentToDelete.name}"</span> with registration ID <span className="text-indigo-600 font-bold font-mono text-[11px] bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded">{studentToDelete.regNo}</span>?
+                    <br /><br />
+                    <span className="text-red-600 font-bold flex items-center gap-1 justify-center bg-red-50/50 p-2.5 rounded-xl border border-red-100">
+                      <AlertCircle className="w-4 h-4 shrink-0" />
+                      This operation is irreversible!
+                    </span>
+                  </p>
+
+                  {/* Actions */}
+                  <div className="grid grid-cols-2 gap-3 w-full">
+                    <button
+                      id="btn-cancel-delete"
+                      type="button"
+                      onClick={() => setStudentToDelete(null)}
+                      className="py-3 px-4 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 hover:text-slate-900 text-xs font-bold rounded-xl transition-all cursor-pointer shadow-2xs font-sans"
+                    >
+                      No, Cancel
+                    </button>
+                    <button
+                      id="btn-confirm-delete"
+                      type="button"
+                      onClick={confirmDeleteStudent}
+                      className="py-3 px-4 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl transition-all cursor-pointer shadow-md flex items-center justify-center gap-1.5 hover:shadow-red-200 font-sans"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      <span>Yes, Delete</span>
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
 
       </main>
     </div>

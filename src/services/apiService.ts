@@ -16,88 +16,257 @@ const DEFAULT_FALLBACK_DATA: OBEData = {
       name: 'Department of Business Administration',
       vision: 'To be a leading business school recognized globally for nurturing entrepreneurial mindsets and ethical leadership in the corporate world.',
       mission: 'To empower students with innovative business education, pioneering research capabilities, and ethical principles designed to create future business leaders.'
+    },
+    {
+      id: 'engineering',
+      name: 'Department of Engineering and Applied Sciences',
+      vision: 'To foster innovation, sustainable development, and global leadership in physical, chemical, and electrical systems development.',
+      mission: 'To cultivate engineering leaders through rigorous experiential learning, research excellence, and socially responsible designs.'
+    },
+    {
+      id: 'media',
+      name: 'Department of Media and Communications',
+      vision: 'To inspire creative thinking, truth seeking, and advanced media production standards for modern media landscapes.',
+      mission: 'To prepare future journalists and digital marketers with robust storytelling, visual art principles, and ethical reporting practices.'
+    },
+    {
+      id: 'health',
+      name: 'Department of Health and Life Sciences',
+      vision: 'To be a center of clinical excellence and biotechnology research that transforms human health and well-being.',
+      mission: 'To empower practitioners and researchers through state-of-the-art clinical skills, bioethics education, and dynamic scientific inquiry.'
     }
   ],
   programs: [
+    // Computing Department Programs (BSCS, BSSE, BSCY)
     {
       id: 'bscs',
       name: 'Bachelor of Science in Computer Science',
       code: 'BSCS',
       departmentId: 'computing',
       pos: [
-        {
-          id: 'PO1',
-          text: 'Establishing in-depth understanding of theoretical concepts related to computer science.',
-          mappedGAs: ['GA-1', 'GA-2']
-        },
-        {
-          id: 'PO2',
-          text: 'Applying core Computer Science knowledge and analytical skills to optimally solve real-world problems.',
-          mappedGAs: ['GA-1', 'GA-2', 'GA-3', 'GA-4', 'GA-5']
-        },
-        {
-          id: 'PO3',
-          text: 'Imbuing quest for learning and engaging in continuous professional development in the field of computer science by carrying research and adopting professional practices.',
-          mappedGAs: ['GA-3', 'GA-4', 'GA-6', 'GA-7', 'GA-8', 'GA-10']
-        },
-        {
-          id: 'PO4',
-          text: 'Developing the ability to work in a multi-disciplinary and multi cultural environment in teams incorporating soft skills and maintaining high ethical standards.',
-          mappedGAs: ['GA-6', 'GA-7', 'GA-9']
-        }
+        { id: 'PO1', text: 'Establishing in-depth understanding of theoretical concepts related to computer science.', mappedGAs: ['GA-1', 'GA-2'] },
+        { id: 'PO2', text: 'Applying core Computer Science knowledge and analytical skills to optimally solve real-world problems.', mappedGAs: ['GA-1', 'GA-2', 'GA-3', 'GA-4', 'GA-5'] },
+        { id: 'PO3', text: 'Imbuing quest for learning and engaging in continuous professional development in the field of computer science by carrying research and adopting professional practices.', mappedGAs: ['GA-3', 'GA-4', 'GA-6', 'GA-7', 'GA-8', 'GA-10'] },
+        { id: 'PO4', text: 'Developing the ability to work in a multi-disciplinary and multi cultural environment in teams incorporating soft skills and maintaining high ethical standards.', mappedGAs: ['GA-6', 'GA-7', 'GA-9'] }
       ]
     },
+    {
+      id: 'bsse',
+      name: 'Bachelor of Science in Software Engineering',
+      code: 'BSSE',
+      departmentId: 'computing',
+      pos: [
+        { id: 'PO1', text: 'Mastery of software design patterns and system architecture specifications.', mappedGAs: ['GA-1', 'GA-4'] },
+        { id: 'PO2', text: 'Applying software engineering lifecycles and modern testing frameworks to construct robust products.', mappedGAs: ['GA-2', 'GA-4', 'GA-5'] },
+        { id: 'PO3', text: 'Understanding of professional and ethical responsibilities in software development.', mappedGAs: ['GA-8', 'GA-9'] },
+        { id: 'PO4', text: 'Engaging in lifelong learning to adapt to emerging software frameworks and AI-assisted development tools.', mappedGAs: ['GA-10'] }
+      ]
+    },
+    {
+      id: 'bscy',
+      name: 'Bachelor of Science in Cyber Security',
+      code: 'BSCY',
+      departmentId: 'computing',
+      pos: [
+        { id: 'PO1', text: 'Analyzing security properties and identifying vulnerabilities in networks and cloud architectures.', mappedGAs: ['GA-3', 'GA-4'] },
+        { id: 'PO2', text: 'Implementing high-fidelity cryptographic models and access control measures to protect institutional infrastructure.', mappedGAs: ['GA-2', 'GA-5'] },
+        { id: 'PO3', text: 'Formulating disaster recovery protocols and ethical hacking methodologies conforming to international standards.', mappedGAs: ['GA-8', 'GA-9'] },
+        { id: 'PO4', text: 'Communicating risk profiles and policy compliance metrics effectively with executive stakeholders.', mappedGAs: ['GA-7'] }
+      ]
+    },
+
+    // Business Department Programs (BBA, BSAF, MBA)
     {
       id: 'bba',
       name: 'Bachelor of Business Administration',
       code: 'BBA',
       departmentId: 'business',
       pos: [
-        {
-          id: 'PO1',
-          text: 'Mastering Core Business Management Skills and Analytical Tools.',
-          mappedGAs: ['GA-1', 'GA-4']
-        },
-        {
-          id: 'PO2',
-          text: 'Strategic planning, operations synthesis, and ethical decision modeling.',
-          mappedGAs: ['GA-2', 'GA-3', 'GA-5']
-        },
-        {
-          id: 'PO3',
-          text: 'Fostering innovative business development strategies and executive communication.',
-          mappedGAs: ['GA-3', 'GA-6', 'GA-8']
-        },
-        {
-          id: 'PO4',
-          text: 'Developing adaptive management capabilities in multi-dimensional market climates.',
-          mappedGAs: ['GA-2', 'GA-7']
-        }
+        { id: 'PO1', text: 'Mastering Core Business Management Skills and Analytical Tools.', mappedGAs: ['GA-B1', 'GA-B4'] },
+        { id: 'PO2', text: 'Strategic planning, operations synthesis, and ethical decision modeling.', mappedGAs: ['GA-B2', 'GA-B3', 'GA-B5'] },
+        { id: 'PO3', text: 'Fostering innovative business development strategies and executive communication.', mappedGAs: ['GA-B3', 'GA-B6', 'GA-B8'] },
+        { id: 'PO4', text: 'Developing adaptive management capabilities in multi-dimensional market climates.', mappedGAs: ['GA-B2', 'GA-B7'] }
+      ]
+    },
+    {
+      id: 'bsaf',
+      name: 'Bachelor of Science in Accounting and Finance',
+      code: 'BSAF',
+      departmentId: 'business',
+      pos: [
+        { id: 'PO1', text: 'Applying advanced taxation and compliance mechanisms in financial reporting.', mappedGAs: ['GA-B1', 'GA-B4'] },
+        { id: 'PO2', text: 'Executing rigorous quantitative audit procedures and risk assessments for complex institutions.', mappedGAs: ['GA-B4', 'GA-B7'] },
+        { id: 'PO3', text: 'Synthesizing investment strategies and portfolio management structures.', mappedGAs: ['GA-B3', 'GA-B8'] },
+        { id: 'PO4', text: 'Engaging ethical leadership guidelines in corporate accounting structures.', mappedGAs: ['GA-B2', 'GA-B5'] }
+      ]
+    },
+    {
+      id: 'mba',
+      name: 'Master of Business Administration',
+      code: 'MBA',
+      departmentId: 'business',
+      pos: [
+        { id: 'PO1', text: 'Formulating high-level global market expansion strategies and supply chain management structures.', mappedGAs: ['GA-B3', 'GA-B8'] },
+        { id: 'PO2', text: 'Driving executive data-driven decision optimization via business intelligence frameworks.', mappedGAs: ['GA-B1', 'GA-B7'] },
+        { id: 'PO3', text: 'Negotiating complex stakeholder values with impeccable corporate communication.', mappedGAs: ['GA-B2', 'GA-B6'] },
+        { id: 'PO4', text: 'Championing systemic corporate social responsibility initiatives.', mappedGAs: ['GA-B5'] }
+      ]
+    },
+
+    // Engineering Department Programs (BEEE, BECE, BECIV)
+    {
+      id: 'be_ee',
+      name: 'Bachelor of Engineering in Electrical Engineering',
+      code: 'BEEE',
+      departmentId: 'engineering',
+      pos: [
+        { id: 'PO1', text: 'Designing electrical power systems and modern grid architectures.', mappedGAs: ['GA-E1', 'GA-E2'] },
+        { id: 'PO2', text: 'Applying signal processing mechanisms and embedded controls.', mappedGAs: ['GA-E2', 'GA-E3'] },
+        { id: 'PO3', text: 'Evaluating safety protocols and environmental impact of power setups.', mappedGAs: ['GA-E4'] },
+        { id: 'PO4', text: 'Leading multi-disciplinary engineering projects under stringent timelines.', mappedGAs: ['GA-E2', 'GA-E4'] }
+      ]
+    },
+    {
+      id: 'be_ce',
+      name: 'Bachelor of Engineering in Computer Engineering',
+      code: 'BECE',
+      departmentId: 'engineering',
+      pos: [
+        { id: 'PO1', text: 'Developing firmware and high-performance microprocessor architectures.', mappedGAs: ['GA-E1', 'GA-E3'] },
+        { id: 'PO2', text: 'Co-designing hardware and software systems for automated IoT systems.', mappedGAs: ['GA-E2', 'GA-E3'] },
+        { id: 'PO3', text: 'Troubleshooting integrated electronic circuits with modern laboratory instrumentation.', mappedGAs: ['GA-E3'] },
+        { id: 'PO4', text: 'Adhering to professional norms and global technical regulations.', mappedGAs: ['GA-E4'] }
+      ]
+    },
+    {
+      id: 'be_civ',
+      name: 'Bachelor of Engineering in Civil Engineering',
+      code: 'BECIV',
+      departmentId: 'engineering',
+      pos: [
+        { id: 'PO1', text: 'Analyzing structural integrity and safety standards for infrastructure project plans.', mappedGAs: ['GA-E1', 'GA-E2'] },
+        { id: 'PO2', text: 'Implementing advanced geotech and hydraulics modeling solutions.', mappedGAs: ['GA-E2', 'GA-E3'] },
+        { id: 'PO3', text: 'Pioneering sustainable smart city structures and eco-friendly building materials.', mappedGAs: ['GA-E4'] },
+        { id: 'PO4', text: 'Managing municipal budgets and public resource allocations.', mappedGAs: ['GA-E2'] }
+      ]
+    },
+
+    // Media Department Programs (BSMS, BSDM, MSJR)
+    {
+      id: 'bs_ms',
+      name: 'Bachelor of Science in Media Studies',
+      code: 'BSMS',
+      departmentId: 'media',
+      pos: [
+        { id: 'PO1', text: 'Comprehending historical theories of media consumption and social discourse.', mappedGAs: ['GA-M1'] },
+        { id: 'PO2', text: 'Mastering advanced film production, screenwriting, and cinematic lighting.', mappedGAs: ['GA-M2', 'GA-M3'] },
+        { id: 'PO3', text: 'Critically analyzing television formats and broadcast guidelines.', mappedGAs: ['GA-M1', 'GA-M4'] },
+        { id: 'PO4', text: 'Managing multi-cam productions and digital media editing workflows.', mappedGAs: ['GA-M3'] }
+      ]
+    },
+    {
+      id: 'bs_dm',
+      name: 'Bachelor of Science in Digital Marketing',
+      code: 'BSDM',
+      departmentId: 'media',
+      pos: [
+        { id: 'PO1', text: 'Formulating conversion rate optimization funnels and multi-channel ad campaigns.', mappedGAs: ['GA-M1', 'GA-M3'] },
+        { id: 'PO2', text: 'Leveraging SEO algorithms and data analytics to optimize web presence.', mappedGAs: ['GA-M2', 'GA-M3'] },
+        { id: 'PO3', text: 'Designing professional social media content and brand voice systems.', mappedGAs: ['GA-M3'] },
+        { id: 'PO4', text: 'Exercising consumer rights compliance and ethical ad placement strategies.', mappedGAs: ['GA-M4'] }
+      ]
+    },
+    {
+      id: 'ms_jr',
+      name: 'Master of Science in Journalism',
+      code: 'MSJR',
+      departmentId: 'media',
+      pos: [
+        { id: 'PO1', text: 'Executing high-impact investigative journalism projects in complex environments.', mappedGAs: ['GA-M1', 'GA-M2'] },
+        { id: 'PO2', text: 'Demonstrating complete commitment to editorial truthfulness and legal protection.', mappedGAs: ['GA-M4'] },
+        { id: 'PO3', text: 'Mastering mobile journalism and real-time live reporting procedures.', mappedGAs: ['GA-M3'] },
+        { id: 'PO4', text: 'Analyzing global news syndicates and geostrategic news framing models.', mappedGAs: ['GA-M1'] }
+      ]
+    },
+
+    // Health Department Programs (DPT, BSN, BSBT)
+    {
+      id: 'dpt',
+      name: 'Doctor of Physical Therapy',
+      code: 'DPT',
+      departmentId: 'health',
+      pos: [
+        { id: 'PO1', text: 'Executing comprehensive musculoskeletal diagnostic examinations.', mappedGAs: ['GA-H1', 'GA-H2'] },
+        { id: 'PO2', text: 'Designing customized physical rehabilitation regimens for diverse populations.', mappedGAs: ['GA-H2', 'GA-H3'] },
+        { id: 'PO3', text: 'Upholding patient confidentiality and professional clinical ethics.', mappedGAs: ['GA-H4'] },
+        { id: 'PO4', text: 'Collaborating in inter-professional healthcare units.', mappedGAs: ['GA-H2'] }
+      ]
+    },
+    {
+      id: 'bs_n',
+      name: 'Bachelor of Science in Nursing',
+      code: 'BSN',
+      departmentId: 'health',
+      pos: [
+        { id: 'PO1', text: 'Delivering holistic clinical nursing care in intensive situations.', mappedGAs: ['GA-H1', 'GA-H2'] },
+        { id: 'PO2', text: 'Administering life-saving pharmacological interventions accurately.', mappedGAs: ['GA-H3'] },
+        { id: 'PO3', text: 'Acting as an empathetic health advocate for underserved demographic units.', mappedGAs: ['GA-H4'] },
+        { id: 'PO4', text: 'Managing sterile ward operations and emergency triage guidelines.', mappedGAs: ['GA-H2', 'GA-H3'] }
+      ]
+    },
+    {
+      id: 'bs_bt',
+      name: 'Bachelor of Science in Biotechnology',
+      code: 'BSBT',
+      departmentId: 'health',
+      pos: [
+        { id: 'PO1', text: 'Isolating nucleic acids and executing advanced PCR procedures.', mappedGAs: ['GA-H1', 'GA-H3'] },
+        { id: 'PO2', text: 'Manipulating recombinant DNA systems for vaccine development.', mappedGAs: ['GA-H2', 'GA-H3'] },
+        { id: 'PO3', text: 'Evaluating chemical biohazards and clinical biosafety levels.', mappedGAs: ['GA-H4'] },
+        { id: 'PO4', text: 'Interpreting complex bio-informatics data sequences.', mappedGAs: ['GA-H2'] }
       ]
     }
   ],
   gas: [
     // Computing Department GAs
     { id: 'GA-1', name: 'Academic Education', description: 'Completion of an accredited program of study designed to prepare graduates as computing professionals.', departmentId: 'computing' },
-    { id: 'GA-2', name: 'Knowledge for Solving Computing Problems', description: 'Apply knowledge of computing fundamentals, knowledge of a computing specialization, and mathematics, science, and domain knowledge appropriate for the computing specialization to the abstraction and conceptualization of computing models from defined problems and requirements.', departmentId: 'computing' },
-    { id: 'GA-3', name: 'Problem Analysis', description: 'Identify and solve complex computing problems reaching substantiated conclusions using fundamental principles of mathematics, computing sciences, and relevant domain disciplines.', departmentId: 'computing' },
-    { id: 'GA-4', name: 'Design/Development of Solutions', description: 'Design and evaluate solutions for complex computing problems, and design and evaluate systems, components, or processes that meet specified needs.', departmentId: 'computing' },
-    { id: 'GA-5', name: 'Modern Tool Usage', description: 'Create, select, or adapt and then apply appropriate techniques, resources, and modern computing tools to complex computing activities, with an understanding of the limitations.', departmentId: 'computing' },
-    { id: 'GA-6', name: 'Individual and Team Work', description: 'Function effectively as an individual and as a member or leader of a team in multidisciplinary settings.', departmentId: 'computing' },
-    { id: 'GA-7', name: 'Communication', description: 'Communicate effectively with the computing community about complex computing activities by being able to comprehend and write effective reports, design documentation, make effective presentations, and give and understand clear instructions.', departmentId: 'computing' },
-    { id: 'GA-8', name: 'Computing Professionalism and Society', description: 'Understand and assess societal, health, safety, legal, and cultural issues within local and global contexts, and the consequential responsibilities relevant to professional computing practice.', departmentId: 'computing' },
-    { id: 'GA-9', name: 'Ethics', description: 'Understand and commit to professional ethics, responsibilities, and norms of professional computing practice.', departmentId: 'computing' },
-    { id: 'GA-10', name: 'Life-long Learning', description: 'Recognize the need, and have the ability, to engage in independent learning for continual development as a computing professional.', departmentId: 'computing' },
+    { id: 'GA-2', name: 'Knowledge for Solving Computing Problems', description: 'Apply knowledge of computing fundamentals.', departmentId: 'computing' },
+    { id: 'GA-3', name: 'Problem Analysis', description: 'Identify and solve complex computing problems.', departmentId: 'computing' },
+    { id: 'GA-4', name: 'Design/Development of Solutions', description: 'Design and evaluate solutions for complex computing problems.', departmentId: 'computing' },
+    { id: 'GA-5', name: 'Modern Tool Usage', description: 'Create, select, or adapt and then apply appropriate modern computing tools.', departmentId: 'computing' },
+    { id: 'GA-6', name: 'Individual and Team Work', description: 'Function effectively as an individual and as a member or leader of a team.', departmentId: 'computing' },
+    { id: 'GA-7', name: 'Communication', description: 'Communicate effectively with the computing community.', departmentId: 'computing' },
+    { id: 'GA-8', name: 'Computing Professionalism and Society', description: 'Understand and assess societal, health, safety, legal, and cultural issues.', departmentId: 'computing' },
+    { id: 'GA-9', name: 'Ethics', description: 'Understand and commit to professional ethics.', departmentId: 'computing' },
+    { id: 'GA-10', name: 'Life-long Learning', description: 'Engage in independent learning for continual development.', departmentId: 'computing' },
 
     // Business Department GAs
-    { id: 'GA-B1', name: 'Business Analytics & Decision Making', description: 'Execute comprehensive business analysis and apply quantitative tools for strategic decision support.', departmentId: 'business' },
-    { id: 'GA-B2', name: 'Leadership & Teamwork', description: 'Foster strong collaborative performance, conflict resolution, and motivational team frameworks within workspaces.', departmentId: 'business' },
-    { id: 'GA-B3', name: 'Strategic Thinking', description: 'Synthesize market trends, competitive intelligence, and internal structures to deploy agile business vision.', departmentId: 'business' },
-    { id: 'GA-B4', name: 'Financial Literacy', description: 'Evaluate balance sheets, corporate portfolios, and financial statements to drive corporate value addition.', departmentId: 'business' },
-    { id: 'GA-B5', name: 'Corporate Social Responsibility & Ethics', description: 'Demonstrate deep compliance, corporate transparency, and standard professional ethics in corporate systems.', departmentId: 'business' },
-    { id: 'GA-B6', name: 'Communication & Presenting', description: 'Deliver highly structured business communications, elevator pitches, and expert corporate reporting values.', departmentId: 'business' },
-    { id: 'GA-B7', name: 'Critical Advisory', description: 'Troubleshoot complex business cases and offer sustainable, optimized pathways to enterprise models.', departmentId: 'business' },
-    { id: 'GA-B8', name: 'Business Enterprise', description: 'Exhibit high entrepreneurial alertness, business opportunity detection traits, and adaptive startup frameworks.', departmentId: 'business' }
+    { id: 'GA-B1', name: 'Business Analytics & Decision Making', description: 'Execute comprehensive business analysis.', departmentId: 'business' },
+    { id: 'GA-B2', name: 'Leadership & Teamwork', description: 'Foster strong collaborative performance.', departmentId: 'business' },
+    { id: 'GA-B3', name: 'Strategic Thinking', description: 'Synthesize market trends to deploy agile business vision.', departmentId: 'business' },
+    { id: 'GA-B4', name: 'Financial Literacy', description: 'Evaluate balance sheets and financial statements.', departmentId: 'business' },
+    { id: 'GA-B5', name: 'Corporate Social Responsibility & Ethics', description: 'Demonstrate deep compliance and transparency.', departmentId: 'business' },
+    { id: 'GA-B6', name: 'Communication & Presenting', description: 'Deliver highly structured business communications.', departmentId: 'business' },
+    { id: 'GA-B7', name: 'Critical Advisory', description: 'Troubleshoot complex business cases.', departmentId: 'business' },
+    { id: 'GA-B8', name: 'Business Enterprise', description: 'Exhibit high entrepreneurial alertness.', departmentId: 'business' },
+
+    // Engineering Department GAs
+    { id: 'GA-E1', name: 'Engineering Knowledge', description: 'Apply mathematics, science, and engineering fundamentals.', departmentId: 'engineering' },
+    { id: 'GA-E2', name: 'Design & Investigation', description: 'Formulate system parameters and conduct valid experiment designs.', departmentId: 'engineering' },
+    { id: 'GA-E3', name: 'Modern Engineering Tools', description: 'Deploy state-of-the-art computational simulation designs.', departmentId: 'engineering' },
+    { id: 'GA-E4', name: 'Ethics & Environment', description: 'Mitigate ecological hazards and adhere to professional codes.', departmentId: 'engineering' },
+
+    // Media Department GAs
+    { id: 'GA-M1', name: 'Media Literacy', description: 'Analyze structural paradigms in mass communication streams.', departmentId: 'media' },
+    { id: 'GA-M2', name: 'Content Strategy', description: 'Optimize user attention dynamics and narrative engagement loops.', departmentId: 'media' },
+    { id: 'GA-M3', name: 'Digital Tools Production', description: 'Design premium multimedia vectors and software configurations.', departmentId: 'media' },
+    { id: 'GA-M4', name: 'Acoustic & Media Ethics', description: 'Defend journalism integrity standards.', departmentId: 'media' },
+
+    // Health Department GAs
+    { id: 'GA-H1', name: 'Medical Knowledge', description: 'Demonstrate rigorous understanding of biological mechanics.', departmentId: 'health' },
+    { id: 'GA-H2', name: 'Clinical Excellence', description: 'Perform diagnostic inquiries and execute treatment designs safely.', departmentId: 'health' },
+    { id: 'GA-H3', name: 'Scientific Research', description: 'Formulate bio-informatics queries and test chemical hypotheses.', departmentId: 'health' },
+    { id: 'GA-H4', name: 'Bioethics & Patient Advocacy', description: 'Enforce patient rights and medical ethics codes.', departmentId: 'health' }
   ],
   courses: [
     // 37 BSCS Core Courses + 7 Electives (Total 44 as shown exactly in photos!)
@@ -171,6 +340,15 @@ const getLocalStorageData = (): OBEData => {
     try {
       const parsed = JSON.parse(dataStr);
       let migrated = false;
+
+      // Force reset or migrate departments if they have old dataset
+      if (!parsed.departments || parsed.departments.length < 5) {
+        parsed.departments = DEFAULT_FALLBACK_DATA.departments;
+        parsed.programs = DEFAULT_FALLBACK_DATA.programs;
+        parsed.gas = DEFAULT_FALLBACK_DATA.gas;
+        migrated = true;
+      }
+
       if (Array.isArray(parsed.courses)) {
         parsed.courses = parsed.courses.map((c: any) => {
           if (c.departmentId === 'computing' && !c.programId) {
@@ -180,18 +358,13 @@ const getLocalStorageData = (): OBEData => {
           return c;
         });
       }
-      if (Array.isArray(parsed.gas)) {
-        parsed.gas = parsed.gas.map((g: any) => {
-          if (g.departmentId === 'computing' && !g.programId) {
-            migrated = true;
-            return { ...g, programId: 'bscs' };
-          }
-          if (g.departmentId === 'business' && !g.programId) {
-            migrated = true;
-            return { ...g, programId: 'bba' };
-          }
-          return g;
-        });
+      if (Array.isArray(parsed.gas) && parsed.gas.length > 0 && parsed.departments && parsed.departments.length >= 5) {
+        // Ensure GAs are migrated/present for all departments
+        const hasEngineeringGAs = parsed.gas.some((g: any) => g.departmentId === 'engineering');
+        if (!hasEngineeringGAs) {
+          parsed.gas = DEFAULT_FALLBACK_DATA.gas;
+          migrated = true;
+        }
       } else {
         migrated = true;
         parsed.gas = DEFAULT_FALLBACK_DATA.gas.map(g => {
@@ -504,10 +677,10 @@ export const apiService = {
       }
     }
     const initialStudents: Student[] = [
-      { regNo: "FA22-BSCS-0012", name: "Abdur Rehman Khalid", departmentId: "computing", programId: "bscs", batch: "Fall" },
-      { regNo: "FA22-BSCS-0045", name: "Syeda Fatima Alvi", departmentId: "computing", programId: "bscs", batch: "Fall" },
-      { regNo: "FA22-BSCS-0089", name: "Zayan Ahmed Khan", departmentId: "computing", programId: "bscs", batch: "Fall" },
-      { regNo: "FA22-BSCS-0104", name: "Misha Farooq", departmentId: "computing", programId: "bscs", batch: "Fall" }
+      { regNo: "FA22-BSCS-0012", name: "Abdur Rehman Khalid", departmentId: "computing", programId: "bscs", batch: "Fall", semester: "6th" },
+      { regNo: "FA22-BSCS-0045", name: "Syeda Fatima Alvi", departmentId: "computing", programId: "bscs", batch: "Fall", semester: "6th" },
+      { regNo: "FA22-BSCS-0089", name: "Zayan Ahmed Khan", departmentId: "computing", programId: "bscs", batch: "Fall", semester: "6th" },
+      { regNo: "FA22-BSCS-0104", name: "Misha Farooq", departmentId: "computing", programId: "bscs", batch: "Fall", semester: "6th" }
     ];
     localStorage.setItem('IQRA_OBE_STUDENTS', JSON.stringify(initialStudents));
     return initialStudents;
