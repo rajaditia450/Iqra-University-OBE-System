@@ -37,7 +37,7 @@ const DEFAULT_FALLBACK_DATA: OBEData = {
     }
   ],
   programs: [
-    // Computing Department Programs (BSCS, BSSE, BSCY)
+    // Computing Department Programs (BSCS, BSAI, BSSE, BSCY)
     {
       id: 'bscs',
       name: 'Bachelor of Science in Computer Science',
@@ -48,6 +48,18 @@ const DEFAULT_FALLBACK_DATA: OBEData = {
         { id: 'PO2', text: 'Applying core Computer Science knowledge and analytical skills to optimally solve real-world problems.', mappedGAs: ['GA-1', 'GA-2', 'GA-3', 'GA-4', 'GA-5'] },
         { id: 'PO3', text: 'Imbuing quest for learning and engaging in continuous professional development in the field of computer science by carrying research and adopting professional practices.', mappedGAs: ['GA-3', 'GA-4', 'GA-6', 'GA-7', 'GA-8', 'GA-10'] },
         { id: 'PO4', text: 'Developing the ability to work in a multi-disciplinary and multi cultural environment in teams incorporating soft skills and maintaining high ethical standards.', mappedGAs: ['GA-6', 'GA-7', 'GA-9'] }
+      ]
+    },
+    {
+      id: 'bsai',
+      name: 'Bachelor of Science in Artificial Intelligence',
+      code: 'BSAI',
+      departmentId: 'computing',
+      pos: [
+        { id: 'PO1', text: 'Establishing in-depth understanding of theoretical concepts related to intelligence representation and reasoning.', mappedGAs: ['GA-1', 'GA-2'] },
+        { id: 'PO2', text: 'Applying core AI systems knowledge, deep learning, and analytical skills to optimally solve real-world problems.', mappedGAs: ['GA-1', 'GA-2', 'GA-3', 'GA-4', 'GA-5'] },
+        { id: 'PO3', text: 'Imbuing quest for learning and engaging in continuous professional development in the field of artificial intelligence by carrying research and adopting professional practices.', mappedGAs: ['GA-3', 'GA-4', 'GA-6', 'GA-7', 'GA-8', 'GA-10'] },
+        { id: 'PO4', text: 'Developing the ability to work in a multi-disciplinary and multicultural environment in teams incorporating soft skills and maintaining high ethical standards in intelligent systems.', mappedGAs: ['GA-6', 'GA-7', 'GA-9'] }
       ]
     },
     {
@@ -317,6 +329,22 @@ const DEFAULT_FALLBACK_DATA: OBEData = {
     { id: 'C43', code: 'CSC321', title: 'Embedded Systems', type: 'elective', mappedGAs: ['GA-1', 'GA-2', 'GA-5'], departmentId: 'computing' },
     { id: 'C44', code: 'CSC478', title: 'Routing and Switching', type: 'elective', mappedGAs: ['GA-1', 'GA-2', 'GA-3', 'GA-4'], departmentId: 'computing' },
 
+    // BSAI Core & Elective Courses
+    { id: 'C45', code: 'AIC211', title: 'Artificial Intelligence', type: 'core', mappedGAs: ['GA-1', 'GA-2', 'GA-4', 'GA-5'], departmentId: 'computing' },
+    { id: 'C46', code: 'AIC212', title: 'Programming For AI', type: 'core', mappedGAs: ['GA-1', 'GA-2', 'GA-4', 'GA-5'], departmentId: 'computing' },
+    { id: 'C47', code: 'CMC252', title: 'Analysis of Algorithms', type: 'core', mappedGAs: ['GA-1', 'GA-2', 'GA-3', 'GA-4'], departmentId: 'computing' },
+    { id: 'C48', code: 'AIC221', title: 'Introduction to Machine Learning', type: 'core', mappedGAs: ['GA-1', 'GA-2', 'GA-3', 'GA-4', 'GA-5'], departmentId: 'computing' },
+    { id: 'C49', code: 'AIC323', title: 'Artificial Neural Network & Deep Learning', type: 'core', mappedGAs: ['GA-1', 'GA-3', 'GA-4', 'GA-5'], departmentId: 'computing' },
+    { id: 'C50', code: 'AIE423', title: 'Computer vision', type: 'core', mappedGAs: ['GA-1', 'GA-2', 'GA-4'], departmentId: 'computing' },
+    { id: 'C51', code: 'AIC331', title: 'Knowledge Representation & Reasoning', type: 'core', mappedGAs: ['GA-1', 'GA-2', 'GA-3', 'GA-4'], departmentId: 'computing' },
+    { id: 'C52', code: 'AIE441', title: 'Natural Language Processing', type: 'elective', mappedGAs: ['GA-1', 'GA-2', 'GA-4', 'GA-5'], departmentId: 'computing' },
+    { id: 'C53', code: 'CSE384', title: 'Data Science', type: 'elective', mappedGAs: ['GA-1', 'GA-2', 'GA-7'], departmentId: 'computing' },
+    { id: 'C54', code: 'SEN352', title: 'HCI & Computer Graphics', type: 'elective', mappedGAs: ['GA-1', 'GA-3', 'GA-4'], departmentId: 'computing' },
+    { id: 'C55', code: 'AINX7X', title: 'Image Processing & Analysis', type: 'elective', mappedGAs: ['GA-1', 'GA-2', 'GA-4'], departmentId: 'computing' },
+    { id: 'C56', code: 'AIE341', title: 'Deep Learning', type: 'elective', mappedGAs: ['GA-1', 'GA-2', 'GA-3', 'GA-4'], departmentId: 'computing' },
+    { id: 'C57', code: 'AINX7X', title: 'Big Data', type: 'elective', mappedGAs: ['GA-1', 'GA-2', 'GA-3', 'GA-4'], departmentId: 'computing' },
+    { id: 'C58', code: 'AINX7X', title: 'Artificial Intelligence For Robotics', type: 'elective', mappedGAs: ['GA-1', 'GA-2', 'GA-3', 'GA-4'], departmentId: 'computing' },
+
     // Business Department Courses (BBA)
     { id: 'CB1', code: 'BUS101', title: 'Principles of Management', type: 'core', mappedGAs: ['GA-B2', 'GA-B3', 'GA-B6'], departmentId: 'business' },
     { id: 'CB2', code: 'MKT111', title: 'Principles of Marketing', type: 'core', mappedGAs: ['GA-B3', 'GA-B6', 'GA-B8'], departmentId: 'business' },
@@ -342,10 +370,12 @@ const getLocalStorageData = (): OBEData => {
       let migrated = false;
 
       // Force reset or migrate departments if they have old dataset
-      if (!parsed.departments || parsed.departments.length < 5) {
+      const hasBsai = parsed.programs && parsed.programs.some((p: any) => p.id === 'bsai');
+      if (!parsed.departments || parsed.departments.length < 5 || !hasBsai) {
         parsed.departments = DEFAULT_FALLBACK_DATA.departments;
         parsed.programs = DEFAULT_FALLBACK_DATA.programs;
         parsed.gas = DEFAULT_FALLBACK_DATA.gas;
+        parsed.courses = DEFAULT_FALLBACK_DATA.courses;
         migrated = true;
       }
 
@@ -391,7 +421,15 @@ const getLocalStorageData = (): OBEData => {
       if (migrated) {
         localStorage.setItem('IQRA_OBE_FALLBACK_DB', JSON.stringify(parsed));
       }
-      return parsed;
+      
+      // Filter the returned data to only Computing & Technology (computing) department and its CS, AI, SE programs
+      return {
+        ...parsed,
+        departments: (parsed.departments || []).filter((d: any) => d.id === 'computing'),
+        programs: (parsed.programs || []).filter((p: any) => p.departmentId === 'computing' && ['bscs', 'bsai', 'bsse'].includes(p.id)),
+        gas: (parsed.gas || []).filter((g: any) => g.departmentId === 'computing'),
+        courses: (parsed.courses || []).filter((c: any) => c.departmentId === 'computing')
+      };
     } catch (e) {
       console.error("Failed to parse local storage fallback, resetting to default.", e);
     }
@@ -425,7 +463,14 @@ const getLocalStorageData = (): OBEData => {
   });
 
   localStorage.setItem('IQRA_OBE_FALLBACK_DB', JSON.stringify(base));
-  return base;
+  
+  return {
+    ...base,
+    departments: (base.departments || []).filter(d => d.id === 'computing'),
+    programs: (base.programs || []).filter(p => p.departmentId === 'computing' && ['bscs', 'bsai', 'bsse'].includes(p.id)),
+    gas: (base.gas || []).filter(g => g.departmentId === 'computing'),
+    courses: (base.courses || []).filter(c => c.departmentId === 'computing')
+  };
 };
 
 const saveLocalStorageData = (data: OBEData) => {
@@ -471,11 +516,14 @@ export const apiService = {
         throw new Error('Malformed or empty departments returned from backend');
       }
 
+      const fallbackCourses = getLocalStorageData().courses;
+      const mergedCourses = Array.isArray(courses) && courses.length > 0 ? courses : fallbackCourses;
+
       return {
-        departments: depts,
-        programs: programs,
-        gas: gas,
-        courses: Array.isArray(courses) && courses.length > 0 ? courses : getLocalStorageData().courses,
+        departments: (depts || []).filter((d: any) => d.id === 'computing'),
+        programs: (programs || []).filter((p: any) => p.departmentId === 'computing' && ['bscs', 'bsai', 'bsse'].includes(p.id)),
+        gas: (gas || []).filter((g: any) => g.departmentId === 'computing'),
+        courses: (mergedCourses || []).filter((c: any) => c.departmentId === 'computing'),
       };
     } catch (err) {
       console.warn("Backend servers offline or unreachable. Propagating error to UI loader.", err);
@@ -671,7 +719,11 @@ export const apiService = {
     const saved = localStorage.getItem('IQRA_OBE_STUDENTS');
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        const hasBsai = parsed.some((s: any) => s.programId === 'bsai');
+        if (hasBsai) {
+          return parsed;
+        }
       } catch (e) {
         // ignore
       }
@@ -680,7 +732,11 @@ export const apiService = {
       { regNo: "012-fa22-22012", name: "Abdur Rehman Khalid", departmentId: "computing", programId: "bscs", batch: "Fall", semester: "6th" },
       { regNo: "045-fa22-22045", name: "Wajahat Bine Saif", departmentId: "computing", programId: "bscs", batch: "Fall", semester: "6th" },
       { regNo: "089-fa22-22089", name: "Zayan Ahmed Khan", departmentId: "computing", programId: "bscs", batch: "Fall", semester: "6th" },
-      { regNo: "104-fa22-22104", name: "Misha Farooq", departmentId: "computing", programId: "bscs", batch: "Fall", semester: "6th" }
+      { regNo: "104-fa22-22104", name: "Misha Farooq", departmentId: "computing", programId: "bscs", batch: "Fall", semester: "6th" },
+      { regNo: "001-fa23-23001", name: "Aisha Siddiqui", departmentId: "computing", programId: "bsai", batch: "Fall", semester: "4th" },
+      { regNo: "002-fa23-23002", name: "Muhammad Ali", departmentId: "computing", programId: "bsai", batch: "Fall", semester: "4th" },
+      { regNo: "003-sp24-24003", name: "Zainab Fatima", departmentId: "computing", programId: "bsai", batch: "Spring", semester: "3rd" },
+      { regNo: "004-fa24-24004", name: "Hamza Yusuf", departmentId: "computing", programId: "bsai", batch: "Fall", semester: "2nd" }
     ];
     localStorage.setItem('IQRA_OBE_STUDENTS', JSON.stringify(initialStudents));
     return initialStudents;
@@ -754,6 +810,9 @@ export const apiService = {
     const updated = current.filter(s => s.regNo !== regNo);
     localStorage.setItem('IQRA_OBE_STUDENTS', JSON.stringify(updated));
     return true;
+  },
+  saveLocalStorageData(data: OBEData): void {
+    saveLocalStorageData(data);
   }
 };
 

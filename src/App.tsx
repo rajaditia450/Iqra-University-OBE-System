@@ -4,6 +4,7 @@ import Login from './components/Login';
 import QADashboard from './components/QADashboard';
 import InstructorDashboard from './components/InstructorDashboard';
 import AdmissionDashboard from './components/AdmissionDashboard';
+import DeptAdminDashboard from './components/DeptAdminDashboard';
 import ComingSoon from './components/ComingSoon';
 import { AnimatePresence, motion } from 'motion/react';
 
@@ -60,6 +61,16 @@ export default function App() {
             className="w-full h-full"
           >
             <AdmissionDashboard onLogout={handleLogout} admissionName={currentUser.name || undefined} />
+          </motion.div>
+        ) : (currentUser.type === 'dept_admin') ? (
+          <motion.div
+            key="dept-admin-dashboard"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="w-full h-full"
+          >
+            <DeptAdminDashboard onLogout={handleLogout} adminName={currentUser.name || undefined} />
           </motion.div>
         ) : (
           <motion.div
