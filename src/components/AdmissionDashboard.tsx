@@ -27,6 +27,71 @@ import * as XLSX from 'xlsx';
 import StudentDirectory from './admission/StudentDirectory';
 import StudentDelete from './admission/StudentDelete';
 
+export const getRegNoPreview = (regNo: string) => {
+  const match = regNo.trim().match(/(FA|SP)(\d{2})/i);
+  if (!match) {
+    return null;
+  }
+  const prefix = match[1].toUpperCase();
+  const yearDigits = parseInt(match[2]);
+  const startYear = 2000 + yearDigits;
+  const startSemesterName = prefix === 'SP' ? 'Spring' : 'Fall';
+  const batchCode = `${prefix}${match[2]}`;
+
+  // Calculate Semester
+  // Spring starts in February (Month 1), Fall starts in September (Month 8)
+  const currentDate = new Date();
+  const currentYear = currentDate.getFullYear();
+  const currentMonth = currentDate.getMonth(); // 0 = January, 1 = February, ..., 11 = December
+  
+  let currentSemesterTerm: 'Spring' | 'Fall' = 'Spring';
+  let adjustedCurrentYear = currentYear;
+
+  if (currentMonth >= 1 && currentMonth <= 7) {
+    // Feb to Aug is Spring semester of currentYear
+    currentSemesterTerm = 'Spring';
+    adjustedCurrentYear = currentYear;
+  } else {
+    // Sep to Dec or Jan is Fall semester
+    currentSemesterTerm = 'Fall';
+    if (currentMonth === 0) {
+      // January belongs to the Fall semester of the previous calendar year
+      adjustedCurrentYear = currentYear - 1;
+    } else {
+      adjustedCurrentYear = currentYear;
+    }
+  }
+
+  const startIndex = startSemesterName === 'Spring' ? (2 * startYear) : (2 * startYear + 1);
+  const currentIndex = currentSemesterTerm === 'Spring' ? (2 * adjustedCurrentYear) : (2 * adjustedCurrentYear + 1);
+
+  const diff = currentIndex - startIndex + 1;
+  const semesterNum = diff > 0 ? diff : 1;
+
+  const getOrdinalSuffix = (num: number): string => {
+    if (num <= 0) return '1st';
+    const j = num % 10;
+    const k = num % 100;
+    if (j === 1 && k !== 11) {
+      return num + "st";
+    }
+    if (j === 2 && k !== 12) {
+      return num + "nd";
+    }
+    if (j === 3 && k !== 13) {
+      return num + "rd";
+    }
+    return num + "th";
+  };
+
+  return {
+    batchCode,
+    startSemesterName,
+    startYear,
+    currentSemesterVal: getOrdinalSuffix(semesterNum)
+  };
+};
+
 interface AdmissionDashboardProps {
   onLogout: () => void;
   admissionName?: string;
@@ -220,13 +285,17 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
       return;
     }
 
+    const preview = getRegNoPreview(cleanRegNo);
+    const derivedBatch = preview ? (preview.startSemesterName as 'Spring' | 'Summer' | 'Fall') : 'Fall';
+    const derivedSemester = preview ? preview.currentSemesterVal : '1st';
+
     const newStudent: Student = {
       regNo: cleanRegNo,
       name: cleanName,
       departmentId: selectedDeptId,
       programId: selectedProgId,
-      batch: selectedBatch,
-      semester: selectedSemester
+      batch: derivedBatch,
+      semester: derivedSemester
     };
 
     try {
@@ -281,11 +350,17 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
       setEditSearchError("Please enter a registration number");
       return;
     }
-    const matched = students.find(s => s.regNo.toUpperCase() === cleanQuery);
-    if (matched) {
-      handleEditClick(matched);
+    const matches = students.filter(s => 
+      s.regNo.toUpperCase().includes(cleanQuery) || 
+      s.name.toUpperCase().includes(cleanQuery)
+    );
+    if (matches.length === 1) {
+      handleEditClick(matches[0]);
+    } else if (matches.length > 1) {
+      // Multiple matches exist, let user choose from the live list
+      setEditSearchError(null);
     } else {
-      setEditSearchError(`No student found with registration number "${cleanQuery}"`);
+      setEditSearchError(`No student found matching "${cleanQuery}"`);
     }
   };
 
@@ -349,15 +424,23 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
           const semesterVal = getVal(['semester', 'currentsemester', 'sem']);
 
           let cleanedBatch: 'Spring' | 'Summer' | 'Fall' = 'Fall';
-          const bLower = batchVal.toLowerCase();
-          if (bLower.includes('spring')) cleanedBatch = 'Spring';
-          else if (bLower.includes('summer')) cleanedBatch = 'Summer';
+          let cleanedSemester = '1st';
 
-          let cleanedSemester = semesterVal || '1st';
-          if (/^\d+$/.test(cleanedSemester)) {
-            const num = parseInt(cleanedSemester);
-            const suffixes = ["th", "st", "nd", "rd", "th", "th", "th", "th", "th", "th", "th"];
-            cleanedSemester = num + (suffixes[num] || "th");
+          const preview = regNoVal ? getRegNoPreview(regNoVal) : null;
+          if (preview) {
+            cleanedBatch = preview.startSemesterName as 'Spring' | 'Summer' | 'Fall';
+            cleanedSemester = preview.currentSemesterVal;
+          } else {
+            const bLower = batchVal.toLowerCase();
+            if (bLower.includes('spring')) cleanedBatch = 'Spring';
+            else if (bLower.includes('summer')) cleanedBatch = 'Summer';
+
+            cleanedSemester = semesterVal || '1st';
+            if (/^\d+$/.test(cleanedSemester)) {
+              const num = parseInt(cleanedSemester);
+              const suffixes = ["th", "st", "nd", "rd", "th", "th", "th", "th", "th", "th", "th"];
+              cleanedSemester = num + (suffixes[num] || "th");
+            }
           }
 
           const errors: string[] = [];
@@ -407,10 +490,10 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
 
   const handleDownloadTemplate = () => {
     const headers = [
-      ["Registration Number", "Student Name", "Department ID", "Program ID", "Admission Batch", "Semester"],
-      ["FA22-BSCS-0045", "Syeda Fatima Alvi", "computing", "bscs", "Fall", "6th"],
-      ["SP23-BBA-0120", "Zayan Ahmed Khan", "business", "bba", "Spring", "5th"],
-      ["FA25-BECE-0010", "Abdur Rehman Khalid", "engineering", "be_ce", "Fall", "1st"]
+      ["Registration Number", "Student Name", "Department ID", "Program ID"],
+      ["FA22-BSCS-0045", "Syeda Fatima Alvi", "computing", "bscs"],
+      ["SP23-BBA-0120", "Zayan Ahmed Khan", "business", "bba"],
+      ["FA25-BECE-0010", "Abdur Rehman Khalid", "engineering", "be_ce"]
     ];
     
     const ws = XLSX.utils.aoa_to_sheet(headers);
@@ -771,53 +854,7 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
-                        {/* Batch Selection */}
-                        <div>
-                          <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2 ml-0.5">
-                            Admission Batch <span className="text-red-500">*</span>
-                          </label>
-                          <div className="grid grid-cols-3 gap-3">
-                            {['Spring', 'Summer', 'Fall'].map((b) => (
-                              <button
-                                key={b}
-                                type="button"
-                                onClick={() => setSelectedBatch(b as 'Spring' | 'Summer' | 'Fall')}
-                                className={`py-3 text-xs font-bold rounded-xl border transition-all cursor-pointer ${
-                                  selectedBatch === b 
-                                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' 
-                                    : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
-                                }`}
-                              >
-                                {b}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
 
-                        {/* Current Semester */}
-                        <div>
-                          <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2 ml-0.5">
-                            Current Semester <span className="text-red-500">*</span>
-                          </label>
-                          <div className="relative">
-                            <select
-                              id="select-semester"
-                              value={selectedSemester}
-                              onChange={(e) => setSelectedSemester(e.target.value)}
-                              className="w-full px-4 py-3 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border border-slate-200 focus:ring-2 focus:ring-indigo-600/10 focus:border-indigo-600 rounded-xl font-sans text-sm text-slate-800 outline-none cursor-pointer transition-all appearance-none font-medium pr-10"
-                              required
-                            >
-                              {['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th'].map(sem => (
-                                <option key={sem} value={sem}>{sem} Semester</option>
-                              ))}
-                            </select>
-                            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-400">
-                              <Calendar className="w-4 h-4" />
-                            </div>
-                          </div>
-                        </div>
-                      </div>
 
                       {/* Form Actions */}
                       <div className="pt-4 border-t border-slate-100 flex gap-4">
@@ -980,53 +1017,7 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
                             </div>
                           </div>
 
-                           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
-                             {/* Batch Selection */}
-                             <div>
-                               <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2 ml-0.5">
-                                 Admission Batch <span className="text-red-500">*</span>
-                               </label>
-                               <div className="grid grid-cols-3 gap-3">
-                                 {['Spring', 'Summer', 'Fall'].map((b) => (
-                                   <button
-                                     key={b}
-                                     type="button"
-                                     onClick={() => setSelectedBatch(b as 'Spring' | 'Summer' | 'Fall')}
-                                     className={`py-3 text-xs font-bold rounded-xl border transition-all cursor-pointer ${
-                                       selectedBatch === b 
-                                         ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' 
-                                         : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
-                                     }`}
-                                   >
-                                     {b}
-                                   </button>
-                                 ))}
-                               </div>
-                             </div>
 
-                             {/* Current Semester */}
-                             <div>
-                               <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2 ml-0.5">
-                                 Current Semester <span className="text-red-500">*</span>
-                               </label>
-                               <div className="relative">
-                                 <select
-                                   id="edit-select-semester"
-                                   value={selectedSemester}
-                                   onChange={(e) => setSelectedSemester(e.target.value)}
-                                   className="w-full px-4 py-3 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border border-slate-200 focus:ring-2 focus:ring-indigo-600/10 focus:border-indigo-600 rounded-xl font-sans text-sm text-slate-800 outline-none cursor-pointer transition-all appearance-none font-medium pr-10"
-                                   required
-                                 >
-                                   {['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th'].map(sem => (
-                                     <option key={sem} value={sem}>{sem} Semester</option>
-                                   ))}
-                                 </select>
-                                 <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-400">
-                                   <Calendar className="w-4 h-4" />
-                                 </div>
-                               </div>
-                             </div>
-                           </div>
 
                           {/* Form Actions */}
                           <div className="pt-4 border-t border-slate-100 flex gap-4">
@@ -1058,15 +1049,15 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
                         </p>
 
                         {/* Lookup form */}
-                        <form onSubmit={handleEditSearch} className="w-full max-w-md bg-slate-50 p-6 rounded-2xl border border-slate-200/70 space-y-4 mb-6">
+                        <form onSubmit={handleEditSearch} className="w-full max-w-md bg-slate-50 p-6 rounded-2xl border border-slate-200/70 space-y-4 mb-4">
                           <div className="text-left">
                             <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5 ml-0.5">
-                              Search Registration Number
+                              Search Registration Number / Name
                             </label>
                             <div className="flex gap-2">
                               <input
                                 type="text"
-                                placeholder="e.g. FA22-BSCS-0012"
+                                placeholder="e.g. 22 or student name"
                                 value={editSearchQuery}
                                 onChange={(e) => setEditSearchQuery(e.target.value)}
                                 className="flex-1 px-4 py-2.5 bg-white border border-slate-200 focus:ring-2 focus:ring-indigo-600/10 focus:border-indigo-600 rounded-xl font-mono text-xs text-slate-800 outline-none transition-all uppercase font-semibold"
@@ -1075,7 +1066,7 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
                                 type="submit"
                                 className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm cursor-pointer"
                               >
-                                Load Profile
+                                Search
                               </button>
                             </div>
                             {editSearchError && (
@@ -1086,6 +1077,72 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
                             )}
                           </div>
                         </form>
+
+                        {/* Live Matching Students List */}
+                        {(() => {
+                          const query = editSearchQuery.trim().toUpperCase();
+                          if (!query) return null;
+                          const matches = students.filter(s => 
+                            s.regNo.toUpperCase().includes(query) || 
+                            s.name.toUpperCase().includes(query)
+                          );
+                          return (
+                            <div className="w-full max-w-md bg-white border border-slate-200/80 rounded-2xl shadow-xs p-4 mb-4 text-left">
+                              <div className="flex items-center justify-between border-b border-slate-100 pb-2 mb-3">
+                                <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">
+                                  Matching Students ({matches.length})
+                                </span>
+                                {matches.length > 0 && (
+                                  <span className="text-[10px] text-indigo-600 font-semibold">
+                                    Click on any student to edit
+                                  </span>
+                                )}
+                              </div>
+                              
+                              {matches.length === 0 ? (
+                                <div className="py-4 text-center text-slate-400 text-xs italic">
+                                  No students match "{editSearchQuery}"
+                                </div>
+                              ) : (
+                                <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+                                  {matches.map((student) => {
+                                    const deptName = getDeptName(student.departmentId);
+                                    const progCode = getProgCode(student.programId);
+                                    return (
+                                      <button
+                                        key={student.regNo}
+                                        type="button"
+                                        onClick={() => handleEditClick(student)}
+                                        className="w-full flex items-center justify-between p-3 rounded-xl border border-slate-100 hover:border-indigo-200 hover:bg-indigo-50/30 text-left transition-all group cursor-pointer"
+                                      >
+                                        <div className="min-w-0 flex-1">
+                                          <div className="flex items-center gap-2 mb-0.5">
+                                            <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 font-mono text-[10px] font-bold rounded group-hover:bg-indigo-100 transition-colors">
+                                              {student.regNo}
+                                            </span>
+                                            <span className="text-xs font-bold text-slate-700 truncate">
+                                              {student.name}
+                                            </span>
+                                          </div>
+                                          <div className="text-[10px] text-slate-400 font-semibold flex items-center gap-1.5">
+                                            <span className="truncate">{deptName}</span>
+                                            <span className="text-slate-300">•</span>
+                                            <span className="font-mono text-indigo-600/80 uppercase">{progCode}</span>
+                                          </div>
+                                        </div>
+                                        <div className="ml-3 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                                          <span className="text-[10px] font-bold text-indigo-600 flex items-center gap-0.5">
+                                            Edit
+                                          </span>
+                                        </div>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
 
                         {/* Select dropdown */}
                         <div className="w-full max-w-md text-left">
@@ -1215,7 +1272,7 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
                             Spreadsheet Column Mapping & Guide
                           </h3>
                           <p className="text-xs text-slate-500 mb-4 leading-relaxed font-semibold">
-                            Ensure your spreadsheet columns strictly correspond to the system variables listed below. Column header naming variations (such as "ID" instead of "Registration Number") will be automatically aligned.
+                            Only provide the columns below. The system will automatically detect the <strong>Admission Batch</strong> and active <strong>Semester</strong> based on the Registration Number.
                           </p>
 
                           <div className="overflow-x-auto">
@@ -1260,22 +1317,6 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
                                     </div>
                                   </td>
                                 </tr>
-                                <tr>
-                                  <td className="px-4 py-3 font-bold text-indigo-600 font-mono">Admission Batch</td>
-                                  <td className="px-4 py-3">Fall</td>
-                                  <td className="px-4 py-3">
-                                    <span className="px-1.5 py-0.5 bg-slate-100 text-[9px] font-bold font-mono rounded text-slate-700">Spring</span>
-                                    <span className="px-1.5 py-0.5 bg-slate-100 text-[9px] font-bold font-mono rounded text-slate-700 ml-1">Summer</span>
-                                    <span className="px-1.5 py-0.5 bg-slate-100 text-[9px] font-bold font-mono rounded text-slate-700 ml-1">Fall</span>
-                                  </td>
-                                </tr>
-                                <tr>
-                                  <td className="px-4 py-3 font-bold text-indigo-600 font-mono">Semester</td>
-                                  <td className="px-4 py-3 font-mono">6th</td>
-                                  <td className="px-4 py-3">
-                                    <span className="text-slate-500 font-sans">e.g. 1st, 2nd, 3rd, 4th, 5th, 6th, 7th, 8th, 9th, 10th or numeric indices.</span>
-                                  </td>
-                                </tr>
                               </tbody>
                             </table>
                           </div>
@@ -1305,8 +1346,8 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
                                     <th className="px-4 py-2.5 text-left">Student Name</th>
                                     <th className="px-4 py-2.5 text-left">Dept ID</th>
                                     <th className="px-4 py-2.5 text-left">Program ID</th>
-                                    <th className="px-4 py-2.5 text-left">Batch</th>
-                                    <th className="px-4 py-2.5 text-left">Semester</th>
+                                    <th className="px-4 py-2.5 text-left">Batch (Auto)</th>
+                                    <th className="px-4 py-2.5 text-left">Semester (Auto)</th>
                                     <th className="px-4 py-2.5 text-left">Status / Errors</th>
                                   </tr>
                                 </thead>

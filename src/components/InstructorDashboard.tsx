@@ -2465,7 +2465,12 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
     return (
       <div className="min-h-screen flex flex-col items-center justify-center font-sans frosted-bg text-slate-800">
         <div className="text-center space-y-4">
-          <div className="mx-auto w-12 h-12 bg-indigo-600 rounded-xl flex items-center justify-center text-white font-bold text-2xl animate-pulse shadow-lg">IU</div>
+          <img 
+            src="/iqralogo.png" 
+            alt="Iqra University Logo" 
+            className="mx-auto w-56 h-20 object-contain mb-2 animate-pulse bg-white p-2.5 rounded-2xl shadow-sm border border-slate-100"
+            referrerPolicy="no-referrer"
+          />
           <p className="text-sm font-sans font-semibold text-indigo-950 animate-pulse">Loading course data from backend API...</p>
         </div>
       </div>

@@ -191,15 +191,20 @@ export default function StudentDirectory({
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 py-0.5 text-[10px] font-bold rounded-md ${
-                        student.batch === 'Spring' 
-                          ? 'bg-teal-50 text-teal-700 border border-teal-200' 
-                          : student.batch === 'Summer' 
-                            ? 'bg-amber-50 text-amber-700 border border-amber-200' 
-                            : 'bg-rose-50 text-rose-700 border border-rose-200'
-                      }`}>
-                        {student.batch}
-                      </span>
+                      {(() => {
+                        const match = student.regNo.trim().match(/(FA|SP)(\d{2})/i);
+                        const displayBatch = match ? `${match[1].toUpperCase()}${match[2]}` : student.batch;
+                        const isSpring = displayBatch.toUpperCase().startsWith('SP') || student.batch === 'Spring';
+                        return (
+                          <span className={`px-2.5 py-1 text-[11px] font-black font-mono rounded-lg tracking-wider uppercase ${
+                            isSpring
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/60' 
+                              : 'bg-indigo-50 text-indigo-700 border border-indigo-200/60'
+                          }`}>
+                            {displayBatch}
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className="px-2.5 py-1 bg-slate-50 border border-slate-200 text-slate-700 text-[10px] font-bold rounded-md shadow-2xs">
