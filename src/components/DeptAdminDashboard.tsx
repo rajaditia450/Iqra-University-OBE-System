@@ -817,19 +817,21 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
     return plan ? plan.courseCodes : [];
   }, [semesterPlans, selectedPlanProg, selectedPlanSem]);
 
-  // Available courses (global courses that are NOT in the active semester plan)
+  // Available courses (global courses that are NOT in any semester plan of the selected program)
   const availableCoursesForPlan = useMemo(() => {
     return courses.filter(c => {
       // Filter by department and program of current plan
       const deptMatch = c.departmentId === (programs.find(p => p.id === selectedPlanProg)?.departmentId || 'computing');
-      const isAlreadyInPlan = activeSemesterPlanCourses.includes(c.code);
+      const isAlreadyInAnyPlan = semesterPlans
+        .filter(p => p.programId === selectedPlanProg)
+        .some(p => p.courseCodes.includes(c.code));
       const searchMatch = planSearch === '' || 
         c.code.toLowerCase().includes(planSearch.toLowerCase()) || 
         c.title.toLowerCase().includes(planSearch.toLowerCase());
       
-      return deptMatch && !isAlreadyInPlan && searchMatch;
+      return deptMatch && !isAlreadyInAnyPlan && searchMatch;
     });
-  }, [courses, selectedPlanProg, activeSemesterPlanCourses, planSearch, programs]);
+  }, [courses, selectedPlanProg, semesterPlans, planSearch, programs]);
 
   // Course Filter List (Tab 2)
   const filteredCourses = useMemo(() => {

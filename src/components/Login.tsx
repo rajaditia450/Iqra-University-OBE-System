@@ -27,7 +27,7 @@ export default function Login({ onLogin }: LoginProps) {
     setLoading(true);
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 1500);
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
 
     try {
       const res = await fetch(`${BASE_URL}/auth/login/`, {

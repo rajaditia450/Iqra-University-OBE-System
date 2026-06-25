@@ -422,14 +422,7 @@ const getLocalStorageData = (): OBEData => {
         localStorage.setItem('IQRA_OBE_FALLBACK_DB', JSON.stringify(parsed));
       }
       
-      // Filter the returned data to only Computing & Technology (computing) department and its CS, AI, SE programs
-      return {
-        ...parsed,
-        departments: (parsed.departments || []).filter((d: any) => d.id === 'computing'),
-        programs: (parsed.programs || []).filter((p: any) => p.departmentId === 'computing' && ['bscs', 'bsai', 'bsse'].includes(p.id)),
-        gas: (parsed.gas || []).filter((g: any) => g.departmentId === 'computing'),
-        courses: (parsed.courses || []).filter((c: any) => c.departmentId === 'computing')
-      };
+      return parsed;
     } catch (e) {
       console.error("Failed to parse local storage fallback, resetting to default.", e);
     }
@@ -464,13 +457,7 @@ const getLocalStorageData = (): OBEData => {
 
   localStorage.setItem('IQRA_OBE_FALLBACK_DB', JSON.stringify(base));
   
-  return {
-    ...base,
-    departments: (base.departments || []).filter(d => d.id === 'computing'),
-    programs: (base.programs || []).filter(p => p.departmentId === 'computing' && ['bscs', 'bsai', 'bsse'].includes(p.id)),
-    gas: (base.gas || []).filter(g => g.departmentId === 'computing'),
-    courses: (base.courses || []).filter(c => c.departmentId === 'computing')
-  };
+  return base;
 };
 
 const saveLocalStorageData = (data: OBEData) => {
@@ -485,7 +472,7 @@ const getHeaders = () => {
   };
 };
 
-const fetchWithTimeout = async (url: string, options: RequestInit = {}, timeoutMs = 4000): Promise<Response> => {
+const fetchWithTimeout = async (url: string, options: RequestInit = {}, timeoutMs = 15000): Promise<Response> => {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -520,10 +507,10 @@ export const apiService = {
       const mergedCourses = Array.isArray(courses) && courses.length > 0 ? courses : fallbackCourses;
 
       return {
-        departments: (depts || []).filter((d: any) => d.id === 'computing'),
-        programs: (programs || []).filter((p: any) => p.departmentId === 'computing' && ['bscs', 'bsai', 'bsse'].includes(p.id)),
-        gas: (gas || []).filter((g: any) => g.departmentId === 'computing'),
-        courses: (mergedCourses || []).filter((c: any) => c.departmentId === 'computing'),
+        departments: depts || [],
+        programs: programs || [],
+        gas: gas || [],
+        courses: mergedCourses || [],
       };
     } catch (err) {
       console.warn("Backend servers offline or unreachable. Propagating error to UI loader.", err);
