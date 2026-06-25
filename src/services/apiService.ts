@@ -677,10 +677,10 @@ export const apiService = {
       }
     }
     const initialStudents: Student[] = [
-      { regNo: "FA22-BSCS-0012", name: "Abdur Rehman Khalid", departmentId: "computing", programId: "bscs", batch: "Fall", semester: "6th" },
-      { regNo: "FA22-BSCS-0045", name: "Syeda Fatima Alvi", departmentId: "computing", programId: "bscs", batch: "Fall", semester: "6th" },
-      { regNo: "FA22-BSCS-0089", name: "Zayan Ahmed Khan", departmentId: "computing", programId: "bscs", batch: "Fall", semester: "6th" },
-      { regNo: "FA22-BSCS-0104", name: "Misha Farooq", departmentId: "computing", programId: "bscs", batch: "Fall", semester: "6th" }
+      { regNo: "012-fa22-22012", name: "Abdur Rehman Khalid", departmentId: "computing", programId: "bscs", batch: "Fall", semester: "6th" },
+      { regNo: "045-fa22-22045", name: "Wajahat Bine Saif", departmentId: "computing", programId: "bscs", batch: "Fall", semester: "6th" },
+      { regNo: "089-fa22-22089", name: "Zayan Ahmed Khan", departmentId: "computing", programId: "bscs", batch: "Fall", semester: "6th" },
+      { regNo: "104-fa22-22104", name: "Misha Farooq", departmentId: "computing", programId: "bscs", batch: "Fall", semester: "6th" }
     ];
     localStorage.setItem('IQRA_OBE_STUDENTS', JSON.stringify(initialStudents));
     return initialStudents;
@@ -813,7 +813,7 @@ const DUMMY_PLAYGROUND_COURSES: InstructorCourse[] = [
     },
     students: [
       {
-        regNo: "FA22-BSCS-0012",
+        regNo: "012-fa22-22012",
         name: "Abdur Rehman Khalid",
         marks: {
           "Assignments-1": 8.5,
@@ -830,8 +830,8 @@ const DUMMY_PLAYGROUND_COURSES: InstructorCourse[] = [
         }
       },
       {
-        regNo: "FA22-BSCS-0045",
-        name: "Syeda Fatima Alvi",
+        regNo: "045-fa22-22045",
+        name: "Wajahat Bine Saif",
         marks: {
           "Assignments-1": 9.0,
           "Assignments-2": 8.0,
@@ -847,7 +847,7 @@ const DUMMY_PLAYGROUND_COURSES: InstructorCourse[] = [
         }
       },
       {
-        regNo: "FA22-BSCS-0089",
+        regNo: "089-fa22-22089",
         name: "Zayan Ahmed Khan",
         marks: {
           "Assignments-1": 7.5,
@@ -919,7 +919,7 @@ const DUMMY_PLAYGROUND_COURSES: InstructorCourse[] = [
     },
     students: [
       {
-        regNo: "FA22-BSCS-0012",
+        regNo: "012-fa22-22012",
         name: "Abdur Rehman Khalid",
         marks: {
           "Assignments-1": 9.0,
@@ -934,7 +934,7 @@ const DUMMY_PLAYGROUND_COURSES: InstructorCourse[] = [
         }
       },
       {
-        regNo: "FA22-BSCS-0104",
+        regNo: "104-fa22-22104",
         name: "Misha Farooq",
         marks: {
           "Assignments-1": 8.0,

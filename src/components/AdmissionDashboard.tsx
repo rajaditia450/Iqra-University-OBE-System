@@ -278,10 +278,10 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
       return;
     }
 
-    // Check pattern for registration number e.g. FA22-BSCS-0012 or standard formats
-    const regPattern = /^[A-Z0-9-]{3,20}$/i;
+    // Check pattern for registration number e.g. 052-sp23-22055
+    const regPattern = /^\d{3}-(sp|fa)\d{2}-\d{5}$/i;
     if (!regPattern.test(cleanRegNo)) {
-      setFormError("Invalid registration number format. Use alphanumeric characters and dashes (e.g. SP26-BSCS-0056).");
+      setFormError("Invalid registration number format. Must follow exactly: 052-sp23-22055");
       return;
     }
 
@@ -444,7 +444,11 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
           }
 
           const errors: string[] = [];
-          if (!regNoVal) errors.push("Missing Registration No.");
+          if (!regNoVal) {
+            errors.push("Missing Registration No.");
+          } else if (!/^\d{3}-(sp|fa)\d{2}-\d{5}$/i.test(regNoVal)) {
+            errors.push("Invalid registration format. Expected format: 052-sp23-22055");
+          }
           if (!nameVal) errors.push("Missing Student Name.");
           if (!deptVal) errors.push("Missing Department ID.");
           if (!progVal) errors.push("Missing Program ID.");
@@ -491,9 +495,9 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
   const handleDownloadTemplate = () => {
     const headers = [
       ["Registration Number", "Student Name", "Department ID", "Program ID"],
-      ["FA22-BSCS-0045", "Syeda Fatima Alvi", "computing", "bscs"],
-      ["SP23-BBA-0120", "Zayan Ahmed Khan", "business", "bba"],
-      ["FA25-BECE-0010", "Abdur Rehman Khalid", "engineering", "be_ce"]
+      ["045-fa22-22045", "Wajahat Bine Saif", "computing", "bscs"],
+      ["120-sp23-23120", "Zayan Ahmed Khan", "business", "bba"],
+      ["010-fa25-25010", "Abdur Rehman Khalid", "engineering", "be_ce"]
     ];
     
     const ws = XLSX.utils.aoa_to_sheet(headers);
@@ -780,7 +784,7 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
                             type="text"
                             value={regNo}
                             onChange={(e) => setRegNo(e.target.value)}
-                            placeholder="e.g. FA22-BSCS-0045"
+                            placeholder="e.g. 052-sp23-22055"
                             className="w-full px-4 py-3 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border border-slate-200 focus:ring-2 focus:ring-indigo-600/10 focus:border-indigo-600 rounded-xl font-sans text-sm text-slate-800 placeholder:text-slate-400 outline-none transition-all font-medium uppercase"
                             required
                           />
@@ -796,7 +800,7 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
                             type="text"
                             value={name}
                             onChange={(e) => setName(e.target.value)}
-                            placeholder="e.g. Syeda Fatima Alvi"
+                            placeholder="e.g. Wajahat Bine Saif"
                             className="w-full px-4 py-3 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border border-slate-200 focus:ring-2 focus:ring-indigo-600/10 focus:border-indigo-600 rounded-xl font-sans text-sm text-slate-800 placeholder:text-slate-400 outline-none transition-all font-medium"
                             required
                           />
@@ -962,7 +966,7 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
                                 type="text"
                                 value={name}
                                 onChange={(e) => setName(e.target.value)}
-                                placeholder="e.g. Syeda Fatima Alvi"
+                                placeholder="e.g. Wajahat Bine Saif"
                                 className="w-full px-4 py-3 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border border-slate-200 focus:ring-2 focus:ring-indigo-600/10 focus:border-indigo-600 rounded-xl font-sans text-sm text-slate-800 placeholder:text-slate-400 outline-none transition-all font-medium"
                                 required
                               />
@@ -1287,12 +1291,12 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
                               <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-600">
                                 <tr>
                                   <td className="px-4 py-3 font-bold text-indigo-600 font-mono">Registration Number</td>
-                                  <td className="px-4 py-3 font-mono">FA22-BSCS-0045</td>
-                                  <td className="px-4 py-3">Alphanumeric formats with dashes. Must be unique.</td>
+                                  <td className="px-4 py-3 font-mono">052-sp23-22055</td>
+                                  <td className="px-4 py-3">Format must be exactly 052-sp23-22055. Must be unique.</td>
                                 </tr>
                                 <tr>
                                   <td className="px-4 py-3 font-bold text-indigo-600 font-mono">Student Name</td>
-                                  <td className="px-4 py-3">Syeda Fatima Alvi</td>
+                                  <td className="px-4 py-3">Wajahat Bine Saif</td>
                                   <td className="px-4 py-3">Letters, spaces, periods.</td>
                                 </tr>
                                 <tr>

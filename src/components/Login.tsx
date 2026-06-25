@@ -88,7 +88,6 @@ export default function Login({ onLogin }: LoginProps) {
             referrerPolicy="no-referrer"
           />
           <h1 className="text-4xl font-display font-bold text-indigo-950 tracking-tight mb-2">Iqra University OBE</h1>
-          <p className="text-indigo-800/80 font-sans text-sm font-medium">University Outcome Based Education Manager</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -131,11 +130,11 @@ export default function Login({ onLogin }: LoginProps) {
                   required
                 >
                   <option value="" disabled className="bg-slate-50 text-slate-400">Select User Type...</option>
+                  <option value="admission" className="bg-slate-50 text-slate-900">Admission</option>
+                  <option value="dept_admin" className="bg-slate-50 text-slate-900">Department Administration</option>
                   <option value="qa" className="bg-slate-50 text-slate-900">QA / Quality Assurance</option>
                   <option value="instructor" className="bg-slate-50 text-slate-900">Instructor</option>
                   <option value="student" className="bg-slate-50 text-slate-900">Student</option>
-                  <option value="admission" className="bg-slate-50 text-slate-900">Admission</option>
-                  <option value="dept_admin" className="bg-slate-50 text-slate-900">Department Administrator</option>
                 </select>
                 <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-5 text-indigo-900/60">
                   <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
