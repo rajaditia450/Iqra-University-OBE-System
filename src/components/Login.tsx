@@ -49,6 +49,11 @@ export default function Login({ onLogin }: LoginProps) {
       localStorage.setItem('access',  data.access);
       localStorage.setItem('refresh', data.refresh);
 
+      if (data.user) {
+        localStorage.setItem('IQRA_OBE_USER_DEPT_ID', data.user.departmentId || '');
+        localStorage.setItem('IQRA_OBE_USER_DEPT_NAME', data.user.departmentName || '');
+      }
+
       // Use role from Django instead of the UI selector
       onLogin(data.user.user_type as UserType, data.user.username);
 

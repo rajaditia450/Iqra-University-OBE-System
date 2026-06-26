@@ -779,7 +779,8 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
       if (active) {
         setObeData(res);
         if (res.departments && res.departments.length > 0) {
-          const firstDeptId = res.departments[0].id;
+          const storedDept = localStorage.getItem('IQRA_OBE_USER_DEPT_ID');
+          const firstDeptId = (storedDept && res.departments.some(d => d.id === storedDept)) ? storedDept : res.departments[0].id;
           setAddDeptId(firstDeptId);
           setEditDeptId(firstDeptId);
           const firstProg = res.programs?.find(p => p.departmentId === firstDeptId)?.id || '';
@@ -793,7 +794,8 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
       if (active && offline) {
         setObeData(offline);
         if (offline.departments && offline.departments.length > 0) {
-          const firstDeptId = offline.departments[0].id;
+          const storedDept = localStorage.getItem('IQRA_OBE_USER_DEPT_ID');
+          const firstDeptId = (storedDept && offline.departments.some(d => d.id === storedDept)) ? storedDept : offline.departments[0].id;
           setAddDeptId(firstDeptId);
           setEditDeptId(firstDeptId);
           const firstProg = offline.programs?.find(p => p.departmentId === firstDeptId)?.id || '';

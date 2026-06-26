@@ -43,7 +43,9 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
   const [error, setError] = useState<string | null>(null);
 
   // Core navigation selectors directly in header
-  const [activeDeptId, setActiveDeptId] = useState<string>('computing');
+  const [activeDeptId, setActiveDeptId] = useState<string>(() => {
+    return localStorage.getItem('IQRA_OBE_USER_DEPT_ID') || 'computing';
+  });
   const [activeProgramId, setActiveProgramId] = useState<string>('');
   const [activeModule, setActiveModule] = useState<ActiveViewModule>('vision_mission');
   const [selectedCourseId, setSelectedCourseId] = useState<string>('all');
@@ -1237,6 +1239,7 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                                           if (confirm(`Are you sure you want to delete the course "${course.code} - ${course.title}"?`)) {
                                             try {
                                               setSavingLoad(true);
+                                              await apiService.deleteCourse(course.id);
                                               const updatedCourses = data.courses.filter(c => c.id !== course.id);
                                               setData({ ...data, courses: updatedCourses });
                                               

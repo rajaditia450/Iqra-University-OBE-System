@@ -590,15 +590,47 @@ export const apiService = {
     return updatedCourses.find(c => c.id === id)!;
   },
 
+  async deleteCourse(id: string): Promise<boolean> {
+    try {
+      const response = await fetchWithTimeout(`${BASE_URL}/courses/${id}/`, {
+        method: 'DELETE',
+        headers: getHeaders(),
+      }, 8000);
+      if (response.ok) {
+        const localData = getLocalStorageData();
+        const updatedCourses = localData.courses.filter(c => c.id !== id);
+        saveLocalStorageData({ ...localData, courses: updatedCourses });
+        return true;
+      }
+    } catch (err) {
+      console.warn("Backend API for course delete offline. Fallback to local storage.");
+    }
+    const localData = getLocalStorageData();
+    const updatedCourses = localData.courses.filter(c => c.id !== id);
+    saveLocalStorageData({ ...localData, courses: updatedCourses });
+    return true;
+  },
+
   async createProgram(data: Program, associatedGAs?: GA[]): Promise<Program> {
     try {
+      if (associatedGAs && associatedGAs.length > 0) {
+        try {
+          await Promise.all(associatedGAs.map(async (ga) => {
+            await fetchWithTimeout(`${BASE_URL}/gas/`, {
+              method: 'POST',
+              headers: getHeaders(),
+              body: JSON.stringify(ga),
+            }, 3000).catch(e => console.warn("Failed to save GA to backend", ga.id, e));
+          }));
+        } catch (gaErr) {
+          console.warn("Failed to batch save GAs to backend", gaErr);
+        }
+      }
+
       const response = await fetchWithTimeout(`${BASE_URL}/programs/`, {
         method: 'POST',
         headers: getHeaders(),
-        body: JSON.stringify({
-          ...data,
-          slug: data.code.toLowerCase()
-        }),
+        body: JSON.stringify(data),
       }, 8000);
       if (!response.ok) throw new Error('Failed to create program on server');
       const responseData = await response.json();
@@ -624,10 +656,7 @@ export const apiService = {
       const response = await fetchWithTimeout(`${BASE_URL}/courses/`, {
         method: 'POST',
         headers: getHeaders(),
-        body: JSON.stringify({
-          ...data,
-          slug: data.id
-        }),
+        body: JSON.stringify(data),
       }, 8000);
       if (!response.ok) throw new Error('Failed to create course on server');
       const responseData = await response.json();
