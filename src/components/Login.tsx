@@ -84,7 +84,7 @@ export default function Login({ onLogin }: LoginProps) {
           <img 
             src="/iqralogo.png" 
             alt="Iqra University Logo" 
-            className="mx-auto w-64 h-24 object-contain mb-5 bg-white p-3 rounded-2xl shadow-sm border border-slate-100"
+            className="mx-auto w-64 h-24 object-contain mb-5"
             referrerPolicy="no-referrer"
           />
           <h1 className="text-4xl font-display font-bold text-indigo-950 tracking-tight mb-2">Iqra University OBE</h1>

@@ -158,6 +158,43 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
   const [studentBindings, setStudentBindings] = useState<StudentCourseBinding[]>([]);
   const [teacherAssignments, setTeacherAssignments] = useState<TeacherCourseAssignment[]>([]);
 
+  // Find which department this administrator manages.
+  const managedDeptId = useMemo(() => {
+    if (departments.length === 1) {
+      return departments[0].id;
+    }
+    const nameLower = adminName.toLowerCase();
+    if (nameLower.includes('computing') || nameLower.includes('cs') || nameLower.includes('ai') || nameLower.includes('se') || nameLower.includes('tech')) {
+      return 'computing';
+    }
+    if (nameLower.includes('business') || nameLower.includes('bba') || nameLower.includes('management') || nameLower.includes('finance')) {
+      return 'business';
+    }
+    if (nameLower.includes('engineering') || nameLower.includes('ee') || nameLower.includes('electronic')) {
+      return 'engineering';
+    }
+    if (nameLower.includes('fashion') || nameLower.includes('design') || nameLower.includes('media')) {
+      return 'fashion_design';
+    }
+    if (nameLower.includes('humanities') || nameLower.includes('sciences')) {
+      return 'humanities';
+    }
+    const saved = localStorage.getItem('IQRA_OBE_ADMIN_MANAGED_DEPT');
+    if (saved && departments.some(d => d.id === saved)) {
+      return saved;
+    }
+    return departments[0]?.id || 'computing';
+  }, [departments, adminName]);
+
+  // Programs belonging to the active admin's department
+  const adminPrograms = useMemo(() => {
+    return programs.filter(p => p.departmentId === managedDeptId);
+  }, [programs, managedDeptId]);
+
+  const currentDeptObj = useMemo(() => {
+    return departments.find(d => d.id === managedDeptId);
+  }, [departments, managedDeptId]);
+
   // Navigation State
   const [activeTab, setActiveTab] = useState<'semester-plans' | 'courses' | 'teachers' | 'teacher-assignments' | 'student-enrollment'>('semester-plans');
   const [loading, setLoading] = useState(true);
@@ -193,6 +230,30 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
   // Tab 5: Student Binding State
   const [studentSearch, setStudentSearch] = useState('');
   const [selectedStudentRegNo, setSelectedStudentRegNo] = useState<string>('');
+
+  // Synchronize Tab 1 default program when adminPrograms load or change
+  useEffect(() => {
+    if (adminPrograms.length > 0) {
+      const isValid = adminPrograms.some(p => p.id === selectedPlanProg);
+      if (!isValid) {
+        setSelectedPlanProg(adminPrograms[0].id);
+      }
+    }
+  }, [adminPrograms, selectedPlanProg]);
+
+  // Synchronize Tab 2 Department/Program default selection when managedDeptId loads/changes
+  useEffect(() => {
+    setCourseDept(managedDeptId);
+    const pList = programs.filter(p => p.departmentId === managedDeptId);
+    if (pList.length > 0) {
+      setCourseProg(pList[0].id);
+    }
+  }, [managedDeptId, programs]);
+
+  // Synchronize Tab 3 Department default selection when managedDeptId loads/changes
+  useEffect(() => {
+    setTeacherDept(managedDeptId);
+  }, [managedDeptId]);
   const [selectedCourseCodeForStudent, setSelectedCourseCodeForStudent] = useState('');
 
   // Load all initial data and set fallback local storage structures
@@ -836,24 +897,31 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
   // Course Filter List (Tab 2)
   const filteredCourses = useMemo(() => {
     return courses.filter(c => {
+      const isSameDept = c.departmentId === managedDeptId;
+      if (!isSameDept) return false;
       const q = courseSearch.toLowerCase().trim();
       return q === '' || c.code.toLowerCase().includes(q) || c.title.toLowerCase().includes(q);
     });
-  }, [courses, courseSearch]);
+  }, [courses, courseSearch, managedDeptId]);
 
   // Teacher Filter List (Tab 3)
   const filteredTeachers = useMemo(() => {
     return teachers.filter(t => {
+      const isSameDept = t.departmentId === managedDeptId;
+      if (!isSameDept) return false;
       const q = teacherSearch.toLowerCase().trim();
       return q === '' || t.name.toLowerCase().includes(q) || t.email.toLowerCase().includes(q);
     });
-  }, [teachers, teacherSearch]);
+  }, [teachers, teacherSearch, managedDeptId]);
 
   // Teacher Assignments Grid (Tab 4)
   const filteredAssignments = useMemo(() => {
     return teacherAssignments.filter(a => {
       const teacher = teachers.find(t => t.id === a.teacherId);
       const course = courses.find(c => c.code === a.courseCode);
+      if (!course || course.departmentId !== managedDeptId) {
+        return false;
+      }
       const q = assignmentSearch.toLowerCase().trim();
 
       return q === '' || 
@@ -861,15 +929,17 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
         a.courseCode.toLowerCase().includes(q) || 
         (course?.title || '').toLowerCase().includes(q);
     });
-  }, [teacherAssignments, teachers, courses, assignmentSearch]);
+  }, [teacherAssignments, teachers, courses, assignmentSearch, managedDeptId]);
 
   // Student Filter List (Tab 5)
   const filteredStudents = useMemo(() => {
     return students.filter(s => {
+      const isSameDept = s.departmentId === managedDeptId;
+      if (!isSameDept) return false;
       const q = studentSearch.toLowerCase().trim();
       return q === '' || s.name.toLowerCase().includes(q) || s.regNo.toLowerCase().includes(q);
     });
-  }, [students, studentSearch]);
+  }, [students, studentSearch, managedDeptId]);
 
   // Selected student's current bindings
   const selectedStudentCurrentCourses = useMemo(() => {
@@ -929,7 +999,9 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
             <div className="h-6 w-px bg-slate-200"></div>
             <div>
               <h1 className="text-lg font-bold text-slate-900 tracking-tight">OBE Department Administration</h1>
-              <p className="text-xs font-semibold text-indigo-600/80 uppercase tracking-widest">{adminName}</p>
+              <p className="text-xs font-semibold text-indigo-600/80 uppercase tracking-widest">
+                {currentDeptObj ? `${currentDeptObj.name} Portal` : `${adminName}`}
+              </p>
             </div>
           </div>
           <button 
@@ -1045,7 +1117,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                         onChange={(e) => setSelectedPlanProg(e.target.value)}
                         className="bg-slate-50 hover:bg-slate-100 border border-slate-200 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 outline-none transition-all"
                       >
-                        {programs.map(p => (
+                        {adminPrograms.map(p => (
                           <option key={p.id} value={p.id}>{p.code} - {p.name}</option>
                         ))}
                       </select>
@@ -1214,7 +1286,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                       }}
                       className="w-full px-4 py-2.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none transition-all"
                     >
-                      {departments.map(d => (
+                      {departments.filter(d => d.id === managedDeptId).map(d => (
                         <option key={d.id} value={d.id}>{d.name}</option>
                       ))}
                     </select>
@@ -1393,7 +1465,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                       onChange={(e) => setTeacherDept(e.target.value)}
                       className="w-full px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none transition-all"
                     >
-                      {departments.map(d => (
+                      {departments.filter(d => d.id === managedDeptId).map(d => (
                         <option key={d.id} value={d.id}>{d.name}</option>
                       ))}
                     </select>
@@ -1487,7 +1559,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                       required
                     >
                       <option value="">Select Course...</option>
-                      {courses.map(c => (
+                      {courses.filter(c => c.departmentId === managedDeptId).map(c => (
                         <option key={c.code} value={c.code}>{c.code} - {c.title}</option>
                       ))}
                     </select>
