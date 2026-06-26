@@ -159,9 +159,13 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
   const [semesterPlans, setSemesterPlans] = useState<SemesterPlan[]>([]);
   const [studentBindings, setStudentBindings] = useState<StudentCourseBinding[]>([]);
   const [teacherAssignments, setTeacherAssignments] = useState<TeacherCourseAssignment[]>([]);
+  const [adminProfile, setAdminProfile] = useState<{ departmentId?: string; departmentName?: string; employeeId?: string } | null>(null);
 
   // Find which department this administrator manages.
   const managedDeptId = useMemo(() => {
+    if (adminProfile?.departmentId) {
+      return adminProfile.departmentId;
+    }
     if (departments.length === 1) {
       return departments[0].id;
     }
@@ -186,7 +190,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
       return saved;
     }
     return departments[0]?.id || 'computing';
-  }, [departments, adminName]);
+  }, [departments, adminName, adminProfile]);
 
   // Programs belonging to the active admin's department
   const adminPrograms = useMemo(() => {
@@ -279,49 +283,71 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
       setPrograms(obData.programs || []);
       setCourses(obData.courses || []);
 
-      // 2. Load Students
+      // 2. Load admin profile from backend
+      try {
+        const profile = await apiService.getDeptAdminProfile();
+        setAdminProfile(profile);
+      } catch (err) {
+        console.warn("Failed to fetch admin profile from backend, using adminName detection.", err);
+      }
+
+      // 3. Load Students
       const studentList = await apiService.getStudents();
       setStudents(studentList);
 
-      // 3. Load Teachers from Local Storage or set defaults
-      const savedTeachers = localStorage.getItem('IQRA_OBE_TEACHERS');
-      if (savedTeachers) {
-        setTeachers(JSON.parse(savedTeachers));
-      } else {
-        localStorage.setItem('IQRA_OBE_TEACHERS', JSON.stringify(DEFAULT_TEACHERS));
-        setTeachers(DEFAULT_TEACHERS);
-      }
-
-      // 4. Load Semester Plans from Local Storage or set defaults
-      const savedPlans = localStorage.getItem('IQRA_OBE_SEMESTER_PLANS');
-      let parsedPlans: SemesterPlan[] = [];
-      let plansNeedReset = false;
-      if (savedPlans) {
-        try {
-          parsedPlans = JSON.parse(savedPlans);
-          const hasBsai = parsedPlans.some(p => p.programId === 'bsai');
-          const hasOldCourse = parsedPlans.some(p => p.courseCodes.includes('SE-311') || p.courseCodes.includes('AI-381'));
-          if (!hasBsai || hasOldCourse) {
-            plansNeedReset = true;
-          }
-        } catch (e) {
-          plansNeedReset = true;
+      // 4. Load Teachers from backend or fallback to Local Storage
+      let loadedTeachers: Teacher[] = [];
+      try {
+        const fetchedTeachers = await apiService.getTeachers();
+        if (Array.isArray(fetchedTeachers)) {
+          loadedTeachers = fetchedTeachers.map((t: any) => ({
+            id: t.employeeId || t.id,
+            name: t.name,
+            email: t.email,
+            departmentId: t.departmentId
+          }));
         }
-      } else {
-        plansNeedReset = true;
+      } catch (err) {
+        console.warn("Backend API for teachers offline. Falling back to local storage.");
+        const savedTeachers = localStorage.getItem('IQRA_OBE_TEACHERS');
+        if (savedTeachers) {
+          loadedTeachers = JSON.parse(savedTeachers);
+        } else {
+          localStorage.setItem('IQRA_OBE_TEACHERS', JSON.stringify(DEFAULT_TEACHERS));
+          loadedTeachers = DEFAULT_TEACHERS;
+        }
       }
+      setTeachers(loadedTeachers);
 
-      if (plansNeedReset) {
-        localStorage.setItem('IQRA_OBE_SEMESTER_PLANS', JSON.stringify(DEFAULT_SEMESTER_PLANS));
-        setSemesterPlans(DEFAULT_SEMESTER_PLANS);
-        parsedPlans = DEFAULT_SEMESTER_PLANS;
-      } else {
-        setSemesterPlans(parsedPlans);
+      // 5. Load Semester Plans from backend or fallback to Local Storage
+      let loadedPlans: SemesterPlan[] = [];
+      try {
+        const fetchedPlans = await apiService.getSemesterPlans();
+        if (Array.isArray(fetchedPlans)) {
+          loadedPlans = fetchedPlans.map((p: any) => ({
+            programId: p.programId,
+            semester: p.semester,
+            courseCodes: p.courseCodes || []
+          }));
+        }
+      } catch (err) {
+        console.warn("Backend API for semester plans offline. Falling back to local storage.");
+        const savedPlans = localStorage.getItem('IQRA_OBE_SEMESTER_PLANS');
+        if (savedPlans) {
+          try {
+            loadedPlans = JSON.parse(savedPlans);
+          } catch (e) {
+            loadedPlans = DEFAULT_SEMESTER_PLANS;
+          }
+        } else {
+          loadedPlans = DEFAULT_SEMESTER_PLANS;
+        }
       }
+      setSemesterPlans(loadedPlans);
 
-      // 5. Load Student Bindings
+      // 6. Load Student Bindings
       const savedBindings = localStorage.getItem('IQRA_OBE_STUDENT_BINDINGS');
-      let bindingsNeedReset = plansNeedReset; // Reset if plans changed
+      let bindingsNeedReset = loadedPlans.length === 0;
       if (savedBindings && !bindingsNeedReset) {
         try {
           const parsedB = JSON.parse(savedBindings);
@@ -368,35 +394,38 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
         setStudentBindings(defaultBindings);
       }
 
-      // 6. Load Teacher Course Assignments
-      const savedAssignments = localStorage.getItem('IQRA_OBE_TEACHER_ASSIGNMENTS');
-      let assignmentsNeedReset = plansNeedReset;
-      if (savedAssignments && !assignmentsNeedReset) {
-        try {
-          const parsedA = JSON.parse(savedAssignments);
-          if (parsedA.some((a: any) => a.courseCode === 'SE-311' || a.courseCode === 'AI-381')) {
-            assignmentsNeedReset = true;
-          } else {
-            setTeacherAssignments(parsedA);
-          }
-        } catch (e) {
-          assignmentsNeedReset = true;
+      // 7. Load Teacher Course Assignments from backend or fallback to Local Storage
+      let loadedAssignments: TeacherCourseAssignment[] = [];
+      try {
+        const fetchedAssignments = await apiService.getCourseAssignments();
+        if (Array.isArray(fetchedAssignments)) {
+          loadedAssignments = fetchedAssignments.map((a: any) => ({
+            teacherId: a.teacherId || a.instructor || a.employeeId,
+            courseCode: a.courseCode || a.course_code || a.code,
+            programId: a.programId || a.program_id || a.program
+          }));
         }
-      } else {
-        assignmentsNeedReset = true;
+      } catch (err) {
+        console.warn("Backend API for course assignments offline. Falling back to local storage.");
+        const savedAssignments = localStorage.getItem('IQRA_OBE_TEACHER_ASSIGNMENTS');
+        if (savedAssignments) {
+          try {
+            loadedAssignments = JSON.parse(savedAssignments);
+          } catch (e) {
+            loadedAssignments = [];
+          }
+        } else {
+          loadedAssignments = [
+            { teacherId: 'INS-CS-001', courseCode: 'CMC381', programId: 'bscs' },
+            { teacherId: 'INS-CS-001', courseCode: 'AIC211', programId: 'bsai' },
+            { teacherId: 'INS-CS-002', courseCode: 'CSC382', programId: 'bscs' },
+            { teacherId: 'INS-CS-003', courseCode: 'AIC212', programId: 'bsai' },
+            { teacherId: 'INS-CS-004', courseCode: 'CMC241', programId: 'bsse' }
+          ];
+          localStorage.setItem('IQRA_OBE_TEACHER_ASSIGNMENTS', JSON.stringify(loadedAssignments));
+        }
       }
-
-      if (assignmentsNeedReset) {
-        const defaultAssignments: TeacherCourseAssignment[] = [
-          { teacherId: 'teacher-1', courseCode: 'CMC381', programId: 'bscs', section: 'Section A' },
-          { teacherId: 'teacher-1', courseCode: 'AIC211', programId: 'bsai', section: 'Section A' },
-          { teacherId: 'teacher-2', courseCode: 'CSC382', programId: 'bscs', section: 'Section B' },
-          { teacherId: 'teacher-3', courseCode: 'AIC212', programId: 'bsai', section: 'Section A' },
-          { teacherId: 'teacher-4', courseCode: 'CMC241', programId: 'bsse', section: 'Section A' }
-        ];
-        localStorage.setItem('IQRA_OBE_TEACHER_ASSIGNMENTS', JSON.stringify(defaultAssignments));
-        setTeacherAssignments(defaultAssignments);
-      }
+      setTeacherAssignments(loadedAssignments);
 
     } catch (err: any) {
       console.error(err);
@@ -719,7 +748,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
   };
 
   // 4. Assign Course to Teacher
-  const handleAssignCourseToTeacher = (e: React.FormEvent) => {
+  const handleAssignCourseToTeacher = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedTeacherId || !selectedCourseCodeForTeacher) {
       triggerNotification("Please select both a teacher and a course", true);
@@ -744,6 +773,12 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
       programId: selectedProgramForTeacher || undefined
     };
 
+    try {
+      await apiService.assignCourse(selectedTeacherId, selectedCourseCodeForTeacher, selectedProgramForTeacher || undefined);
+    } catch (err) {
+      console.warn("Failed to save course assignment to backend. Syncing locally.", err);
+    }
+
     const updatedAssignments = [...teacherAssignments, newAssignment];
     setTeacherAssignments(updatedAssignments);
     localStorage.setItem('IQRA_OBE_TEACHER_ASSIGNMENTS', JSON.stringify(updatedAssignments));
@@ -757,7 +792,13 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
     triggerNotification(`Successfully assigned course ${selectedCourseCodeForTeacher}${suffix} to ${teacherObj?.name}`);
   };
 
-  const handleRemoveTeacherAssignment = (teacherId: string, courseCode: string, programId?: string) => {
+  const handleRemoveTeacherAssignment = async (teacherId: string, courseCode: string, programId?: string) => {
+    try {
+      await apiService.removeCourseAssignment(teacherId, courseCode, programId);
+    } catch (err) {
+      console.warn("Failed to remove course assignment from backend. Syncing locally.", err);
+    }
+
     const updatedAssignments = teacherAssignments.filter(
       a => !(a.teacherId === teacherId && 
              a.courseCode === courseCode && 
@@ -771,7 +812,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
   };
 
   // 5. Manage Predefined Plans
-  const handleAddCourseToSemesterPlan = (code: string) => {
+  const handleAddCourseToSemesterPlan = async (code: string) => {
     const updatedPlans = semesterPlans.map(plan => {
       if (plan.programId === selectedPlanProg && plan.semester === selectedPlanSem) {
         if (plan.courseCodes.includes(code)) return plan;
@@ -787,18 +828,36 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
       finalPlans = [...semesterPlans, { programId: selectedPlanProg, semester: selectedPlanSem, courseCodes: [code] }];
     }
 
+    const activePlan = finalPlans.find(p => p.programId === selectedPlanProg && p.semester === selectedPlanSem);
+    if (activePlan) {
+      try {
+        await apiService.saveSemesterPlan(activePlan.programId, activePlan.semester, activePlan.courseCodes);
+      } catch (err) {
+        console.warn("Failed to save semester plan to backend.", err);
+      }
+    }
+
     setSemesterPlans(finalPlans);
     localStorage.setItem('IQRA_OBE_SEMESTER_PLANS', JSON.stringify(finalPlans));
     triggerNotification(`Added course ${code} to ${selectedPlanProg.toUpperCase()} ${selectedPlanSem} plan.`);
   };
 
-  const handleRemoveCourseFromSemesterPlan = (code: string) => {
+  const handleRemoveCourseFromSemesterPlan = async (code: string) => {
     const updatedPlans = semesterPlans.map(plan => {
       if (plan.programId === selectedPlanProg && plan.semester === selectedPlanSem) {
         return { ...plan, courseCodes: plan.courseCodes.filter(c => c !== code) };
       }
       return plan;
     });
+
+    const activePlan = updatedPlans.find(p => p.programId === selectedPlanProg && p.semester === selectedPlanSem);
+    if (activePlan) {
+      try {
+        await apiService.saveSemesterPlan(activePlan.programId, activePlan.semester, activePlan.courseCodes);
+      } catch (err) {
+        console.warn("Failed to update semester plan on backend.", err);
+      }
+    }
 
     setSemesterPlans(updatedPlans);
     localStorage.setItem('IQRA_OBE_SEMESTER_PLANS', JSON.stringify(updatedPlans));

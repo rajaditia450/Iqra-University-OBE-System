@@ -98,10 +98,83 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
         setStudentBindings([]);
       }
 
-      // 5. Load instructor courses to get actual marks and assessment items
+      // 5. Load student courses from backend with marks
       try {
-        const instCourses = apiService.getLocalInstructorCourses();
-        setInstructorCourses(instCourses || []);
+        let mappedInstructorCourses: InstructorCourse[] = [];
+        try {
+          const studentCourses = await apiService.getStudentCourses();
+          if (Array.isArray(studentCourses)) {
+            const regToUse = matchingStudent ? matchingStudent.regNo : activeRegNo;
+            const dynamicBindings = studentCourses.map((sc: any) => ({
+              studentRegNo: regToUse,
+              courseCode: sc.code
+            }));
+            setStudentBindings(prev => {
+              const filtered = prev.filter(b => b.studentRegNo !== regToUse);
+              return [...filtered, ...dynamicBindings];
+            });
+
+            mappedInstructorCourses = studentCourses.map((sc: any) => {
+              const standardCategories = sc.categories || [
+                { name: "Assignments", percentage: 15, units: 3 },
+                { name: "Quizzes", percentage: 10, units: 3 },
+                { name: "Class Participation", percentage: 5, units: 1 },
+                { name: "Class Project", percentage: 15, units: 1 },
+                { name: "Presentation", percentage: 5, units: 1 },
+                { name: "Mid Term", percentage: 20, units: 1 },
+                { name: "Final", percentage: 30, units: 1 }
+              ];
+              const standardUnitsData = sc.unitsData || {
+                "Assignments": [
+                  { unitNo: 1, passing: 5, totalMarks: 10, weightage: 33.3 },
+                  { unitNo: 2, passing: 5, totalMarks: 10, weightage: 33.3 },
+                  { unitNo: 3, passing: 5, totalMarks: 10, weightage: 33.4 }
+                ],
+                "Quizzes": [
+                  { unitNo: 1, passing: 5, totalMarks: 10, weightage: 33.3 },
+                  { unitNo: 2, passing: 5, totalMarks: 10, weightage: 33.3 },
+                  { unitNo: 3, passing: 5, totalMarks: 10, weightage: 33.4 }
+                ],
+                "Class Participation": [{ unitNo: 1, passing: 5, totalMarks: 10, weightage: 100 }],
+                "Class Project": [{ unitNo: 1, passing: 15, totalMarks: 30, weightage: 100 }],
+                "Presentation": [{ unitNo: 1, passing: 5, totalMarks: 10, weightage: 100 }],
+                "Mid Term": [{ unitNo: 1, passing: 15, totalMarks: 30, weightage: 100 }],
+                "Final": [{ unitNo: 1, passing: 20, totalMarks: 40, weightage: 100 }]
+              };
+              return {
+                id: sc.id || `course-assigned-${sc.code}`,
+                code: sc.code,
+                title: sc.title,
+                departmentId: sc.departmentId || 'computing',
+                departmentName: sc.departmentName || 'Department of Computing and Technology',
+                programId: sc.programId || 'bscs',
+                programName: sc.programName || 'Bachelor of Science in Computer Science (BSCS)',
+                creditHours: sc.creditHours || 3,
+                categories: standardCategories,
+                unitsData: standardUnitsData,
+                students: [
+                  {
+                    regNo: regToUse,
+                    name: matchingStudent ? matchingStudent.name : 'Logged-In Student',
+                    marks: sc.studentMarks || {}
+                  }
+                ],
+                obeQuestions: sc.obeQuestions || [],
+                obeMarks: {
+                  [regToUse]: sc.obeMarks || {}
+                }
+              };
+            });
+          } else {
+            const instCourses = apiService.getLocalInstructorCourses();
+            mappedInstructorCourses = instCourses || [];
+          }
+        } catch (apiErr) {
+          console.warn("Failed to fetch student courses from backend, falling back to local storage.", apiErr);
+          const instCourses = apiService.getLocalInstructorCourses();
+          mappedInstructorCourses = instCourses || [];
+        }
+        setInstructorCourses(mappedInstructorCourses);
       } catch (err) {
         console.warn("Instructor courses not loaded directly, using empty set.", err);
         setInstructorCourses([]);

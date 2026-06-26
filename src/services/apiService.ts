@@ -827,6 +827,83 @@ export const apiService = {
     localStorage.setItem('IQRA_OBE_STUDENTS', JSON.stringify(updated));
     return true;
   },
+
+  async getDeptAdminProfile() {
+    const res = await fetchWithTimeout(`${BASE_URL}/admin/profile/`, {
+      headers: getHeaders()
+    }, 5000);
+    if (!res.ok) throw new Error('Failed to fetch admin profile');
+    return res.json();
+    // Returns: { departmentId, departmentName, employeeId, username, user_type }
+  },
+
+  async getTeachers() {
+    const res = await fetchWithTimeout(`${BASE_URL}/teachers/`, {
+      headers: getHeaders()
+    }, 5000);
+    if (!res.ok) throw new Error('Failed to fetch teachers');
+    return res.json();
+    // Returns: [{ employeeId, name, email, designation, departmentId, departmentName }]
+  },
+
+  async getSemesterPlans(programId?: string) {
+    const url = programId
+      ? `${BASE_URL}/admin/semester-plans/?programId=${programId}`
+      : `${BASE_URL}/admin/semester-plans/`;
+    const res = await fetchWithTimeout(url, { headers: getHeaders() }, 5000);
+    if (!res.ok) throw new Error('Failed to fetch semester plans');
+    return res.json();
+    // Returns: [{ programId, semester, courseCodes }]
+  },
+
+  async saveSemesterPlan(programId: string, semester: string, courseCodes: string[]) {
+    const res = await fetchWithTimeout(`${BASE_URL}/admin/semester-plans/`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({ programId, semester, courseCodes }),
+    }, 8000);
+    if (!res.ok) throw new Error('Failed to save semester plan');
+    return res.json();
+  },
+
+  async getStudentCourses() {
+    const res = await fetchWithTimeout(`${BASE_URL}/student/courses/`, {
+      headers: getHeaders()
+    }, 5000);
+    if (!res.ok) throw new Error('Failed to fetch student courses');
+    return res.json();
+    // Returns: [{ id, code, title, creditHours, categories, studentMarks }]
+  },
+
+  async getCourseAssignments() {
+    const res = await fetchWithTimeout(`${BASE_URL}/admin/course-assignments/`, {
+      headers: getHeaders()
+    }, 5000);
+    if (!res.ok) throw new Error('Failed to fetch course assignments');
+    return res.json();
+    // Returns: [{ teacherId, courseCode, programId }]
+  },
+
+  async assignCourse(teacherId: string, courseCode: string, programId?: string) {
+    const res = await fetchWithTimeout(`${BASE_URL}/admin/course-assignments/`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({ teacherId, courseCode, programId }),
+    }, 8000);
+    if (!res.ok) throw new Error('Failed to save course assignment');
+    return res.json();
+  },
+
+  async removeCourseAssignment(teacherId: string, courseCode: string, programId?: string) {
+    const res = await fetchWithTimeout(`${BASE_URL}/admin/course-assignments/`, {
+      method: 'DELETE',
+      headers: getHeaders(),
+      body: JSON.stringify({ teacherId, courseCode, programId }),
+    }, 8000);
+    if (!res.ok) throw new Error('Failed to remove course assignment');
+    return res.json();
+  },
+
   saveLocalStorageData(data: OBEData): void {
     saveLocalStorageData(data);
   }
