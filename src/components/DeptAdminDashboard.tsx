@@ -45,6 +45,8 @@ interface StudentCourseBinding {
 interface TeacherCourseAssignment {
   teacherId: string;
   courseCode: string;
+  programId?: string;
+  section?: string;
 }
 
 interface DeptAdminDashboardProps {
@@ -225,6 +227,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
   // Tab 4: Teacher Course Assignment State
   const [selectedTeacherId, setSelectedTeacherId] = useState('');
   const [selectedCourseCodeForTeacher, setSelectedCourseCodeForTeacher] = useState('');
+  const [selectedProgramForTeacher, setSelectedProgramForTeacher] = useState('');
   const [assignmentSearch, setAssignmentSearch] = useState('');
 
   // Tab 5: Student Binding State
@@ -385,11 +388,11 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
 
       if (assignmentsNeedReset) {
         const defaultAssignments: TeacherCourseAssignment[] = [
-          { teacherId: 'teacher-1', courseCode: 'CMC381' },
-          { teacherId: 'teacher-1', courseCode: 'AIC211' },
-          { teacherId: 'teacher-2', courseCode: 'CSC382' },
-          { teacherId: 'teacher-3', courseCode: 'AIC212' },
-          { teacherId: 'teacher-4', courseCode: 'CMC241' }
+          { teacherId: 'teacher-1', courseCode: 'CMC381', programId: 'bscs', section: 'Section A' },
+          { teacherId: 'teacher-1', courseCode: 'AIC211', programId: 'bsai', section: 'Section A' },
+          { teacherId: 'teacher-2', courseCode: 'CSC382', programId: 'bscs', section: 'Section B' },
+          { teacherId: 'teacher-3', courseCode: 'AIC212', programId: 'bsai', section: 'Section A' },
+          { teacherId: 'teacher-4', courseCode: 'CMC241', programId: 'bsse', section: 'Section A' }
         ];
         localStorage.setItem('IQRA_OBE_TEACHER_ASSIGNMENTS', JSON.stringify(defaultAssignments));
         setTeacherAssignments(defaultAssignments);
@@ -427,7 +430,10 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
       const teacher = currentTeachers.find(t => t.id === assignment.teacherId);
       const course = currentCourses.find(c => c.code === assignment.courseCode);
       const matchedDept = departments.find(d => d.id === (course?.departmentId || 'computing'));
-      const matchedProg = programs.find(p => p.id === (course?.programId || 'bscs'));
+      const finalProgramId = assignment.programId || course?.programId || 'bscs';
+      const matchedProg = programs.find(p => p.id === finalProgramId);
+
+      const uniqId = `course-${assignment.courseCode}-${assignment.teacherId}-${finalProgramId}`;
 
       // Find matching students for this course based on bindings
       const studentRegs = currentBindings
@@ -435,10 +441,18 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
         .map(b => b.studentRegNo);
 
       const courseStudents = currentStudents
-        .filter(s => studentRegs.includes(s.regNo))
+        .filter(s => {
+          const isBound = studentRegs.includes(s.regNo);
+          if (!isBound) return false;
+          if (assignment.programId) {
+            return s.programId === assignment.programId;
+          }
+          return true;
+        })
         .map(s => {
           // Preserve existing marks if student was already in this course
-          const existingCourse = existingInstructorCourses.find(ec => ec.code === assignment.courseCode);
+          const existingCourse = existingInstructorCourses.find(ec => ec.id === uniqId) || 
+                                 existingInstructorCourses.find(ec => ec.code === assignment.courseCode && !ec.id.includes('-'));
           const existingStudent = existingCourse?.students.find(es => es.regNo === s.regNo);
           return {
             regNo: s.regNo,
@@ -448,7 +462,8 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
         });
 
       // Find if this course already has initialized units/categories, otherwise set defaults
-      const existingCourse = existingInstructorCourses.find(ec => ec.code === assignment.courseCode);
+      const existingCourse = existingInstructorCourses.find(ec => ec.id === uniqId) || 
+                             existingInstructorCourses.find(ec => ec.code === assignment.courseCode && !ec.id.includes('-'));
       
       const standardCategories = [
         { name: "Assignments", percentage: 15, units: 3 },
@@ -478,14 +493,17 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
         "Final": [{ unitNo: 1, passing: 20, totalMarks: 40, weightage: 100 }]
       };
 
+      const baseTitle = course?.title || 'Unknown Course';
+      const finalTitle = assignment.programId && matchedProg ? `${baseTitle} (${matchedProg.code.toUpperCase()})` : baseTitle;
+
       return {
-        id: existingCourse?.id || `course-assigned-${assignment.courseCode}-${assignment.teacherId}`,
+        id: existingCourse?.id || uniqId,
         code: assignment.courseCode,
-        title: course?.title || 'Unknown Course',
+        title: finalTitle,
         courseType: 'Theory',
         departmentId: course?.departmentId || 'computing',
         departmentName: matchedDept?.name || 'Department of Computing and Technology',
-        programId: course?.programId || 'bscs',
+        programId: finalProgramId,
         programName: matchedProg?.name || 'Bachelor of Science in Computer Science',
         creditHours: 3,
         categories: existingCourse?.categories || standardCategories,
@@ -708,19 +726,22 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
       return;
     }
 
-    // Check if assignment already exists
+    // Check if assignment already exists with same parameters
     const exists = teacherAssignments.some(
-      a => a.teacherId === selectedTeacherId && a.courseCode === selectedCourseCodeForTeacher
+      a => a.teacherId === selectedTeacherId && 
+           a.courseCode === selectedCourseCodeForTeacher &&
+           a.programId === (selectedProgramForTeacher || undefined)
     );
 
     if (exists) {
-      triggerNotification("This teacher is already assigned to this course.", true);
+      triggerNotification("This teacher assignment with specified program already exists.", true);
       return;
     }
 
     const newAssignment: TeacherCourseAssignment = {
       teacherId: selectedTeacherId,
-      courseCode: selectedCourseCodeForTeacher
+      courseCode: selectedCourseCodeForTeacher,
+      programId: selectedProgramForTeacher || undefined
     };
 
     const updatedAssignments = [...teacherAssignments, newAssignment];
@@ -731,12 +752,16 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
     syncToInstructorCourses(courses, teachers, updatedAssignments, studentBindings, students);
 
     const teacherObj = teachers.find(t => t.id === selectedTeacherId);
-    triggerNotification(`Successfully assigned course ${selectedCourseCodeForTeacher} to ${teacherObj?.name}`);
+    const progObj = programs.find(p => p.id === selectedProgramForTeacher);
+    const suffix = progObj ? ` for ${progObj.code.toUpperCase()}` : '';
+    triggerNotification(`Successfully assigned course ${selectedCourseCodeForTeacher}${suffix} to ${teacherObj?.name}`);
   };
 
-  const handleRemoveTeacherAssignment = (teacherId: string, courseCode: string) => {
+  const handleRemoveTeacherAssignment = (teacherId: string, courseCode: string, programId?: string) => {
     const updatedAssignments = teacherAssignments.filter(
-      a => !(a.teacherId === teacherId && a.courseCode === courseCode)
+      a => !(a.teacherId === teacherId && 
+             a.courseCode === courseCode && 
+             a.programId === programId)
     );
     setTeacherAssignments(updatedAssignments);
     localStorage.setItem('IQRA_OBE_TEACHER_ASSIGNMENTS', JSON.stringify(updatedAssignments));
@@ -1535,7 +1560,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                 <h2 className="text-xl font-bold text-slate-900 mb-1">Teacher Course Assignments</h2>
                 <p className="text-xs text-slate-500 mb-6">Assign courses to faculty members. This automatically provisions their digital grading spreadsheets.</p>
 
-                <form onSubmit={handleAssignCourseToTeacher} className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end bg-slate-50/40 p-4 rounded-2xl border border-slate-100 mb-8">
+                <form onSubmit={handleAssignCourseToTeacher} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end bg-slate-50/40 p-4 rounded-2xl border border-slate-100 mb-8">
                   <div>
                     <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Select Teacher</label>
                     <select 
@@ -1561,6 +1586,19 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                       <option value="">Select Course...</option>
                       {courses.filter(c => c.departmentId === managedDeptId).map(c => (
                         <option key={c.code} value={c.code}>{c.code} - {c.title}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Target Program (Optional)</label>
+                    <select 
+                      value={selectedProgramForTeacher}
+                      onChange={(e) => setSelectedProgramForTeacher(e.target.value)}
+                      className="w-full px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none transition-all"
+                    >
+                      <option value="">All Programs (Shared)</option>
+                      {adminPrograms.map(p => (
+                        <option key={p.id} value={p.id}>{p.code.toUpperCase()} - {p.name}</option>
                       ))}
                     </select>
                   </div>
@@ -1594,9 +1632,9 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                     <thead className="bg-slate-50 text-[10px] uppercase font-bold tracking-wider text-slate-400">
                       <tr>
                         <th className="px-5 py-3 text-left">Teacher</th>
-                        <th className="px-5 py-3 text-left">Email</th>
                         <th className="px-5 py-3 text-left">Course Code</th>
                         <th className="px-5 py-3 text-left">Course Title</th>
+                        <th className="px-5 py-3 text-left">Program</th>
                         <th className="px-5 py-3 text-center">Action</th>
                       </tr>
                     </thead>
@@ -1604,15 +1642,23 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                       {filteredAssignments.map((a, idx) => {
                         const teacher = teachers.find(t => t.id === a.teacherId);
                         const course = courses.find(c => c.code === a.courseCode);
+                        const prog = programs.find(p => p.id === a.programId);
                         return (
                           <tr key={idx} className="hover:bg-slate-50/50 transition-all">
-                            <td className="px-5 py-3.5 text-slate-800 font-bold">{teacher?.name || 'Unknown Teacher'}</td>
-                            <td className="px-5 py-3.5 text-slate-500 font-mono text-[11px]">{teacher?.email || ''}</td>
+                            <td className="px-5 py-3.5">
+                              <div className="font-bold text-slate-800">{teacher?.name || 'Unknown Teacher'}</div>
+                              <div className="text-[10px] text-slate-400 font-mono font-normal">{teacher?.email || ''}</div>
+                            </td>
                             <td className="px-5 py-3.5 text-indigo-600 font-mono font-bold">{a.courseCode}</td>
                             <td className="px-5 py-3.5 text-slate-700 font-medium">{course?.title || ''}</td>
+                            <td className="px-5 py-3.5">
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${prog ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-600'}`}>
+                                {prog ? prog.code.toUpperCase() : 'ALL PROGRAMS'}
+                              </span>
+                            </td>
                             <td className="px-5 py-3.5 text-center">
                               <button
-                                onClick={() => handleRemoveTeacherAssignment(a.teacherId, a.courseCode)}
+                                onClick={() => handleRemoveTeacherAssignment(a.teacherId, a.courseCode, a.programId)}
                                 className="inline-flex items-center gap-1 text-xs font-bold text-red-500 hover:text-red-700 hover:bg-red-50 px-2.5 py-1 rounded-lg transition-all"
                               >
                                 <Unlink className="h-3.5 w-3.5" />
