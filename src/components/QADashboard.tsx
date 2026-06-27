@@ -118,20 +118,29 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
       setLoading(true);
       const res = await apiService.getAllData();
       
+      const filteredDepts = (res.departments || []).filter((d: any) => d.id === activeDeptId);
+      const filteredProgs = (res.programs || []).filter((p: any) => p.departmentId === activeDeptId);
+      const filteredCourses = (res.courses || []).filter((c: any) => c.departmentId === activeDeptId);
+
       setData({
-        departments: res.departments || [],
-        programs: res.programs || [],
-        courses: res.courses || [],
+        departments: filteredDepts,
+        programs: filteredProgs,
+        courses: filteredCourses,
         gas: res.gas || []
       });
       setError(null);
     } catch (err) {
       console.warn("Backend server offline, loading local storage sandbox database...", err);
       const localData = apiService.getLocalStorageData();
+
+      const filteredDepts = (localData.departments || []).filter((d: any) => d.id === activeDeptId);
+      const filteredProgs = (localData.programs || []).filter((p: any) => p.departmentId === activeDeptId);
+      const filteredCourses = (localData.courses || []).filter((c: any) => c.departmentId === activeDeptId);
+
       setData({
-        departments: localData.departments || [],
-        programs: localData.programs || [],
-        courses: localData.courses || [],
+        departments: filteredDepts,
+        programs: filteredProgs,
+        courses: filteredCourses,
         gas: localData.gas || []
       });
     } finally {
@@ -181,14 +190,11 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
   }, [activeProgramId]);
 
   useEffect(() => {
-    if (data) {
-      if (!activeDeptId) {
-        setActiveProgramId('');
-      } else {
-        const activeProgObj = data.programs.find(p => p.id === activeProgramId);
-        if (activeProgObj && activeProgObj.departmentId !== activeDeptId) {
-          setActiveProgramId('');
-        }
+    if (data && activeDeptId) {
+      const activeProgObj = data.programs.find(p => p.id === activeProgramId);
+      if (!activeProgObj || activeProgObj.departmentId !== activeDeptId) {
+        const firstProg = data.programs.find(p => p.departmentId === activeDeptId);
+        setActiveProgramId(firstProg ? firstProg.id : '');
       }
     }
   }, [activeDeptId, data]);
@@ -839,25 +845,10 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
           {/* Leftside selectors: Quick action selectors & filters */}
           <div className="flex flex-wrap items-center gap-4">
             
-            {/* Quick Dept Selector */}
-            <div className="flex items-center gap-2 bg-white px-2.5 py-1 border border-slate-300 rounded-lg shadow-xs animate-fade-in">
+            {/* Quick Dept Selector (LOCKED FOR SECURITY) */}
+            <div className="flex items-center gap-2 bg-slate-100 px-3 py-1 border border-slate-200 rounded-lg shadow-xs animate-fade-in text-xs font-bold text-slate-700">
               <span className="text-[9px] text-indigo-950 font-bold tracking-wide uppercase">DEPARTMENT:</span>
-              <select
-                value={activeDeptId}
-                onChange={(e) => {
-                  const dept = e.target.value;
-                  setActiveDeptId(dept);
-                  const firstProg = data?.programs?.find(p => p.departmentId === dept)?.id || '';
-                  setActiveProgramId(firstProg);
-                  setSelectedCourseId('all');
-                  setActiveModule('vision_mission');
-                }}
-                className="bg-transparent border-none text-slate-800 text-xs font-bold font-sans focus:outline-none cursor-pointer"
-              >
-                {data?.departments?.map(d => (
-                  <option key={d.id} value={d.id}>{d.name}</option>
-                ))}
-              </select>
+              <span>{activeDepartment?.name || activeDeptId.toUpperCase()}</span>
             </div>
 
             {/* Quick Program Selector */}
@@ -1006,7 +997,7 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
 
                 {/* Professional Academic-style Text blocks */}
                 <div className="space-y-6">
-                  {data.departments.map((dept) => {
+                  {data.departments.filter(d => d.id === activeDeptId).map((dept) => {
                     const isEditing = editingDeptId === dept.id;
                     return (
                       <div key={dept.id} className="bg-white border-2 border-slate-200 rounded-3xl p-8 shadow-sm relative overflow-hidden transition-all duration-200 text-left">
@@ -2066,7 +2057,7 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                         }}
                         className="w-full p-3 font-medium bg-white border border-slate-300 rounded-lg outline-none focus:border-indigo-500 text-xs text-slate-800"
                       >
-                        {data?.departments.map(d => (
+                        {data?.departments.filter(d => d.id === activeDeptId).map(d => (
                           <option key={d.id} value={d.id}>{d.name}</option>
                         ))}
                       </select>
@@ -2152,7 +2143,7 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                         }}
                         className="w-full p-3 font-medium bg-white border border-slate-300 rounded-lg outline-none focus:border-indigo-500 text-xs text-slate-800"
                       >
-                        {data?.departments.map(d => (
+                        {data?.departments.filter(d => d.id === activeDeptId).map(d => (
                           <option key={d.id} value={d.id}>{d.name}</option>
                         ))}
                       </select>

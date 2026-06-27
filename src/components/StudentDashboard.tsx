@@ -52,9 +52,37 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
   const [activeRegNo, setActiveRegNo] = useState<string>(studentRegNo);
   const [activeTab, setActiveTab] = useState<'transcript' | 'obe_clo' | 'ga_attainment'>('transcript');
   
+  // Dynamic API Report States
+  const [studentSummary, setStudentSummary] = useState<any>(null);
+  const [studentGA, setStudentGA] = useState<any>(null);
+
   // UI States
   const [expandedCourseCode, setExpandedCourseCode] = useState<string | null>(null);
   const [cloFilterCourseCode, setCloFilterCourseCode] = useState<string>('all');
+
+  useEffect(() => {
+    if (!activeRegNo) return;
+    
+    const fetchReports = async () => {
+      try {
+        const summary = await apiService.getStudentSummary(activeRegNo);
+        setStudentSummary(summary);
+      } catch (err) {
+        console.warn("Failed to fetch student summary from backend:", err);
+        setStudentSummary(null);
+      }
+
+      try {
+        const gaAtt = await apiService.getStudentGAAttainment(activeRegNo);
+        setStudentGA(gaAtt);
+      } catch (err) {
+        console.warn("Failed to fetch student GA attainment from backend:", err);
+        setStudentGA(null);
+      }
+    };
+
+    fetchReports();
+  }, [activeRegNo]);
 
   useEffect(() => {
     loadAllData();
@@ -77,17 +105,21 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
 
       // 2. Load students
       const studentList = await apiService.getStudents();
-      setStudents(studentList);
 
       // 3. Match login username or select first default
       const matchingStudent = studentList.find(
         s => s.regNo.toLowerCase() === studentRegNo.toLowerCase() || 
-             s.name.toLowerCase() === studentRegNo.toLowerCase()
+             s.name.toLowerCase() === studentRegNo.toLowerCase() ||
+             (s as any).username?.toLowerCase() === studentRegNo.toLowerCase()
       );
       if (matchingStudent) {
         setActiveRegNo(matchingStudent.regNo);
-      } else if (studentList.length > 0) {
-        setActiveRegNo(studentList[0].regNo);
+        setStudents([matchingStudent]);
+      } else {
+        setStudents(studentList);
+        if (studentList.length > 0) {
+          setActiveRegNo(studentList[0].regNo);
+        }
       }
 
       // 4. Load student bindings
@@ -407,6 +439,14 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
 
   // Compute SGPA / CGPA overall
   const GPAStats = useMemo(() => {
+    if (studentSummary) {
+      return {
+        cgpa: typeof studentSummary.cgpa === 'number' ? studentSummary.cgpa : parseFloat(studentSummary.cgpa || '0'),
+        totalCredits: studentSummary.totalCreditsCompleted || (enrolledCoursesWithGrades.length * 3),
+        passedCourses: studentSummary.enrolledCourses?.filter((c: any) => c.grade !== 'F').length || enrolledCoursesWithGrades.length
+      };
+    }
+
     if (enrolledCoursesWithGrades.length === 0) {
       return { cgpa: 0.0, totalCredits: 0, passedCourses: 0 };
     }
@@ -431,7 +471,7 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
       totalCredits,
       passedCourses
     };
-  }, [enrolledCoursesWithGrades]);
+  }, [enrolledCoursesWithGrades, studentSummary]);
 
   // Filter GAs (Graduate Attributes) associated with the student's program (or standard 10)
   const programGAs = useMemo(() => {
@@ -459,6 +499,17 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
   // Compute Graduate Attribute (GA) Attainment scores dynamically
   // Each GA is mapped to courses. We aggregate the student's aggregate marks in those courses.
   const gaAttainmentProfile = useMemo(() => {
+    if (studentGA && Array.isArray(studentGA.attainments)) {
+      return studentGA.attainments.map((att: any) => ({
+        id: att.gaId,
+        name: att.gaTitle,
+        description: att.gaDescription || `Competency and standard metrics for ${att.gaTitle}`,
+        score: att.score || 0,
+        contributingCount: att.contributingCourses?.length || 0,
+        coursesList: (att.contributingCourses || []).map((c: any) => `${c.code} - ${c.title}`)
+      }));
+    }
+
     return programGAs.map(ga => {
       // Find courses that are mapped to this GA
       const contributingCourses = enrolledCoursesWithGrades.filter(c => 
@@ -491,7 +542,7 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
         coursesList: contributingCourses.map(c => `${c.code} - ${c.title}`)
       };
     });
-  }, [programGAs, enrolledCoursesWithGrades, activeRegNo]);
+  }, [programGAs, enrolledCoursesWithGrades, activeRegNo, studentGA]);
 
   // Aggregate Course Learning Outcomes (CLO) for the selected filter course
   const filteredCLOList = useMemo(() => {
@@ -603,28 +654,13 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
         </div>
 
         <div className="flex items-center gap-4">
-          {/* PROFILE TESTING DROPDOWN */}
-          <div className="hidden md:flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl">
-            <UserCheck className="h-3.5 w-3.5 text-indigo-600" />
-            <select
-              value={activeRegNo}
-              onChange={(e) => {
-                setActiveRegNo(e.target.value);
-                setExpandedCourseCode(null);
-              }}
-              className="bg-transparent text-xs font-bold text-slate-700 outline-none border-none cursor-pointer pr-2"
-              title="Switch profile to test different students/semesters"
-            >
-              {students.map(s => {
-                const prog = programs.find(p => p.id === s.programId);
-                return (
-                  <option key={s.regNo} value={s.regNo}>
-                    {s.name} ({prog?.code?.toUpperCase() || s.programId.toUpperCase()})
-                  </option>
-                );
-              })}
-            </select>
-          </div>
+          {/* SECURE STUDENT INFO BADGE */}
+          {activeStudent && (
+            <div className="hidden md:flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-700">
+              <UserCheck className="h-3.5 w-3.5 text-indigo-600" />
+              <span>{activeStudent.name} ({activeRegNo})</span>
+            </div>
+          )}
 
           <button
             onClick={onLogout}
@@ -700,26 +736,15 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
           </div>
         </div>
 
-        {/* PROFILE SWITCHER ON MOBILE */}
-        <div className="md:hidden bg-white border border-slate-200 p-4 rounded-xl flex items-center justify-between">
-          <span className="text-xs font-bold text-slate-600 flex items-center gap-1.5">
-            <UserCheck className="h-4 w-4 text-indigo-600" /> Test Student Profile:
-          </span>
-          <select
-            value={activeRegNo}
-            onChange={(e) => {
-              setActiveRegNo(e.target.value);
-              setExpandedCourseCode(null);
-            }}
-            className="bg-slate-50 text-xs font-bold text-slate-700 px-3 py-1.5 rounded-lg border border-slate-200"
-          >
-            {students.map(s => (
-              <option key={s.regNo} value={s.regNo}>
-                {s.name}
-              </option>
-            ))}
-          </select>
-        </div>
+        {/* SECURE STUDENT INFO ON MOBILE */}
+        {activeStudent && (
+          <div className="md:hidden bg-slate-50 border border-slate-200 p-4 rounded-xl flex items-center justify-between text-xs font-bold text-slate-700">
+            <span className="flex items-center gap-1.5 text-slate-600">
+              <UserCheck className="h-4 w-4 text-indigo-600" /> Student Profile:
+            </span>
+            <span>{activeStudent.name} ({activeRegNo})</span>
+          </div>
+        )}
 
         {/* TAB CONTROLS */}
         <div className="flex border-b border-slate-200">

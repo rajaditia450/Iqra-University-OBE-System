@@ -905,7 +905,7 @@ export const apiService = {
   },
 
   async getProgramGAAttainment(programId: string) {
-    const res = await fetchWithTimeout(`${BASE_URL}/reports/program-ga-attainment/?programId=${programId}`, {
+    const res = await fetchWithTimeout(`${BASE_URL}/reports/program-ga-attainment/?programId=${programId.toLowerCase()}`, {
       headers: getHeaders()
     }, 5000);
     if (!res.ok) throw new Error('Failed to fetch program GA attainment');
@@ -921,7 +921,7 @@ export const apiService = {
   },
 
   async getCourseAttainment(courseCode: string, programId: string) {
-    const res = await fetchWithTimeout(`${BASE_URL}/reports/course-attainment/?courseCode=${courseCode}&programId=${programId}`, {
+    const res = await fetchWithTimeout(`${BASE_URL}/reports/course-attainment/?courseCode=${courseCode}&programId=${programId.toLowerCase()}`, {
       headers: getHeaders()
     }, 5000);
     if (!res.ok) throw new Error('Failed to fetch course attainment');
@@ -934,6 +934,49 @@ export const apiService = {
     }, 5000);
     if (!res.ok) throw new Error('Failed to fetch student summary');
     return res.json();
+  },
+
+  async getCourseCLOs(courseId: string) {
+    const res = await fetchWithTimeout(`${BASE_URL}/instructor/courses/${courseId}/clos/`, {
+      headers: getHeaders()
+    }, 5000);
+    if (!res.ok) throw new Error('Failed to fetch course CLOs');
+    return res.json();
+  },
+
+  async createCourseCLO(courseId: string, data: { code: string; description: string; mappedGA: string | null; order: number }) {
+    const res = await fetchWithTimeout(`${BASE_URL}/instructor/courses/${courseId}/clos/`, {
+      method: 'POST',
+      headers: {
+        ...getHeaders(),
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(data)
+    }, 5000);
+    if (!res.ok) throw new Error('Failed to create course CLO');
+    return res.json();
+  },
+
+  async updateCourseCLO(courseId: string, id: string | number, data: { description?: string; mappedGA?: string | null; order?: number }) {
+    const res = await fetchWithTimeout(`${BASE_URL}/instructor/courses/${courseId}/clos/${id}/`, {
+      method: 'PATCH',
+      headers: {
+        ...getHeaders(),
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(data)
+    }, 5000);
+    if (!res.ok) throw new Error('Failed to update course CLO');
+    return res.json();
+  },
+
+  async deleteCourseCLO(courseId: string, id: string | number) {
+    const res = await fetchWithTimeout(`${BASE_URL}/instructor/courses/${courseId}/clos/${id}/`, {
+      method: 'DELETE',
+      headers: getHeaders()
+    }, 5000);
+    if (!res.ok) throw new Error('Failed to delete course CLO');
+    return true;
   },
 
   saveLocalStorageData(data: OBEData): void {

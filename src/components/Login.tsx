@@ -54,8 +54,9 @@ export default function Login({ onLogin }: LoginProps) {
         localStorage.setItem('IQRA_OBE_USER_DEPT_NAME', data.user.departmentName || '');
       }
 
-      // Use role from Django instead of the UI selector
-      onLogin(data.user.user_type as UserType, data.user.username);
+      // Use registration number or employee ID if available, otherwise fall back to username
+      const identifier = data.user.regNo || data.user.reg_no || data.user.employeeId || data.user.employee_id || data.user.username;
+      onLogin(data.user.user_type as UserType, identifier);
 
     } catch (err) {
       clearTimeout(timeoutId);

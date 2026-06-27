@@ -20,7 +20,8 @@ import {
   UserPlus, 
   Sliders, 
   Download,
-  Info
+  Info,
+  BarChart3
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -202,10 +203,17 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
   }, [departments, managedDeptId]);
 
   // Navigation State
-  const [activeTab, setActiveTab] = useState<'semester-plans' | 'courses' | 'teachers' | 'teacher-assignments' | 'student-enrollment'>('semester-plans');
+  const [activeTab, setActiveTab] = useState<'semester-plans' | 'courses' | 'teachers' | 'teacher-assignments' | 'student-enrollment' | 'attainment-reports'>('semester-plans');
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  // Tab 6: Reports State
+  const [selectedReportProg, setSelectedReportProg] = useState<string>('bscs');
+  const [selectedReportCourseCode, setSelectedReportCourseCode] = useState<string>('');
+  const [programGAReport, setProgramGAReport] = useState<any>(null);
+  const [courseAttainmentReport, setCourseAttainmentReport] = useState<any>(null);
+  const [loadingReport, setLoadingReport] = useState<boolean>(false);
 
   // Tab 1: Semester Plans Edit State
   const [selectedPlanProg, setSelectedPlanProg] = useState<string>('bscs');
@@ -262,6 +270,62 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
     setTeacherDept(managedDeptId);
   }, [managedDeptId]);
   const [selectedCourseCodeForStudent, setSelectedCourseCodeForStudent] = useState('');
+
+  // Tab 6 Reports computed list
+  const reportCourses = useMemo(() => {
+    return courses.filter(c => c.departmentId === managedDeptId && (!selectedReportProg || c.programId === selectedReportProg));
+  }, [courses, managedDeptId, selectedReportProg]);
+
+  useEffect(() => {
+    if (reportCourses.length > 0) {
+      const codeExists = reportCourses.some(c => c.code === selectedReportCourseCode);
+      if (!codeExists) {
+        setSelectedReportCourseCode(reportCourses[0].code);
+      }
+    } else {
+      setSelectedReportCourseCode('');
+    }
+  }, [reportCourses, selectedReportCourseCode]);
+
+  // Fetch Program GA Attainment
+  useEffect(() => {
+    if (activeTab !== 'attainment-reports' || !selectedReportProg) return;
+
+    const fetchProgramGAReport = async () => {
+      setLoadingReport(true);
+      try {
+        const report = await apiService.getProgramGAAttainment(selectedReportProg);
+        setProgramGAReport(report);
+      } catch (err) {
+        console.warn("Failed to fetch program GA report:", err);
+        setProgramGAReport(null);
+      } finally {
+        setLoadingReport(false);
+      }
+    };
+
+    fetchProgramGAReport();
+  }, [selectedReportProg, activeTab]);
+
+  // Fetch Course Attainment
+  useEffect(() => {
+    if (activeTab !== 'attainment-reports' || !selectedReportCourseCode || !selectedReportProg) {
+      setCourseAttainmentReport(null);
+      return;
+    }
+
+    const fetchCourseReport = async () => {
+      try {
+        const report = await apiService.getCourseAttainment(selectedReportCourseCode, selectedReportProg);
+        setCourseAttainmentReport(report);
+      } catch (err) {
+        console.warn("Failed to fetch course attainment report:", err);
+        setCourseAttainmentReport(null);
+      }
+    };
+
+    fetchCourseReport();
+  }, [selectedReportCourseCode, selectedReportProg, activeTab]);
 
   // Load all initial data and set fallback local storage structures
   useEffect(() => {
@@ -1161,6 +1225,18 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                 <UserPlus className="h-4 w-4" />
                 <span>Student Enrollments</span>
               </button>
+
+              <button
+                onClick={() => setActiveTab('attainment-reports')}
+                className={`flex items-center space-x-2 py-3.5 border-b-2 font-bold text-xs transition-all whitespace-nowrap cursor-pointer ${
+                  activeTab === 'attainment-reports' 
+                    ? 'border-indigo-600 text-indigo-600' 
+                    : 'border-transparent text-slate-500 hover:text-slate-950 hover:border-slate-300'
+                }`}
+              >
+                <BarChart3 className="h-4 w-4" />
+                <span>OBE Attainment Reports</span>
+              </button>
             </nav>
           </div>
         </div>
@@ -1902,6 +1978,227 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                   )}
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* TAB 6: OBE ATTAINMENT REPORTS */}
+          {activeTab === 'attainment-reports' && (
+            <div className="space-y-8 animate-fadeIn">
+              
+              {/* Program selection and info header */}
+              <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-5">
+                  <div className="space-y-1">
+                    <h2 className="text-lg font-bold text-slate-900">Department OBE Attainment Analytics</h2>
+                    <p className="text-xs text-slate-500 leading-relaxed max-w-xl">
+                      Monitor student competencies, Washington Accord Graduate Attribute (GA) compliance, and Course Learning Outcome (CLO) attainment percentages across your department programs.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs font-bold text-slate-600">Active Program:</span>
+                    <select
+                      value={selectedReportProg}
+                      onChange={(e) => setSelectedReportProg(e.target.value)}
+                      className="bg-slate-50 text-xs font-bold text-slate-700 px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-600/10 focus:border-indigo-600"
+                    >
+                      {adminPrograms.map(p => (
+                        <option key={p.id} value={p.id}>{p.name} ({p.code.toUpperCase()})</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                
+                {/* PANEL 1: PROGRAM-WIDE GA ATTAINMENT */}
+                <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm space-y-6">
+                  <div>
+                    <h3 className="text-sm font-extrabold text-slate-900 uppercase tracking-tight flex items-center gap-2">
+                      <BarChart3 className="h-4.5 w-4.5 text-indigo-600" />
+                      Graduate Attribute (GA) Attainment Profile
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Aggregated student score metrics across all contributing courses mapping to program attributes.
+                    </p>
+                  </div>
+
+                  {loadingReport ? (
+                    <div className="flex flex-col items-center justify-center py-20 text-slate-400 gap-2.5">
+                      <RefreshCw className="h-6 w-6 animate-spin text-indigo-600" />
+                      <span className="text-xs font-semibold">Recalculating real-time attainment profiles...</span>
+                    </div>
+                  ) : programGAReport && programGAReport.attributes && programGAReport.attributes.length > 0 ? (
+                    <div className="space-y-4 max-h-[500px] overflow-y-auto pr-2">
+                      <div className="bg-slate-50 p-3.5 border border-slate-200/50 rounded-xl flex items-center justify-between text-xs text-slate-500 font-bold">
+                        <span>Attainment Threshold:</span>
+                        <span className="font-mono text-indigo-950 font-black">{programGAReport.attainmentThreshold || 50}%</span>
+                      </div>
+                      
+                      {programGAReport.attributes.map((attr: any) => {
+                        const passed = attr.attainmentStatus === 'Passed';
+                        const score = attr.averageAttainment || attr.score || 0;
+                        const scorePct = Math.min(100, Math.max(0, score));
+                        const isPassed = score >= (programGAReport.attainmentThreshold || 50);
+
+                        return (
+                          <div 
+                            key={attr.id}
+                            className="bg-slate-50/40 border border-slate-200/60 p-4.5 rounded-xl hover:bg-white transition-all space-y-3"
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono text-[10px] font-bold text-indigo-600 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded uppercase">
+                                  {attr.id}
+                                </span>
+                                <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${
+                                  isPassed 
+                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-100' 
+                                    : 'bg-amber-50 text-amber-700 border-amber-100'
+                                }`}>
+                                  {isPassed ? 'Passed' : 'Needs Review'}
+                                </span>
+                              </div>
+                              <span className="font-mono text-xs text-slate-400 font-bold">
+                                {attr.contributingCoursesCount || attr.contributingCourses?.length || 0} Courses mapped
+                              </span>
+                            </div>
+                            
+                            <div>
+                              <h4 className="text-xs font-bold text-slate-800">{attr.title}</h4>
+                              <p className="text-[10px] text-slate-400 mt-0.5">{attr.description || 'Washington Accord compliance attribute measure.'}</p>
+                            </div>
+
+                            <div className="space-y-1 pt-1">
+                              <div className="flex items-center justify-between text-[11px] text-slate-500 font-bold">
+                                <span>Average Attainment score:</span>
+                                <span className="font-mono text-indigo-950 font-black">{score.toFixed(1)}%</span>
+                              </div>
+                              <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
+                                <div 
+                                  className={`h-full rounded-full transition-all duration-500 ${isPassed ? 'bg-emerald-500' : 'bg-amber-500'}`}
+                                  style={{ width: `${scorePct}%` }}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="text-center py-16 text-slate-400 text-xs font-semibold">
+                      No attributes found. Assign GAs inside your Course Catalog.
+                    </div>
+                  )}
+                </div>
+
+                {/* PANEL 2: COURSE ATTAINMENT */}
+                <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm space-y-6">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                      <h3 className="text-sm font-extrabold text-slate-900 uppercase tracking-tight flex items-center gap-2">
+                        <GraduationCap className="h-4.5 w-4.5 text-indigo-600" />
+                        Course Attainment Ledger
+                      </h3>
+                      <p className="text-xs text-slate-400 mt-1">
+                        Select a course within the department to inspect target outcome attainment.
+                      </p>
+                    </div>
+                    <div>
+                      <select
+                        value={selectedReportCourseCode}
+                        onChange={(e) => setSelectedReportCourseCode(e.target.value)}
+                        className="bg-slate-50 text-xs font-bold text-slate-700 px-3 py-2 rounded-xl border border-slate-200 outline-none w-full sm:w-44 focus:ring-2 focus:ring-indigo-600/10 focus:border-indigo-600"
+                      >
+                        <option value="">Select Course...</option>
+                        {reportCourses.map(c => (
+                          <option key={c.code} value={c.code}>{c.code} - {c.title}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {!selectedReportCourseCode ? (
+                    <div className="flex flex-col items-center justify-center py-24 text-slate-400 text-center">
+                      <GraduationCap className="h-12 w-auto text-slate-300 mb-3" />
+                      <h4 className="text-xs font-bold text-slate-700">No Course Selected</h4>
+                      <p className="text-[11px] text-slate-400 max-w-xs mt-1">Choose a course from the dropdown above to view its real-time CLO-to-GA attainment metrics.</p>
+                    </div>
+                  ) : courseAttainmentReport ? (
+                    <div className="space-y-6">
+                      
+                      {/* Metric widgets */}
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="bg-slate-50 border border-slate-200/60 p-4 rounded-xl text-center space-y-1">
+                          <p className="text-[9px] uppercase font-bold text-slate-400 tracking-wider">Average Marks</p>
+                          <p className="text-xl font-mono font-black text-indigo-950">
+                            {courseAttainmentReport.averageMarks?.toFixed(1) || '0.0'}
+                            <span className="text-[11px] text-slate-400 font-bold ml-1">/ {courseAttainmentReport.maxMarks || 100}</span>
+                          </p>
+                        </div>
+                        <div className="bg-slate-50 border border-slate-200/60 p-4 rounded-xl text-center space-y-1">
+                          <p className="text-[9px] uppercase font-bold text-slate-400 tracking-wider">Pass Rate</p>
+                          <p className="text-xl font-mono font-black text-emerald-700">
+                            {courseAttainmentReport.passedCount || 0}
+                            <span className="text-[11px] text-slate-400 font-bold font-sans ml-1">of {courseAttainmentReport.totalCount || 0} students</span>
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Course Attainment Gauge */}
+                      <div className="bg-indigo-50/30 border border-indigo-100/50 p-5 rounded-2xl space-y-4">
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs font-bold text-indigo-950">Overall Attainment Percentage</span>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                            courseAttainmentReport.attainmentStatus === 'Passed' 
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-100' 
+                              : 'bg-amber-50 text-amber-700 border-amber-100'
+                          }`}>
+                            {courseAttainmentReport.attainmentStatus || 'Passed'}
+                          </span>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <div className="flex justify-between items-center text-xs text-slate-500 font-bold">
+                            <span>Index score:</span>
+                            <span className="font-mono text-indigo-950 font-black">{courseAttainmentReport.attainmentPercentage?.toFixed(1)}%</span>
+                          </div>
+                          <div className="w-full bg-slate-200/60 h-3 rounded-full overflow-hidden">
+                            <div 
+                              className={`h-full rounded-full transition-all duration-500 ${
+                                courseAttainmentReport.attainmentStatus === 'Passed' ? 'bg-emerald-500' : 'bg-amber-500'
+                              }`}
+                              style={{ width: `${courseAttainmentReport.attainmentPercentage || 0}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Mapped GAs List */}
+                      {courseAttainmentReport.mappedGA && courseAttainmentReport.mappedGA.length > 0 && (
+                        <div className="space-y-2">
+                          <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Target Attributes Mapping</h4>
+                          <div className="flex flex-wrap gap-2">
+                            {courseAttainmentReport.mappedGA.map((gaCode: string, idx: number) => (
+                              <span key={idx} className="bg-indigo-50 border border-indigo-150 text-indigo-700 font-mono text-xs font-bold px-2.5 py-1 rounded-lg">
+                                {gaCode}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                    </div>
+                  ) : (
+                    <div className="text-center py-16 text-slate-400 text-xs font-semibold">
+                      No OBE marks or target mapping data found for this course.
+                    </div>
+                  )}
+
+                </div>
+
+              </div>
+
             </div>
           )}
 
