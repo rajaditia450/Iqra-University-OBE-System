@@ -79,6 +79,14 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
   const [editProgramMission, setEditProgramMission] = useState('');
   const [editPOs, setEditPOs] = useState<ProgramObjective[]>([]);
   const [savingLoad, setSavingLoad] = useState(false);
+  const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  const showNotification = (message: string, type: 'success' | 'error' = 'success') => {
+    setNotification({ message, type });
+    setTimeout(() => {
+      setNotification(null);
+    }, 4000);
+  };
 
   // Form states for creating custom program
   const [newProgramName, setNewProgramName] = useState('');
@@ -329,9 +337,9 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
       });
       const upgraded = data.departments.map(d => d.id === activeDepartment.id ? updated : d);
       setData({ ...data, departments: upgraded });
-      alert("Department Mission & Vision saved successfully.");
+      showNotification("Department Mission & Vision saved successfully.", "success");
     } catch (e) {
-      alert("Failed to sync vision data");
+      showNotification("Failed to sync department vision data", "error");
     } finally {
       setSavingLoad(false);
     }
@@ -348,9 +356,9 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
       });
       const upgraded = data.programs.map(p => p.id === activeProgram.id ? { ...p, ...updated } : p);
       setData({ ...data, programs: upgraded });
-      alert("Program Mission & Vision saved successfully.");
+      showNotification("Program Mission & Vision saved successfully.", "success");
     } catch (e) {
-      alert("Failed to sync program vision data");
+      showNotification("Failed to sync program vision data", "error");
     } finally {
       setSavingLoad(false);
     }
@@ -1072,9 +1080,9 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                                       };
                                     });
                                     setEditingDeptId(null);
-                                    alert("Departmental vision & mission draft saved successfully.");
+                                    showNotification("Departmental vision & mission draft saved successfully.", "success");
                                   } catch (err) {
-                                    alert("Error updating department.");
+                                    showNotification("Error updating department.", "error");
                                   } finally {
                                     setSavingLoad(false);
                                   }
@@ -1468,6 +1476,88 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
             {activeModule === 'vision_mission' && activeDepartment && activeProgram && (
               <div className="max-w-4xl mx-auto space-y-6 animate-in duration-200 fade-in-25">
                 
+                {/* Department Specific Brand Identity Sheets */}
+                <div className="bg-white border border-slate-200 rounded-3xl shadow-xl overflow-hidden">
+                  
+                  <div className="bg-indigo-900/90 text-white p-6 select-none flex items-center justify-between border-b border-indigo-800">
+                    <div>
+                      <span className="text-[10px] uppercase font-mono tracking-widest text-indigo-200 font-bold">DEPARTMENT SPECIFIC CHARTER</span>
+                      <h3 className="font-serif font-bold text-lg">{activeDepartment.name} Vision &amp; Mission</h3>
+                    </div>
+                    <GraduationCap className="w-8 h-8 opacity-40 text-white" />
+                  </div>
+
+                  <div className="p-6 md:p-8 space-y-8">
+                    
+                    {/* Department Vision Block */}
+                    <div className="space-y-4 bg-slate-50 border border-slate-200 p-8 rounded-3xl shadow-xs text-left relative overflow-hidden">
+                      <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-indigo-500"></div>
+                      <div className="flex items-center gap-2 pl-2">
+                        <Award className="w-5 h-5 text-indigo-650 shrink-0" />
+                        <h4 className="font-sans font-extrabold text-slate-950 text-base tracking-wide uppercase">DEPARTMENT VISION STATEMENT</h4>
+                      </div>
+                      
+                      {isConfiguring ? (
+                        <div className="space-y-2 pl-2">
+                          <textarea
+                            value={editVision}
+                            onChange={(e) => setEditVision(e.target.value)}
+                            rows={3}
+                            className="w-full p-4 text-base bg-white border border-indigo-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 font-normal"
+                            placeholder="Type department vision statement..."
+                          />
+                          <p className="text-[10px] text-slate-400 italic">This will alter the active department vision across all linked interfaces.</p>
+                        </div>
+                      ) : (
+                        <p className="font-sans text-base leading-relaxed italic text-slate-900 pl-9 py-1 font-medium">
+                          "{editVision || '(Department vision statement undefined)'}"
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Department Mission Block */}
+                    <div className="space-y-4 bg-slate-50 border border-slate-200 p-8 rounded-3xl shadow-xs text-left relative overflow-hidden">
+                      <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-indigo-500"></div>
+                      <div className="flex items-center gap-2 pl-2">
+                        <Compass className="w-5 h-5 text-indigo-650 shrink-0" />
+                        <h4 className="font-sans font-extrabold text-slate-950 text-base tracking-wide uppercase">DEPARTMENT MISSION STATEMENT</h4>
+                      </div>
+
+                      {isConfiguring ? (
+                        <div className="space-y-2 pl-2">
+                          <textarea
+                            value={editMission}
+                            onChange={(e) => setEditMission(e.target.value)}
+                            rows={5}
+                            className="w-full p-4 text-base bg-white border border-indigo-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 font-normal"
+                            placeholder="Type department mission statement..."
+                          />
+                          <p className="text-[10px] text-slate-400 italic">This will alter the active department mission across all linked interfaces.</p>
+                        </div>
+                      ) : (
+                        <p className="font-sans text-base leading-relaxed text-slate-900 pl-9 py-1 font-medium">
+                          {editMission || '(Department mission statement undefined)'}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Configuration Department Save Area */}
+                    {isConfiguring && (
+                       <div className="flex justify-end border-t border-indigo-100 pt-5">
+                        <button
+                          onClick={handleSaveVisionMission}
+                          disabled={savingLoad}
+                          className="px-6 py-2.5 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center gap-2 shadow-md hover:shadow-lg hover:scale-105 active:scale-95 duration-100"
+                        >
+                          {savingLoad ? <Loader2 className="w-4 h-4 animate-spin" /> : '💾 SAVE DEPARTMENT CHARTER CHANGES'}
+                        </button>
+                      </div>
+                    )}
+
+                  </div>
+
+                </div>
+
                 {/* Program Specific Brand Identity Sheets */}
                 <div className="bg-white border border-slate-200 rounded-3xl shadow-xl overflow-hidden">
                   
@@ -2262,6 +2352,23 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
               </div>
             </div>
 
+          </div>
+        </div>
+      )}
+      
+      {notification && (
+        <div className="fixed bottom-5 right-5 z-[100] animate-in slide-in-from-bottom-5 duration-300 select-none">
+          <div className={`flex items-center gap-2.5 px-5 py-3.5 rounded-2xl shadow-2xl border ${
+            notification.type === 'success' 
+              ? 'bg-emerald-50 border-emerald-200 text-emerald-950 font-medium' 
+              : 'bg-rose-50 border-rose-200 text-rose-950 font-medium'
+          }`}>
+            {notification.type === 'success' ? (
+              <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+            ) : (
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+            )}
+            <span className="text-xs">{notification.message}</span>
           </div>
         </div>
       )}
