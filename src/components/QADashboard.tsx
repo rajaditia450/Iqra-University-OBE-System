@@ -192,9 +192,8 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
   useEffect(() => {
     if (data && activeDeptId) {
       const activeProgObj = data.programs.find(p => p.id === activeProgramId);
-      if (!activeProgObj || activeProgObj.departmentId !== activeDeptId) {
-        const firstProg = data.programs.find(p => p.departmentId === activeDeptId);
-        setActiveProgramId(firstProg ? firstProg.id : '');
+      if (activeProgramId !== '' && (!activeProgObj || activeProgObj.departmentId !== activeDeptId)) {
+        setActiveProgramId('');
       }
     }
   }, [activeDeptId, data]);
@@ -880,34 +879,65 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
             </div>
 
             {/* Quick view switcher buttons */}
-            {activeProgramId !== '' && (
-              <div className="flex items-center gap-1 bg-slate-200/50 p-1 rounded-lg border border-slate-200">
-                <button 
-                  onClick={() => setActiveModule('vision_mission')}
-                  className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${activeModule === 'vision_mission' ? 'bg-white text-indigo-950 shadow-xs border border-slate-200' : 'text-slate-600 hover:text-slate-900'}`}
-                >
-                  Vision &amp; Mission
-                </button>
-                <button 
-                  onClick={() => setActiveModule('allocation')}
-                  className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${activeModule === 'allocation' ? 'bg-white text-indigo-950 shadow-xs border border-slate-200' : 'text-slate-600 hover:text-slate-900'}`}
-                >
-                  Allocation Matrix
-                </button>
-                <button 
-                  onClick={() => setActiveModule('po_mapping')}
-                  className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${activeModule === 'po_mapping' ? 'bg-white text-indigo-950 shadow-xs border border-slate-200' : 'text-slate-600 hover:text-slate-900'}`}
-                >
-                  PO Mapping
-                </button>
-                <button 
-                  onClick={() => setActiveModule('po_configure')}
-                  className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${activeModule === 'po_configure' ? 'bg-white text-indigo-950 shadow-xs border border-slate-200' : 'text-slate-600 hover:text-slate-900'}`}
-                >
-                  Configure PO's
-                </button>
-              </div>
-            )}
+            <div className="flex items-center gap-1 bg-slate-200/50 p-1 rounded-lg border border-slate-200">
+              <button 
+                onClick={() => {
+                  setActiveProgramId('');
+                  setSelectedCourseId('all');
+                }}
+                className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${activeProgramId === '' ? 'bg-white text-indigo-950 shadow-xs border border-slate-200' : 'text-slate-600 hover:text-slate-900'}`}
+              >
+                Department V&amp;M
+              </button>
+              <button 
+                onClick={() => {
+                  if (activeProgramId === '') {
+                    const firstProg = data?.programs?.find(p => p.departmentId === activeDeptId)?.id || '';
+                    setActiveProgramId(firstProg);
+                  }
+                  setActiveModule('vision_mission');
+                }}
+                className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${activeProgramId !== '' && activeModule === 'vision_mission' ? 'bg-white text-indigo-950 shadow-xs border border-slate-200' : 'text-slate-600 hover:text-slate-900'}`}
+              >
+                Program V&amp;M
+              </button>
+              <button 
+                onClick={() => {
+                  if (activeProgramId === '') {
+                    const firstProg = data?.programs?.find(p => p.departmentId === activeDeptId)?.id || '';
+                    setActiveProgramId(firstProg);
+                  }
+                  setActiveModule('allocation');
+                }}
+                className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${activeProgramId !== '' && activeModule === 'allocation' ? 'bg-white text-indigo-950 shadow-xs border border-slate-200' : 'text-slate-600 hover:text-slate-900'}`}
+              >
+                Allocation Matrix
+              </button>
+              <button 
+                onClick={() => {
+                  if (activeProgramId === '') {
+                    const firstProg = data?.programs?.find(p => p.departmentId === activeDeptId)?.id || '';
+                    setActiveProgramId(firstProg);
+                  }
+                  setActiveModule('po_mapping');
+                }}
+                className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${activeProgramId !== '' && activeModule === 'po_mapping' ? 'bg-white text-indigo-950 shadow-xs border border-slate-200' : 'text-slate-600 hover:text-slate-900'}`}
+              >
+                PO Mapping
+              </button>
+              <button 
+                onClick={() => {
+                  if (activeProgramId === '') {
+                    const firstProg = data?.programs?.find(p => p.departmentId === activeDeptId)?.id || '';
+                    setActiveProgramId(firstProg);
+                  }
+                  setActiveModule('po_configure');
+                }}
+                className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${activeProgramId !== '' && activeModule === 'po_configure' ? 'bg-white text-indigo-950 shadow-xs border border-slate-200' : 'text-slate-600 hover:text-slate-900'}`}
+              >
+                Configure PO's
+              </button>
+            </div>
 
             {/* Course Filter Search Bar inside the Quick toolbar */}
             {activeModule === 'allocation' && (
