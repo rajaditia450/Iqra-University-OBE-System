@@ -301,10 +301,11 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
         const fetchedTeachers = await apiService.getTeachers();
         if (Array.isArray(fetchedTeachers)) {
           loadedTeachers = fetchedTeachers.map((t: any) => ({
-            id: t.employeeId || t.id,
+            ...t,
+            id: t.employeeId || t.employee_id || t.id,
             name: t.name,
             email: t.email,
-            departmentId: t.departmentId
+            departmentId: t.departmentId || t.department_id
           }));
         }
       } catch (err) {

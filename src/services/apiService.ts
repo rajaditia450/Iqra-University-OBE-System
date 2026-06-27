@@ -901,7 +901,7 @@ export const apiService = {
       body: JSON.stringify({ teacherId, courseCode, programId }),
     }, 8000);
     if (!res.ok) throw new Error('Failed to remove course assignment');
-    return res.json();
+    return;
   },
 
   saveLocalStorageData(data: OBEData): void {
