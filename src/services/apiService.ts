@@ -904,6 +904,38 @@ export const apiService = {
     return;
   },
 
+  async getProgramGAAttainment(programId: string) {
+    const res = await fetchWithTimeout(`${BASE_URL}/reports/program-ga-attainment/?programId=${programId}`, {
+      headers: getHeaders()
+    }, 5000);
+    if (!res.ok) throw new Error('Failed to fetch program GA attainment');
+    return res.json();
+  },
+
+  async getStudentGAAttainment(regNo: string) {
+    const res = await fetchWithTimeout(`${BASE_URL}/reports/student-ga-attainment/?regNo=${regNo}`, {
+      headers: getHeaders()
+    }, 5000);
+    if (!res.ok) throw new Error('Failed to fetch student GA attainment');
+    return res.json();
+  },
+
+  async getCourseAttainment(courseCode: string, programId: string) {
+    const res = await fetchWithTimeout(`${BASE_URL}/reports/course-attainment/?courseCode=${courseCode}&programId=${programId}`, {
+      headers: getHeaders()
+    }, 5000);
+    if (!res.ok) throw new Error('Failed to fetch course attainment');
+    return res.json();
+  },
+
+  async getStudentSummary(regNo: string) {
+    const res = await fetchWithTimeout(`${BASE_URL}/reports/student-summary/?regNo=${regNo}`, {
+      headers: getHeaders()
+    }, 5000);
+    if (!res.ok) throw new Error('Failed to fetch student summary');
+    return res.json();
+  },
+
   saveLocalStorageData(data: OBEData): void {
     saveLocalStorageData(data);
   }
