@@ -10,7 +10,7 @@ interface LoginProps {
 
 export default function Login({ onLogin }: LoginProps) {
   const [userType, setUserType] = useState<UserType | ''>('');
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -34,7 +34,7 @@ export default function Login({ onLogin }: LoginProps) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         signal: controller.signal,
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ email, password }),
       });
       clearTimeout(timeoutId);
 
@@ -63,7 +63,7 @@ export default function Login({ onLogin }: LoginProps) {
       setError('Connection to backend failed. Logging you into offline corporate sandbox demo...');
       setTimeout(() => {
         // Fallback login
-        onLogin(userType as UserType, username || 'QA Advisor');
+        onLogin(userType as UserType, email.split('@')[0] || 'QA Advisor');
       }, 1200);
     } finally {
       // delay state reset to make transition look native
@@ -100,13 +100,14 @@ export default function Login({ onLogin }: LoginProps) {
           <div className="space-y-4">
             <div>
               <label className="block text-xs font-sans font-bold uppercase tracking-wider text-indigo-900/60 ml-1 mb-2">
-                Username
+                Email Address
               </label>
               <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="Enter your username"
+                type="email"
+                autoComplete="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Enter your email address"
                 className="w-full px-5 py-4 bg-white/40 border border-white/40 rounded-2xl font-sans focus:bg-white/60 focus:ring-2 focus:ring-indigo-600/20 transition-all outline-none text-indigo-950 placeholder:text-indigo-800/40"
                 required
               />
