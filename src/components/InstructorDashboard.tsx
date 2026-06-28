@@ -2574,38 +2574,6 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
               <span>Back</span>
             </button>
 
-            {/* FILE MENU */}
-            <div className="relative">
-              <button
-                onClick={() => setOpenMenu(openMenu === 'file' ? null : 'file')}
-                onMouseEnter={() => openMenu && setOpenMenu('file')}
-                className={getNavbarItemClass(openMenu === 'file')}
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>File</span>
-                <ChevronDown className="w-3 h-3 opacity-60" />
-              </button>
-              {openMenu === 'file' && (
-                <div className="absolute left-0 mt-1 w-60 bg-white border border-slate-300 rounded-lg shadow-xl py-1 z-50">
-                  <button
-                    onClick={() => { setIsAddingCourse(true); setOpenMenu(null); }}
-                    className="w-full text-left px-3.5 py-1.5 text-xs text-slate-700 hover:bg-indigo-50 hover:text-indigo-950 flex items-center gap-2 rounded focus:outline-none font-medium"
-                  >
-                    <Plus className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                    <span>Add Course Teaches</span>
-                  </button>
-                  <div className="border-t border-slate-100 my-1"></div>
-                  <button
-                    onClick={() => { onLogout(); setOpenMenu(null); }}
-                    className="w-full text-left px-3.5 py-1.5 text-xs text-slate-700 hover:bg-indigo-50 hover:text-indigo-950 flex items-center gap-2 rounded focus:outline-none font-medium"
-                  >
-                    <LogOut className="w-3.5 h-3.5 text-rose-500 shrink-0" />
-                    <span>Sign out / Logout</span>
-                  </button>
-                </div>
-              )}
-            </div>
-
             {/* SET WEIGHTAGE DIRECT ITEM */}
             <div className="relative font-bold">
               <button
@@ -2681,7 +2649,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                 className={getNavbarItemClass(activeTab === 'students')}
               >
                 <Users className="w-3.5 h-3.5" />
-                <span>Add Student</span>
+                <span>Student Roster</span>
               </button>
             </div>
 
@@ -2907,16 +2875,10 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
         {courses.length === 0 ? (
           <div className="bg-white border border-dashed border-slate-300 p-12 rounded-3xl text-center max-w-md mx-auto my-12 shadow-sm font-sans">
             <BookOpen className="w-12 h-12 text-slate-400 mx-auto mb-4" />
-            <h3 className="text-lg font-bold text-slate-800 mb-2">No Courses Enrolled</h3>
+            <h3 className="text-lg font-bold text-slate-800 mb-2">No Courses Assigned</h3>
             <p className="text-xs text-slate-600 mb-6 leading-relaxed">
-              You are currently not teaching any course specifications. Click the button below to register a subject and start setting outcomes.
+              You are currently not assigned any courses. Please contact your Department Administration or QA focal person to assign courses to your profile.
             </p>
-            <button
-              onClick={() => setIsAddingCourse(true)}
-              className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg shadow-sm transition-all cursor-pointer"
-            >
-              Add Your First Course
-            </button>
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start font-sans">
@@ -3015,26 +2977,6 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                               
                               {/* Action buttons */}
                               <div className="flex items-center gap-1 shrink-0 self-center">
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleOpenEditCourse(c);
-                                  }}
-                                  className="p-1 hover:bg-slate-200 rounded text-slate-400 hover:text-indigo-605 transition-colors cursor-pointer"
-                                  title="Edit Course Specification"
-                                >
-                                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
-                                </button>
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleDeleteCourse(c.id);
-                                  }}
-                                  className="p-1 hover:bg-rose-50 rounded text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
-                                  title="Delete Course Specification"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
                               </div>
                             </div>
                           );
@@ -3048,14 +2990,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                 });
               })()}
 
-              {/* DEFINED COURSE ACTION */}
-              <button
-                onClick={() => setIsAddingCourse(true)}
-                className="w-full mt-4 flex items-center justify-center gap-2 py-2 border-2 border-dashed border-slate-250 hover:border-indigo-600 hover:bg-indigo-50/10 rounded-xl text-xs font-bold text-slate-600 hover:text-indigo-700 transition-all cursor-pointer"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Define Course Specification</span>
-              </button>
+
 
 
 
@@ -3342,164 +3277,25 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
 
                   <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                     
-                    {/* ENROLL FORM */}
+                    {/* DEPARTMENTAL ENROLLMENT INFO CARD */}
                     <div className="lg:col-span-4 space-y-6">
-                      
-                      <form onSubmit={handleAddNewStudent} className="bg-[#f8fafc] p-4 rounded-xl border border-slate-205 shadow-xs space-y-4">
-                        <h4 className="text-xs uppercase tracking-wider font-bold text-indigo-950 border-b border-slate-200 pb-2">
-                          Single Enrollment
-                        </h4>
-
-                        <div>
-                          <label className="block text-[10px] text-slate-600 uppercase font-mono font-bold mb-1">
-                            Registration Number *
-                          </label>
-                          <input
-                            type="text"
-                            required
-                            placeholder="e.g. FA-2017/BS EE-045"
-                            value={newStudentReg}
-                            onChange={(e) => setNewStudentReg(e.target.value)}
-                            className="bg-white border border-slate-300 px-3 py-2 rounded-lg text-slate-950 text-xs w-full outline-none focus:ring-2 focus:ring-indigo-150 font-mono"
-                          />
+                      <div className="bg-[#f8fafc] border border-slate-200 rounded-2xl p-5 shadow-xs text-left relative overflow-hidden font-sans">
+                        <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-indigo-600"></div>
+                        <div className="flex items-center gap-2 mb-3">
+                          <Building className="w-4 h-4 text-indigo-600 shrink-0" />
+                          <h4 className="font-sans font-bold text-slate-900 text-xs tracking-wider uppercase">Departmental Enrollment</h4>
                         </div>
-
-                        <div>
-                          <label className="block text-[10px] text-slate-600 uppercase font-mono font-bold mb-1">
-                            Student Name (Optional)
-                          </label>
-                          <input
-                            type="text"
-                            placeholder="e.g. Muhammad Ali"
-                            value={newStudentName}
-                            onChange={(e) => setNewStudentName(e.target.value)}
-                            className="bg-white border border-slate-300 px-3 py-2 rounded-lg text-slate-950 text-xs w-full outline-none focus:ring-2 focus:ring-indigo-150"
-                          />
-                        </div>
-
-                        <button
-                          type="submit"
-                          className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-lg transition-colors cursor-pointer shadow-xs"
-                        >
-                          Enroll Student
-                        </button>
-                      </form>
-
-                      {/* BULK UPLOAD FORM (Excel Sheet Import) */}
-                      <div className="bg-[#f8fafc] p-4 rounded-xl border border-slate-205 shadow-xs space-y-4 font-sans text-slate-800">
-                        <h4 className="text-xs uppercase tracking-wider font-bold text-indigo-950 border-b border-slate-200 pb-2 flex items-center gap-2">
-                          <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-                          Import from Excel / CSV Sheet
-                        </h4>
-
-                        {!fileName ? (
-                          <div
-                            onDragOver={handleDragOver}
-                            onDragLeave={handleDragLeave}
-                            onDrop={handleDrop}
-                            onClick={() => document.getElementById('excel-file-picker')?.click()}
-                            className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all duration-200 flex flex-col items-center justify-center gap-3 ${
-                              isDragging 
-                                ? 'border-indigo-600 bg-indigo-50/70 text-indigo-950 scale-[1.01]' 
-                                : 'border-slate-300 hover:border-indigo-500 hover:bg-slate-50'
-                            }`}
-                          >
-                            <input
-                              id="excel-file-picker"
-                              type="file"
-                              accept=".xlsx,.xls,.csv"
-                              onChange={handleFileChange}
-                              className="hidden"
-                            />
-                            <Upload className={`w-8 h-8 transition-transform duration-200 ${isDragging ? 'text-indigo-600 animate-bounce' : 'text-slate-400'}`} />
-                            <div>
-                              <p className="text-xs font-bold text-slate-800">
-                                Click to select or drag & drop excel file
-                              </p>
-                              <p className="text-[10px] text-slate-500 mt-1">
-                                Supports Excel (.xlsx, .xls) and CSV (.csv) stylesheets
-                              </p>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="space-y-3 bg-white border border-slate-200 rounded-lg p-3">
-                            <div className="flex items-start justify-between gap-2 border-b border-slate-100 pb-2">
-                              <div className="flex items-center gap-2 min-w-0">
-                                <FileSpreadsheet className="w-5 h-5 text-emerald-600 shrink-0" />
-                                <div className="min-w-0">
-                                  <p className="text-xs font-bold text-slate-900 truncate" title={fileName}>
-                                    {fileName}
-                                  </p>
-                                  <p className="text-[10px] text-emerald-600 font-semibold font-mono">
-                                    {parsedStudents.length} student records parsed successfully
-                                  </p>
-                                </div>
-                              </div>
-                              <button
-                                onClick={() => {
-                                  setFileName('');
-                                  setParsedStudents([]);
-                                }}
-                                className="text-rose-500 hover:text-rose-700 hover:bg-rose-50 p-1 rounded transition-colors text-[10px] font-bold font-mono cursor-pointer"
-                              >
-                                Clear
-                              </button>
-                            </div>
-
-                            {parsedStudents.length > 0 && (
-                              <div className="space-y-2">
-                                <p className="text-[10px] text-slate-500 uppercase font-mono font-bold">
-                                  Preview (First 3 parsed rows)
-                                </p>
-                                <div className="border border-slate-100 rounded-lg overflow-hidden bg-slate-50/50">
-                                  <table className="w-full text-left text-[10px] font-sans">
-                                    <thead>
-                                      <tr className="bg-slate-100 text-slate-655 font-bold border-b border-slate-200">
-                                        <th className="py-1 px-2.5">Reg Number</th>
-                                        <th className="py-1 px-2.5">Student Name</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-100 font-mono text-slate-705">
-                                      {parsedStudents.slice(0, 3).map((std, i) => (
-                                        <tr key={i}>
-                                          <td className="py-1 px-2.5 font-bold uppercase text-indigo-900">{std.regNo}</td>
-                                          <td className="py-1 px-2.5 max-w-[120px] truncate">{std.name}</td>
-                                        </tr>
-                                      ))}
-                                    </tbody>
-                                  </table>
-                                  {parsedStudents.length > 3 && (
-                                    <p className="text-[9px] text-slate-500 italic p-1 bg-white text-center border-t border-slate-100 border-b">
-                                      ... and {parsedStudents.length - 3} more student records
-                                    </p>
-                                  )}
-                                </div>
-                              </div>
-                            )}
-
-                            <button
-                              onClick={handleExcelImportExecute}
-                              disabled={parsedStudents.length === 0}
-                              className={`w-full py-2 font-bold text-xs rounded-lg transition-all cursor-pointer shadow-xs border text-center ${
-                                parsedStudents.length > 0
-                                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-700'
-                                  : 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
-                              }`}
-                            >
-                              Enroll parsed students
-                            </button>
-                          </div>
-                        )}
-
-                        <div className="bg-amber-50/85 border-l-4 border-amber-500 p-2.5 rounded text-[10px] text-amber-900 leading-relaxed max-w-full">
-                          <strong className="font-bold flex items-center gap-1 text-amber-955 mb-0.5 uppercase tracking-wide">
-                            <Info className="w-3.5 h-3.5 text-amber-600" />
-                            Format requirement:
-                          </strong>
-                          Sheet layout must have <strong className="font-bold font-mono">Registration No</strong> as column 1 (Column A) and <strong className="font-bold font-mono text-xs">Student Name</strong> as column 2 (Column B). Header row is skipped automatically.
+                        <p className="text-xs text-slate-600 leading-relaxed font-medium mb-3">
+                          Student registration and course enrollments are centrally managed at the departmental level by the Department Administration.
+                        </p>
+                        <p className="text-[11px] text-slate-500 leading-relaxed">
+                          To request student roster updates, add/remove students, or correct details, please coordinate with your department admin office or the QA focal person.
+                        </p>
+                        <div className="mt-4 pt-3.5 border-t border-slate-200/80 flex items-center gap-2 text-[10px] text-indigo-700 font-mono font-bold uppercase tracking-wider">
+                          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
+                          Centralized OBE Sync Active
                         </div>
                       </div>
-
                     </div>
 
                     {/* ENROLLED MATRIX */}
@@ -3511,91 +3307,21 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                               <th className="py-2.5 px-4 w-12 text-center sticky top-0 bg-slate-50 z-20">S.#</th>
                               <th className="py-2.5 px-4 font-sans sticky top-0 bg-slate-50 z-20">Registration No.</th>
                               <th className="py-2.5 px-4 font-sans sticky top-0 bg-slate-50 z-20">Student Name</th>
-                              <th className="py-2.5 px-4 text-center w-28 font-sans sticky top-0 bg-slate-50 z-20">Actions</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-200 font-mono text-slate-700">
                           {selectedCourse.students.map((student, index) => {
-                            const isEditing = editingStudentReg === student.regNo;
                             return (
-                              <tr key={student.regNo} className={isEditing ? "bg-indigo-50/40" : "hover:bg-slate-55"}>
+                              <tr key={student.regNo} className="hover:bg-slate-55">
                                 <td className="py-3 px-4 text-center text-slate-400 font-mono">
                                   {index + 1}
                                 </td>
-                                {isEditing ? (
-                                  <>
-                                    <td className="py-2 px-3">
-                                      <input
-                                        type="text"
-                                        value={editStudentRegVal}
-                                        onChange={(e) => setEditStudentRegVal(e.target.value)}
-                                        className="bg-white border border-slate-300 rounded px-2 py-1 text-indigo-700 font-bold font-mono text-[11px] w-full focus:ring-2 focus:ring-indigo-400 outline-none"
-                                        onKeyDown={(e) => {
-                                          if (e.key === 'Enter') handleUpdateStudentDetail(student.regNo);
-                                          if (e.key === 'Escape') handleCancelEditStudent();
-                                        }}
-                                        autoFocus
-                                      />
-                                    </td>
-                                    <td className="py-2 px-3">
-                                      <input
-                                        type="text"
-                                        value={editStudentNameVal}
-                                        onChange={(e) => setEditStudentNameVal(e.target.value)}
-                                        className="bg-white border border-slate-300 rounded px-2 py-1 text-slate-900 font-sans text-xs w-full focus:ring-2 focus:ring-indigo-400 outline-none"
-                                        onKeyDown={(e) => {
-                                          if (e.key === 'Enter') handleUpdateStudentDetail(student.regNo);
-                                          if (e.key === 'Escape') handleCancelEditStudent();
-                                        }}
-                                      />
-                                    </td>
-                                    <td className="py-2 px-4 text-center">
-                                      <div className="flex items-center justify-center gap-1">
-                                        <button
-                                          onClick={() => handleUpdateStudentDetail(student.regNo)}
-                                          className="text-emerald-600 hover:text-emerald-700 p-1.5 rounded hover:bg-emerald-50 transition-all font-sans cursor-pointer"
-                                          title="Save changes"
-                                        >
-                                          <Check className="w-3.5 h-3.5 mx-auto" />
-                                        </button>
-                                        <button
-                                          onClick={handleCancelEditStudent}
-                                          className="text-slate-400 hover:text-slate-600 p-1.5 rounded hover:bg-slate-100 transition-all font-sans cursor-pointer"
-                                          title="Cancel edit"
-                                        >
-                                          <X className="w-3.5 h-3.5 mx-auto" />
-                                        </button>
-                                      </div>
-                                    </td>
-                                  </>
-                                ) : (
-                                  <>
-                                    <td className="py-3 px-4 text-indigo-650 font-bold font-mono text-[11px]">
-                                      {student.regNo}
-                                    </td>
-                                    <td className="py-3 px-4 font-sans text-slate-800">
-                                      {student.name}
-                                    </td>
-                                    <td className="py-3 px-4 text-center">
-                                      <div className="flex items-center justify-center gap-1.5">
-                                        <button
-                                          onClick={() => handleStartEditStudent(student)}
-                                          className="text-slate-400 hover:text-indigo-600 p-1.5 rounded hover:bg-indigo-50 transition-all font-sans cursor-pointer"
-                                          title="Edit student details"
-                                        >
-                                          <Pencil className="w-3.5 h-3.5 mx-auto" />
-                                        </button>
-                                        <button
-                                          onClick={() => handleUnenrollStudent(student.regNo)}
-                                          className="text-slate-400 hover:text-rose-600 p-1.5 rounded hover:bg-rose-50 transition-all font-sans cursor-pointer"
-                                          title="Unenroll student"
-                                        >
-                                          <Trash2 className="w-3.5 h-3.5 mx-auto" />
-                                        </button>
-                                      </div>
-                                    </td>
-                                  </>
-                                )}
+                                <td className="py-3 px-4 text-indigo-650 font-bold font-mono text-[11px]">
+                                  {student.regNo}
+                                </td>
+                                <td className="py-3 px-4 font-sans text-slate-800">
+                                  {student.name}
+                                </td>
                               </tr>
                             );
                           })}

@@ -48,6 +48,7 @@ export default function Login({ onLogin }: LoginProps) {
       // Save tokens
       localStorage.setItem('access',  data.access);
       localStorage.setItem('refresh', data.refresh);
+      localStorage.setItem('backend_offline', 'false');
 
       if (data.user) {
         localStorage.setItem('IQRA_OBE_USER_DEPT_ID', data.user.departmentId || '');
@@ -60,6 +61,7 @@ export default function Login({ onLogin }: LoginProps) {
 
     } catch (err) {
       clearTimeout(timeoutId);
+      localStorage.setItem('backend_offline', 'true');
       setError('Connection to backend failed. Logging you into offline corporate sandbox demo...');
       setTimeout(() => {
         // Fallback login

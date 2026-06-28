@@ -473,6 +473,9 @@ const getHeaders = () => {
 };
 
 const fetchWithTimeout = async (url: string, options: RequestInit = {}, timeoutMs = 15000): Promise<Response> => {
+  if (localStorage.getItem('backend_offline') === 'true') {
+    throw new Error('Backend offline cached');
+  }
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeoutMs);
   try {

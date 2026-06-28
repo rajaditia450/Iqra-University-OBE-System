@@ -17,6 +17,9 @@ export default function App() {
   };
 
   const handleLogout = () => {
+    localStorage.removeItem('access');
+    localStorage.removeItem('refresh');
+    localStorage.removeItem('backend_offline');
     setCurrentUser(null);
   };
 
