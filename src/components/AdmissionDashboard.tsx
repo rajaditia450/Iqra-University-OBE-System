@@ -111,6 +111,7 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
   
   const [regNo, setRegNo] = useState('');
   const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
   const [selectedDeptId, setSelectedDeptId] = useState('');
   const [selectedProgId, setSelectedProgId] = useState('');
   const [selectedBatch, setSelectedBatch] = useState<'Spring' | 'Summer' | 'Fall'>('Fall');
@@ -240,6 +241,7 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
   const resetForm = () => {
     setRegNo('');
     setName('');
+    setEmail('');
     setSelectedDeptId(departments[0]?.id || '');
     setSelectedProgId('');
     setSelectedBatch('Fall');
@@ -260,6 +262,7 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
     // Validate inputs
     const cleanRegNo = regNo.trim().toUpperCase();
     const cleanName = name.trim();
+    const cleanEmail = email.trim().toLowerCase();
 
     if (!cleanRegNo) {
       setFormError("Registration number is required");
@@ -267,6 +270,15 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
     }
     if (!cleanName) {
       setFormError("Student name is required");
+      return;
+    }
+    if (!cleanEmail) {
+      setFormError("Student email is required so they can log in");
+      return;
+    }
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailPattern.test(cleanEmail)) {
+      setFormError("Invalid email format (e.g. student@example.com)");
       return;
     }
     if (!selectedDeptId) {
@@ -292,6 +304,8 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
     const newStudent: Student = {
       regNo: cleanRegNo,
       name: cleanName,
+      email: cleanEmail,
+      password: 'zeeshan123',
       departmentId: selectedDeptId,
       programId: selectedProgId,
       batch: derivedBatch,
@@ -302,7 +316,7 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
       if (isEditing && editRegNo) {
         // Edit student
         const updated = await apiService.updateStudent(editRegNo, newStudent);
-        setStudents(prev => prev.map(s => s.regNo === editRegNo ? updated : s));
+        setStudents(prev => prev.map(s => s.regNo === editRegNo ? { ...s, ...updated } : s));
         setSuccessMsg(`Student record for "${cleanName}" has been updated successfully!`);
         resetForm();
       } else {
@@ -315,7 +329,7 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
 
         const created = await apiService.createStudent(newStudent);
         setStudents(prev => [...prev, created]);
-        setSuccessMsg(`Student "${cleanName}" has been successfully registered!`);
+        setSuccessMsg(`Student "${cleanName}" has been successfully registered. Default password is zeeshan123.`);
         resetForm();
       }
 
@@ -332,6 +346,7 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
     setEditRegNo(student.regNo);
     setRegNo(student.regNo);
     setName(student.name);
+    setEmail(student.email || '');
     setSelectedDeptId(student.departmentId);
     setSelectedProgId(student.programId);
     setSelectedBatch(student.batch);
@@ -418,10 +433,16 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
 
           const regNoVal = getVal(['regno', 'registrationnumber', 'rollno', 'registrationid', 'id']);
           const nameVal = getVal(['name', 'studentname', 'fullname']);
+          const emailVal = getVal(['email', 'studentemail', 'emailaddress', 'emailid', 'mail']);
           const deptVal = getVal(['departmentid', 'deptid', 'department', 'dept']);
           const progVal = getVal(['programid', 'progid', 'program', 'progcode', 'code']);
           const batchVal = getVal(['batch', 'admissionbatch']);
           const semesterVal = getVal(['semester', 'currentsemester', 'sem']);
+
+          let finalEmail = emailVal.trim().toLowerCase();
+          if (!finalEmail && regNoVal) {
+            finalEmail = `${regNoVal.toLowerCase().trim()}@iqra.edu.pk`;
+          }
 
           let cleanedBatch: 'Spring' | 'Summer' | 'Fall' = 'Fall';
           let cleanedSemester = '1st';
@@ -474,6 +495,7 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
             rowNum: index + 2,
             regNo: regNoVal.toUpperCase(),
             name: nameVal,
+            email: finalEmail,
             departmentId: matchedDeptId,
             programId: matchedProgId,
             batch: cleanedBatch,
@@ -494,10 +516,10 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
 
   const handleDownloadTemplate = () => {
     const headers = [
-      ["Registration Number", "Student Name", "Department ID", "Program ID"],
-      ["045-fa22-22045", "Wajahat Bine Saif", "computing", "bscs"],
-      ["120-sp23-23120", "Zayan Ahmed Khan", "business", "bba"],
-      ["010-fa25-25010", "Abdur Rehman Khalid", "engineering", "be_ce"]
+      ["Registration Number", "Student Name", "Email Address", "Department ID", "Program ID"],
+      ["045-fa22-22045", "Wajahat Bine Saif", "045-fa22-22045@iqra.edu.pk", "computing", "bscs"],
+      ["120-sp23-23120", "Zayan Ahmed Khan", "120-sp23-23120@iqra.edu.pk", "business", "bba"],
+      ["010-fa25-25010", "Abdur Rehman Khalid", "010-fa25-25010@iqra.edu.pk", "engineering", "be_ce"]
     ];
     
     const ws = XLSX.utils.aoa_to_sheet(headers);
@@ -519,6 +541,8 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
         const payload: Student = {
           regNo: ps.regNo,
           name: ps.name,
+          email: ps.email,
+          password: 'zeeshan123',
           departmentId: ps.departmentId,
           programId: ps.programId,
           batch: ps.batch,
@@ -535,7 +559,7 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
 
       setImportStatus({
         type: 'success',
-        message: `Successfully registered ${results.length} new students! Any rows with errors were skipped.`
+        message: `Successfully registered ${results.length} new students with default password 'zeeshan123'! Any rows with errors were skipped.`
       });
       setPreviewData([]);
       setImportFile(null);
@@ -790,7 +814,7 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
                           />
                         </div>
 
-                        {/* Student Name */}
+                         {/* Student Name */}
                         <div>
                           <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2 ml-0.5">
                             Student Full Name <span className="text-red-500">*</span>
@@ -801,6 +825,22 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
                             value={name}
                             onChange={(e) => setName(e.target.value)}
                             placeholder="e.g. Wajahat Bine Saif"
+                            className="w-full px-4 py-3 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border border-slate-200 focus:ring-2 focus:ring-indigo-600/10 focus:border-indigo-600 rounded-xl font-sans text-sm text-slate-800 placeholder:text-slate-400 outline-none transition-all font-medium"
+                            required
+                          />
+                        </div>
+
+                        {/* Student Email */}
+                        <div>
+                          <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2 ml-0.5">
+                            Student Email Address <span className="text-red-500">*</span>
+                          </label>
+                          <input
+                            id="input-email"
+                            type="email"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            placeholder="e.g. student@iqra.edu.pk"
                             className="w-full px-4 py-3 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border border-slate-200 focus:ring-2 focus:ring-indigo-600/10 focus:border-indigo-600 rounded-xl font-sans text-sm text-slate-800 placeholder:text-slate-400 outline-none transition-all font-medium"
                             required
                           />
@@ -967,6 +1007,22 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
                                 value={name}
                                 onChange={(e) => setName(e.target.value)}
                                 placeholder="e.g. Wajahat Bine Saif"
+                                className="w-full px-4 py-3 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border border-slate-200 focus:ring-2 focus:ring-indigo-600/10 focus:border-indigo-600 rounded-xl font-sans text-sm text-slate-800 placeholder:text-slate-400 outline-none transition-all font-medium"
+                                required
+                              />
+                            </div>
+
+                            {/* Student Email */}
+                            <div>
+                              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2 ml-0.5">
+                                Student Email Address <span className="text-red-500">*</span>
+                              </label>
+                              <input
+                                id="input-email"
+                                type="email"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                placeholder="e.g. student@iqra.edu.pk"
                                 className="w-full px-4 py-3 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border border-slate-200 focus:ring-2 focus:ring-indigo-600/10 focus:border-indigo-600 rounded-xl font-sans text-sm text-slate-800 placeholder:text-slate-400 outline-none transition-all font-medium"
                                 required
                               />

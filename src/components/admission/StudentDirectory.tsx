@@ -179,6 +179,11 @@ export default function StudentDirectory({
                       <p className="text-sm font-bold text-slate-800 group-hover:text-indigo-950 transition-colors">
                         {student.name}
                       </p>
+                      {student.email && (
+                        <p className="text-[11px] text-slate-400 font-medium">
+                          {student.email}
+                        </p>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap animate-pulse:group-hover">
                       <p className="text-xs font-semibold text-slate-500 max-w-[200px] truncate" title={getDeptName(student.departmentId)}>
