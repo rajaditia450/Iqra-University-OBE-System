@@ -849,6 +849,38 @@ export const apiService = {
     // Returns: [{ employeeId, name, email, designation, departmentId, departmentName }]
   },
 
+  async createTeacher(teacherData: { name: string; email: string; employeeId: string; designation: string; departmentId: string }) {
+    const res = await fetchWithTimeout(`${BASE_URL}/admin/teachers/`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify(teacherData),
+    }, 8000);
+    if (!res.ok) {
+      const errText = await res.text();
+      let parsed;
+      try { parsed = JSON.parse(errText); } catch(e) {}
+      throw new Error(parsed?.message || parsed?.error || errText || 'Failed to onboarding faculty');
+    }
+    return res.json();
+  },
+
+  async deleteTeacher(employeeId: string): Promise<boolean> {
+    const res = await fetchWithTimeout(`${BASE_URL}/admin/teachers/${employeeId}/`, {
+      method: 'DELETE',
+      headers: getHeaders(),
+    }, 8000);
+    if (!res.ok) {
+      if (res.status === 409) {
+        throw new Error("Conflict: This teacher has active course assignments or classes with students and cannot be deleted.");
+      }
+      const errText = await res.text();
+      let parsed;
+      try { parsed = JSON.parse(errText); } catch(e) {}
+      throw new Error(parsed?.message || parsed?.error || errText || 'Failed to delete teacher from server');
+    }
+    return true;
+  },
+
   async getSemesterPlans(programId?: string) {
     const url = programId
       ? `${BASE_URL}/admin/semester-plans/?programId=${programId}`
@@ -980,6 +1012,52 @@ export const apiService = {
     }, 5000);
     if (!res.ok) throw new Error('Failed to delete course CLO');
     return true;
+  },
+
+  async getCOAttainmentSummary(programId: string, semester?: string, academicYear?: string) {
+    let url = `${BASE_URL}/reports/co-attainment-summary/?programId=${programId}`;
+    if (semester) url += `&semester=${semester}`;
+    if (academicYear) url += `&academicYear=${academicYear}`;
+    const res = await fetchWithTimeout(url, { headers: getHeaders() });
+    return res.ok ? res.json() : null;
+  },
+
+  async getPOAttainment(programId: string) {
+    const res = await fetchWithTimeout(
+      `${BASE_URL}/reports/po-attainment/?programId=${programId}`,
+      { headers: getHeaders() }
+    );
+    return res.ok ? res.json() : null;
+  },
+
+  async getGapAnalysis(programId: string) {
+    const res = await fetchWithTimeout(
+      `${BASE_URL}/reports/gap-analysis/?programId=${programId}`,
+      { headers: getHeaders() }
+    );
+    return res.ok ? res.json() : null;
+  },
+
+  async getAtRiskStudents(programId: string, semester?: string) {
+    let url = `${BASE_URL}/reports/at-risk-students/?programId=${programId}`;
+    if (semester) url += `&semester=${semester}`;
+    const res = await fetchWithTimeout(url, { headers: getHeaders() });
+    return res.ok ? res.json() : null;
+  },
+
+  async getInstructorPerformance(departmentId: string) {
+    const res = await fetchWithTimeout(
+      `${BASE_URL}/reports/instructor-performance/?departmentId=${departmentId}`,
+      { headers: getHeaders() }
+    );
+    return res.ok ? res.json() : null;
+  },
+
+  async getCohortComparison(programId: string, gaId?: string) {
+    let url = `${BASE_URL}/reports/cohort-comparison/?programId=${programId}`;
+    if (gaId) url += `&gaId=${gaId}`;
+    const res = await fetchWithTimeout(url, { headers: getHeaders() });
+    return res.ok ? res.json() : null;
   },
 
   saveLocalStorageData(data: OBEData): void {
