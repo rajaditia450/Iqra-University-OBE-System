@@ -58,8 +58,9 @@ export default function Login({ onLogin }: LoginProps) {
       localStorage.setItem('backend_offline', 'false');
 
       if (data.user) {
-        localStorage.setItem('IQRA_OBE_USER_DEPT_ID', data.user.departmentId || '');
-        localStorage.setItem('IQRA_OBE_USER_DEPT_NAME', data.user.departmentName || '');
+        localStorage.setItem('IQRA_OBE_LOGGED_IN_USER', JSON.stringify(data.user));
+        localStorage.setItem('IQRA_OBE_USER_DEPT_ID', data.user.departmentId || data.user.department_id || '');
+        localStorage.setItem('IQRA_OBE_USER_DEPT_NAME', data.user.departmentName || data.user.department_name || '');
       }
 
       // Use registration number or employee ID if available, otherwise fall back to username
@@ -83,6 +84,17 @@ export default function Login({ onLogin }: LoginProps) {
       clearTimeout(timeoutId);
       localStorage.setItem('backend_offline', 'true');
       
+      const fallbackUser = {
+        username: email.split('@')[0],
+        email: email,
+        name: email.split('@')[0].split('.').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
+        user_type: userType,
+        reg_no: email.includes('@') && /\d/.test(email) ? email.split('@')[0].toUpperCase() : '052-SP23-33222',
+        department_id: 'computing',
+        program_id: 'bscs'
+      };
+      localStorage.setItem('IQRA_OBE_LOGGED_IN_USER', JSON.stringify(fallbackUser));
+
       if (password === 'zeeshan123') {
         setTempCredentials({
           email,

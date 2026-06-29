@@ -106,6 +106,28 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
       // 2. Load students
       const studentList = await apiService.getStudents();
 
+      // Retrieve logged-in user details as a reliable backup
+      const loggedInUserStr = localStorage.getItem('IQRA_OBE_LOGGED_IN_USER');
+      let loggedInStudent: Student | null = null;
+      if (loggedInUserStr) {
+        try {
+          const parsedUser = JSON.parse(loggedInUserStr);
+          if (parsedUser.user_type === 'student' || parsedUser.user_type === 'STUDENT' || parsedUser.userType === 'student' || parsedUser.role === 'student') {
+            loggedInStudent = {
+              regNo: parsedUser.regNo || parsedUser.reg_no || studentRegNo,
+              name: parsedUser.name || parsedUser.username || studentRegNo.split('.').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
+              email: parsedUser.email || '',
+              departmentId: parsedUser.departmentId || parsedUser.department_id || 'computing',
+              programId: parsedUser.programId || parsedUser.program_id || 'bscs',
+              batch: parsedUser.batch || 'Fall',
+              semester: parsedUser.semester || '4th'
+            };
+          }
+        } catch (e) {
+          console.error("Error parsing logged-in user in student dashboard", e);
+        }
+      }
+
       // 3. Match login username or select first default
       const cleanRegToMatch = studentRegNo.includes('@') ? studentRegNo.split('@')[0].trim().toLowerCase() : studentRegNo.trim().toLowerCase();
       const rawRegToMatch = studentRegNo.trim().toLowerCase();
@@ -113,13 +135,20 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
       const matchingStudent = studentList.find(
         s => s.regNo.toLowerCase() === cleanRegToMatch || 
              s.regNo.toLowerCase() === rawRegToMatch ||
+             s.regNo.toLowerCase().replace(/[^a-z0-9]/g, '') === cleanRegToMatch.replace(/[^a-z0-9]/g, '') ||
              s.name.toLowerCase() === rawRegToMatch ||
              (s as any).username?.toLowerCase() === rawRegToMatch ||
-             s.email?.toLowerCase() === rawRegToMatch
+             s.email?.toLowerCase() === rawRegToMatch ||
+             s.email?.toLowerCase().split('@')[0] === cleanRegToMatch ||
+             s.email?.toLowerCase().split('@')[0] === rawRegToMatch
       );
+
       if (matchingStudent) {
         setActiveRegNo(matchingStudent.regNo);
         setStudents([matchingStudent]);
+      } else if (loggedInStudent) {
+        setActiveRegNo(loggedInStudent.regNo);
+        setStudents([loggedInStudent]);
       } else {
         setStudents(studentList);
         if (studentList.length > 0) {
