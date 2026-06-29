@@ -871,8 +871,13 @@ export const apiService = {
       return mapped;
     };
 
+    const currentStudents = await this.getStudents();
+    const matchedStudent = currentStudents.find(s => s.regNo.toLowerCase() === regNo.toLowerCase());
+    const backendId = matchedStudent ? (matchedStudent as any).id : null;
+    const urlSuffix = backendId !== undefined && backendId !== null ? backendId : regNo;
+
     try {
-      const response = await fetchWithTimeout(`${BASE_URL}/students/${regNo}/`, {
+      const response = await fetchWithTimeout(`${BASE_URL}/students/${urlSuffix}/`, {
         method: 'PATCH',
         headers: getHeaders(),
         body: JSON.stringify(mapToBackend(studentData)),
@@ -884,9 +889,17 @@ export const apiService = {
         const updated = current.map(s => s.regNo === regNo ? { ...s, ...normalizedData } : s);
         localStorage.setItem('IQRA_OBE_STUDENTS', JSON.stringify(updated));
         return normalizedData;
+      } else {
+        const errorText = await response.text();
+        let parsed;
+        try { parsed = JSON.parse(errorText); } catch (e) {}
+        throw new Error(parsed?.message || parsed?.error || `Server error (${response.status}): ${errorText}`);
       }
-    } catch (err) {
-      console.warn("Backend API for students offline. Updating student in local storage.");
+    } catch (err: any) {
+      if (err.message && (err.message.includes('Server error') || err.message.includes('validation') || err.message.includes('not found') || err.message.includes('Conflict'))) {
+        throw err;
+      }
+      console.warn("Backend API for students offline. Updating student in local storage.", err);
     }
     const current = await this.getStudents();
     const matched = current.find(s => s.regNo === regNo);
@@ -898,8 +911,13 @@ export const apiService = {
   },
 
   async deleteStudent(regNo: string): Promise<boolean> {
+    const currentStudents = await this.getStudents();
+    const matchedStudent = currentStudents.find(s => s.regNo.toLowerCase() === regNo.toLowerCase());
+    const backendId = matchedStudent ? (matchedStudent as any).id : null;
+    const urlSuffix = backendId !== undefined && backendId !== null ? backendId : regNo;
+
     try {
-      const response = await fetchWithTimeout(`${BASE_URL}/students/${regNo}/`, {
+      const response = await fetchWithTimeout(`${BASE_URL}/students/${urlSuffix}/`, {
         method: 'DELETE',
         headers: getHeaders(),
       }, 8000);
@@ -908,9 +926,17 @@ export const apiService = {
         const updated = current.filter(s => s.regNo !== regNo);
         localStorage.setItem('IQRA_OBE_STUDENTS', JSON.stringify(updated));
         return true;
+      } else {
+        const errorText = await response.text();
+        let parsed;
+        try { parsed = JSON.parse(errorText); } catch (e) {}
+        throw new Error(parsed?.message || parsed?.error || `Server error (${response.status}): ${errorText}`);
       }
-    } catch (err) {
-      console.warn("Backend API for students offline. Deleting student from local storage.");
+    } catch (err: any) {
+      if (err.message && (err.message.includes('Server error') || err.message.includes('validation') || err.message.includes('Conflict'))) {
+        throw err;
+      }
+      console.warn("Backend API for students offline. Deleting student from local storage.", err);
     }
     const current = await this.getStudents();
     const updated = current.filter(s => s.regNo !== regNo);

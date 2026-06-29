@@ -107,10 +107,15 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
       const studentList = await apiService.getStudents();
 
       // 3. Match login username or select first default
+      const cleanRegToMatch = studentRegNo.includes('@') ? studentRegNo.split('@')[0].trim().toLowerCase() : studentRegNo.trim().toLowerCase();
+      const rawRegToMatch = studentRegNo.trim().toLowerCase();
+
       const matchingStudent = studentList.find(
-        s => s.regNo.toLowerCase() === studentRegNo.toLowerCase() || 
-             s.name.toLowerCase() === studentRegNo.toLowerCase() ||
-             (s as any).username?.toLowerCase() === studentRegNo.toLowerCase()
+        s => s.regNo.toLowerCase() === cleanRegToMatch || 
+             s.regNo.toLowerCase() === rawRegToMatch ||
+             s.name.toLowerCase() === rawRegToMatch ||
+             (s as any).username?.toLowerCase() === rawRegToMatch ||
+             s.email?.toLowerCase() === rawRegToMatch
       );
       if (matchingStudent) {
         setActiveRegNo(matchingStudent.regNo);
