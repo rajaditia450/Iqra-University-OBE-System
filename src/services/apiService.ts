@@ -721,6 +721,20 @@ export const apiService = {
   },
 
   async getStudents(): Promise<Student[]> {
+    const normalizeStudent = (s: any): Student => {
+      if (!s) return s;
+      return {
+        ...s,
+        regNo: s.regNo || s.reg_no || '',
+        name: s.name || '',
+        email: s.email || '',
+        departmentId: s.departmentId || s.department_id || s.department || '',
+        programId: s.programId || s.program_id || s.program || '',
+        batch: s.batch || 'Fall',
+        semester: s.semester || '1st'
+      };
+    };
+
     try {
       const response = await fetchWithTimeout(`${BASE_URL}/students/`, {
         headers: getHeaders(),
@@ -728,8 +742,9 @@ export const apiService = {
       if (response.ok) {
         const data = await response.json();
         if (Array.isArray(data)) {
-          localStorage.setItem('IQRA_OBE_STUDENTS', JSON.stringify(data));
-          return data;
+          const normalized = data.map(normalizeStudent);
+          localStorage.setItem('IQRA_OBE_STUDENTS', JSON.stringify(normalized));
+          return normalized;
         }
       }
     } catch (err) {
@@ -739,16 +754,16 @@ export const apiService = {
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        const hasBsai = parsed.some((s: any) => s.programId === 'bsai');
+        const hasBsai = parsed.some((s: any) => (s.programId === 'bsai' || s.program_id === 'bsai'));
         if (hasBsai) {
-          return parsed;
+          return parsed.map(normalizeStudent);
         }
       } catch (e) {
         // ignore
       }
     }
     const initialStudents: Student[] = [
-      { regNo: "012-fa22-22012", name: "Abdur Rehman Khalid", departmentId: "computing", programId: "bscs", batch: "Fall", semester: "6th" },
+      { regNo: "012-fa22-22012", name: "Abdur Rehman Khalid", departmentId: "engineering", programId: "be_ce", batch: "Fall", semester: "6th" },
       { regNo: "045-fa22-22045", name: "Wajahat Bine Saif", departmentId: "computing", programId: "bscs", batch: "Fall", semester: "6th" },
       { regNo: "089-fa22-22089", name: "Zayan Ahmed Khan", departmentId: "computing", programId: "bscs", batch: "Fall", semester: "6th" },
       { regNo: "104-fa22-22104", name: "Misha Farooq", departmentId: "computing", programId: "bscs", batch: "Fall", semester: "6th" },
@@ -762,18 +777,50 @@ export const apiService = {
   },
 
   async createStudent(student: Student): Promise<Student> {
+    const normalizeStudent = (s: any): Student => {
+      if (!s) return s;
+      return {
+        ...s,
+        regNo: s.regNo || s.reg_no || '',
+        name: s.name || '',
+        email: s.email || '',
+        departmentId: s.departmentId || s.department_id || s.department || '',
+        programId: s.programId || s.program_id || s.program || '',
+        batch: s.batch || 'Fall',
+        semester: s.semester || '1st'
+      };
+    };
+
+    const mapToBackend = (s: any) => {
+      return {
+        reg_no: s.regNo,
+        regNo: s.regNo,
+        name: s.name,
+        email: s.email,
+        department_id: s.departmentId,
+        departmentId: s.departmentId,
+        department: s.departmentId,
+        program_id: s.programId,
+        programId: s.programId,
+        program: s.programId,
+        batch: s.batch,
+        semester: s.semester
+      };
+    };
+
     try {
       const response = await fetchWithTimeout(`${BASE_URL}/students/`, {
         method: 'POST',
         headers: getHeaders(),
-        body: JSON.stringify(student),
+        body: JSON.stringify(mapToBackend(student)),
       }, 8000);
       if (response.ok) {
         const data = await response.json();
+        const normalizedData = normalizeStudent(data);
         const current = await this.getStudents();
-        const updated = [...current.filter(s => s.regNo !== student.regNo), data];
+        const updated = [...current.filter(s => s.regNo !== normalizedData.regNo), normalizedData];
         localStorage.setItem('IQRA_OBE_STUDENTS', JSON.stringify(updated));
-        return data;
+        return normalizedData;
       }
     } catch (err) {
       console.warn("Backend API for students offline. Adding student to local storage.");
@@ -785,18 +832,58 @@ export const apiService = {
   },
 
   async updateStudent(regNo: string, studentData: Partial<Student>): Promise<Student> {
+    const normalizeStudent = (s: any): Student => {
+      if (!s) return s;
+      return {
+        ...s,
+        regNo: s.regNo || s.reg_no || '',
+        name: s.name || '',
+        email: s.email || '',
+        departmentId: s.departmentId || s.department_id || s.department || '',
+        programId: s.programId || s.program_id || s.program || '',
+        batch: s.batch || 'Fall',
+        semester: s.semester || '1st'
+      };
+    };
+
+    const mapToBackend = (s: any) => {
+      const mapped: any = {};
+      if ('regNo' in s || 'reg_no' in s) {
+        mapped.reg_no = s.regNo || s.reg_no;
+        mapped.regNo = s.regNo || s.reg_no;
+      }
+      if ('name' in s) mapped.name = s.name;
+      if ('email' in s) mapped.email = s.email;
+      if ('departmentId' in s || 'department' in s || 'department_id' in s) {
+        const val = s.departmentId || s.department_id || s.department;
+        mapped.department_id = val;
+        mapped.departmentId = val;
+        mapped.department = val;
+      }
+      if ('programId' in s || 'program' in s || 'program_id' in s) {
+        const val = s.programId || s.program_id || s.program;
+        mapped.program_id = val;
+        mapped.programId = val;
+        mapped.program = val;
+      }
+      if ('batch' in s) mapped.batch = s.batch;
+      if ('semester' in s) mapped.semester = s.semester;
+      return mapped;
+    };
+
     try {
       const response = await fetchWithTimeout(`${BASE_URL}/students/${regNo}/`, {
         method: 'PATCH',
         headers: getHeaders(),
-        body: JSON.stringify(studentData),
+        body: JSON.stringify(mapToBackend(studentData)),
       }, 8000);
       if (response.ok) {
         const data = await response.json();
+        const normalizedData = normalizeStudent(data);
         const current = await this.getStudents();
-        const updated = current.map(s => s.regNo === regNo ? { ...s, ...data } : s);
+        const updated = current.map(s => s.regNo === regNo ? { ...s, ...normalizedData } : s);
         localStorage.setItem('IQRA_OBE_STUDENTS', JSON.stringify(updated));
-        return data;
+        return normalizedData;
       }
     } catch (err) {
       console.warn("Backend API for students offline. Updating student in local storage.");

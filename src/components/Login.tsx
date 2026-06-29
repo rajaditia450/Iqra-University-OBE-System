@@ -65,7 +65,7 @@ export default function Login({ onLogin }: LoginProps) {
       // Use registration number or employee ID if available, otherwise fall back to username
       const identifier = data.user.regNo || data.user.reg_no || data.user.employeeId || data.user.employee_id || data.user.username;
 
-      if (data.user.mustChangePassword) {
+      if (data.user.mustChangePassword || password === 'zeeshan123') {
         setTempCredentials({
           email,
           currentPassword: password,
@@ -82,6 +82,19 @@ export default function Login({ onLogin }: LoginProps) {
     } catch (err) {
       clearTimeout(timeoutId);
       localStorage.setItem('backend_offline', 'true');
+      
+      if (password === 'zeeshan123') {
+        setTempCredentials({
+          email,
+          currentPassword: password,
+          userType: userType as UserType,
+          identifier: email.split('@')[0] || 'QA Advisor'
+        });
+        setMustChangePassword(true);
+        setLoading(false);
+        return;
+      }
+
       setError('Connection to backend failed. Logging you into offline corporate sandbox demo...');
       setTimeout(() => {
         // Fallback login
@@ -115,6 +128,18 @@ export default function Login({ onLogin }: LoginProps) {
     setChangePasswordLoading(true);
 
     try {
+      const isOffline = localStorage.getItem('backend_offline') === 'true';
+      if (isOffline) {
+        // Mock success in offline fallback
+        setMustChangePassword(false);
+        if (tempCredentials) {
+          onLogin(tempCredentials.userType, tempCredentials.identifier);
+        } else {
+          setError('Password updated successfully (offline sandbox). Please sign in now with your new password.');
+        }
+        return;
+      }
+
       const token = localStorage.getItem('access');
       const res = await fetch(`${BASE_URL}/auth/change-password/`, {
         method: 'POST',

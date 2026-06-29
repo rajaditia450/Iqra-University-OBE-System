@@ -146,6 +146,9 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
               return [...filtered, ...dynamicBindings];
             });
 
+            const loadedDepts = obData.departments || [];
+            const loadedProgs = obData.programs || [];
+
             mappedInstructorCourses = studentCourses.map((sc: any) => {
               const standardCategories = sc.categories || [
                 { name: "Assignments", percentage: 15, units: 3 },
@@ -173,14 +176,23 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
                 "Mid Term": [{ unitNo: 1, passing: 15, totalMarks: 30, weightage: 100 }],
                 "Final": [{ unitNo: 1, passing: 20, totalMarks: 40, weightage: 100 }]
               };
+
+              const pId = sc.programId || matchingStudent?.programId || 'bscs';
+              const prog = loadedProgs.find((p: any) => p.id === pId);
+              const pName = prog ? prog.name : 'Bachelor of Science in Computer Science (BSCS)';
+              
+              const dId = sc.departmentId || prog?.departmentId || matchingStudent?.departmentId || 'computing';
+              const dept = loadedDepts.find((d: any) => d.id === dId);
+              const dName = dept ? dept.name : 'Department of Computing and Technology';
+
               return {
                 id: sc.id || `course-assigned-${sc.code}`,
                 code: sc.code,
                 title: sc.title,
-                departmentId: sc.departmentId || 'computing',
-                departmentName: sc.departmentName || 'Department of Computing and Technology',
-                programId: sc.programId || 'bscs',
-                programName: sc.programName || 'Bachelor of Science in Computer Science (BSCS)',
+                departmentId: dId,
+                departmentName: dName,
+                programId: pId,
+                programName: pName,
                 creditHours: sc.creditHours || 3,
                 categories: standardCategories,
                 unitsData: standardUnitsData,

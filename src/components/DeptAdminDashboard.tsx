@@ -1050,7 +1050,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
       setTeacherEmployeeId('');
       setTeacherDesignation('Lecturer');
 
-      triggerNotification(`Teacher ${newTeacher.name} successfully registered. Temporary password is zeeshan123`);
+      triggerNotification(`Teacher ${newTeacher.name} registered. Default login password: zeeshan123`);
     } catch (err: any) {
       console.error(err);
       triggerNotification(err.message || "Failed to onboard faculty.", true);
