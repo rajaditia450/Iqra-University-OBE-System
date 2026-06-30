@@ -864,7 +864,10 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
         apiService.enrollStudents(
           ic.id,
           ic.students.map(s => ({ regNo: s.regNo, name: s.name }))
-        ).catch(e => console.warn('Enrollment sync error:', e));
+        ).catch(e => {
+          console.error('Enrollment sync error:', e);
+          triggerNotification(`Enrollment sync failed: ${e.message}`, true);
+        });
       }
     }
   };
@@ -1149,8 +1152,10 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
         selectedProgramForTeacher || undefined,
         assignmentAcademicYear
       );
-    } catch (err) {
-      console.warn("Failed to save course assignment to backend. Syncing locally.", err);
+    } catch (err: any) {
+      console.error(err);
+      triggerNotification(err.message || "Failed to save course assignment to backend.", true);
+      return;
     }
 
     const updatedAssignments = [...teacherAssignments, newAssignment];

@@ -783,7 +783,11 @@ export const apiService = {
       headers: getHeaders(),
       body: JSON.stringify({ courseId, students }),
     }, 8000);
-    if (!res.ok) console.warn('Enrollment sync failed for', courseId);
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      const errMsg = errData.detail || errData.error || errData.message || 'Enrollment sync failed';
+      throw new Error(errMsg);
+    }
   },
 
   async deleteInstructorCourse(courseId: string): Promise<boolean> {
@@ -1155,7 +1159,11 @@ export const apiService = {
       headers: getHeaders(),
       body: JSON.stringify({ teacherId, courseCode, programId, academicYear }),
     }, 8000);
-    if (!res.ok) throw new Error('Failed to save course assignment');
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      const errMsg = errData.detail || errData.error || errData.message || 'Failed to save course assignment';
+      throw new Error(errMsg);
+    }
     return res.json();
   },
 
