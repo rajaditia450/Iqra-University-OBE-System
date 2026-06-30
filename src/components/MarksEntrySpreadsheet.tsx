@@ -540,6 +540,7 @@ export default function MarksEntrySpreadsheet({
                                   className={`w-full text-center font-mono font-bold text-xs bg-transparent border-none outline-none p-0 focus:ring-0 ${
                                     isEmpty ? 'text-rose-600' : 'text-slate-900'
                                   }`}
+                                  disabled={selectedCourse?.status === 'closed'}
                                   onChange={(e) => {
                                     const val = e.target.value;
                                     if (val === '' || /^\d*\.?\d*$/.test(val)) {

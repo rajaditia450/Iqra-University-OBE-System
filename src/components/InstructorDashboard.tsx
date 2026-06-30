@@ -37,7 +37,8 @@ import {
   Search,
   Printer,
   Download,
-  RefreshCw
+  RefreshCw,
+  Lock
 } from 'lucide-react';
 import { apiService, BASE_URL } from '../services/apiService';
 import { Course, Department, Program, MarksCategory, UnitItem, UnitQuestion, CourseStudent, InstructorCourse, OBEData } from '../types';
@@ -749,7 +750,22 @@ const MarksheetDocument = ({
 const DEFAULT_COURSES: InstructorCourse[] = [];
 
 export default function InstructorDashboard({ onLogout, instructorName = 'Prof. Dr. Jameel Ahmed' }: InstructorDashboardProps) {
-  const [courses, setCourses] = useState<InstructorCourse[]>([]);
+  const [courses, setRawCourses] = useState<InstructorCourse[]>([]);
+  const setCourses = (update: InstructorCourse[] | ((prev: InstructorCourse[]) => InstructorCourse[])) => {
+    setRawCourses(prev => {
+      const next = typeof update === 'function' ? update(prev) : update;
+      const originalActive = prev.find(c => c.id === activeCourseId);
+      if (originalActive && originalActive.status === 'closed') {
+        return next.map(c => {
+          if (c.id === activeCourseId) {
+            return originalActive;
+          }
+          return c;
+        });
+      }
+      return next;
+    });
+  };
   const [loading, setLoading] = useState(true);
   const [obeData, setObeData] = useState<OBEData | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -2834,6 +2850,14 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
               </div>
             )}
 
+            {/* Closed Course Badge */}
+            {selectedCourse?.status === 'closed' && (
+              <div className="flex items-center gap-2 bg-rose-50 border border-rose-250 px-3 py-1 rounded-lg animate-fade-in text-rose-700 shadow-xs">
+                <Lock className="w-3.5 h-3.5" />
+                <span className="text-xs font-black uppercase tracking-wider">LOCKED / CLOSED</span>
+              </div>
+            )}
+
 
 
 
@@ -2861,6 +2885,16 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
           <div className="bg-amber-55 border border-amber-200 text-amber-850 px-4 py-3 rounded-xl flex items-center gap-3 animate-in fade-in duration-200 text-xs shadow-xs font-sans">
             <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0" />
             <span>{errorMsg}</span>
+          </div>
+        )}
+
+        {selectedCourse?.status === 'closed' && (
+          <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 flex items-start gap-3 text-rose-800 shadow-xs animate-fade-in font-sans">
+            <AlertTriangle className="w-5 h-5 text-rose-500 shrink-0 mt-0.5 animate-pulse" />
+            <div>
+              <h3 className="font-bold text-sm text-rose-950">This Course is Finalized & Locked</h3>
+              <p className="text-xs text-rose-700 mt-1">This course has been officially closed and finalized by the department administration. All grades, assessments, CLO mappings, and learning outcome attainments are now in a <strong>read-only snapshot state</strong> and cannot be mutated.</p>
+            </div>
           </div>
         )}
         

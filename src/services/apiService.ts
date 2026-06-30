@@ -472,23 +472,118 @@ const getHeaders = () => {
   };
 };
 
+let isRefreshing = false;
+let refreshSubscribers: ((token: string) => void)[] = [];
+
+const subscribeTokenRefresh = (cb: (token: string) => void) => {
+  refreshSubscribers.push(cb);
+};
+
+const onRefreshed = (token: string) => {
+  refreshSubscribers.forEach(cb => cb(token));
+  refreshSubscribers = [];
+};
+
+const refreshAccessToken = async (): Promise<string | null> => {
+  const refreshToken = localStorage.getItem('refresh');
+  if (!refreshToken) return null;
+
+  const endpoints = [
+    `${BASE_URL}/auth/token/refresh/`,
+    `${BASE_URL}/auth/refresh/`,
+    `${BASE_URL}/token/refresh/`
+  ];
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh: refreshToken }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.access) {
+          localStorage.setItem('access', data.access);
+          return data.access;
+        }
+      }
+    } catch (e) {
+      console.warn(`Token refresh failed on endpoint ${url}:`, e);
+    }
+  }
+  return null;
+};
+
 const fetchWithTimeout = async (url: string, options: RequestInit = {}, timeoutMs = 15000): Promise<Response> => {
   if (localStorage.getItem('backend_offline') === 'true') {
     throw new Error('Backend offline cached');
   }
-  const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const response = await fetch(url, {
-      ...options,
-      signal: controller.signal,
-    });
-    clearTimeout(id);
-    return response;
-  } catch (error) {
-    clearTimeout(id);
-    throw error;
+
+  const makeRequest = async (tokenOverride?: string) => {
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      let reqOptions = { ...options };
+      if (tokenOverride) {
+        reqOptions.headers = {
+          ...reqOptions.headers,
+          'Authorization': `Bearer ${tokenOverride}`
+        };
+      } else {
+        // Always make sure headers are fresh when retrying or starting
+        reqOptions.headers = {
+          ...getHeaders(),
+          ...options.headers
+        };
+      }
+      const response = await fetch(url, {
+        ...reqOptions,
+        signal: controller.signal,
+      });
+      clearTimeout(id);
+      return response;
+    } catch (error) {
+      clearTimeout(id);
+      throw error;
+    }
+  };
+
+  let response = await makeRequest();
+
+  // If unauthorized (401), try token refresh once
+  if (response.status === 401 && !url.includes('/auth/login') && !url.includes('/refresh')) {
+    const refreshToken = localStorage.getItem('refresh');
+    if (refreshToken) {
+      if (!isRefreshing) {
+        isRefreshing = true;
+        const newAccessToken = await refreshAccessToken();
+        isRefreshing = false;
+        onRefreshed(newAccessToken || '');
+      }
+
+      if (isRefreshing) {
+        // Wait for refresh to complete
+        const refreshedToken = await new Promise<string>((resolve) => {
+          subscribeTokenRefresh((token) => resolve(token));
+        });
+        if (refreshedToken) {
+          response = await makeRequest(refreshedToken);
+        }
+      } else {
+        const storedToken = localStorage.getItem('access');
+        if (storedToken) {
+          response = await makeRequest(storedToken);
+        }
+      }
+    }
   }
+
+  // If STILL unauthorized (401), trigger session expiration to alert user and logout gracefully
+  if (response.status === 401 && !url.includes('/auth/login') && !url.includes('/refresh')) {
+    window.dispatchEvent(new CustomEvent('session-expired'));
+  }
+
+  return response;
 };
 
 export const apiService = {
@@ -689,6 +784,19 @@ export const apiService = {
       body: JSON.stringify({ courseId, students }),
     }, 8000);
     if (!res.ok) console.warn('Enrollment sync failed for', courseId);
+  },
+
+  async deleteInstructorCourse(courseId: string): Promise<boolean> {
+    try {
+      const res = await fetchWithTimeout(`${BASE_URL}/instructor/courses/${courseId}/`, {
+        method: 'DELETE',
+        headers: getHeaders(),
+      }, 8000);
+      return res.ok;
+    } catch (e) {
+      console.warn('Failed to delete instructor course from backend', e);
+      return false;
+    }
   },
 
   getLocalStorageData(): OBEData {
@@ -1041,13 +1149,40 @@ export const apiService = {
     // Returns: [{ teacherId, courseCode, programId }]
   },
 
-  async assignCourse(teacherId: string, courseCode: string, programId?: string) {
+  async assignCourse(teacherId: string, courseCode: string, programId?: string, academicYear?: string) {
     const res = await fetchWithTimeout(`${BASE_URL}/admin/course-assignments/`, {
       method: 'POST',
       headers: getHeaders(),
-      body: JSON.stringify({ teacherId, courseCode, programId }),
+      body: JSON.stringify({ teacherId, courseCode, programId, academicYear }),
     }, 8000);
     if (!res.ok) throw new Error('Failed to save course assignment');
+    return res.json();
+  },
+
+  async finalizeCourse(courseId: string, academicYear: string): Promise<{ message: string }> {
+    const res = await fetchWithTimeout(`${BASE_URL}/admin/finalize-course/`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({ courseId, academicYear }),
+    }, 8000);
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.detail || errData.error || errData.message || 'Failed to finalize course');
+    }
+    return res.json();
+  },
+
+  async getFinalResults(params: { regNo?: string; courseCode?: string; academicYear?: string }): Promise<{ results: any[] }> {
+    let url = `${BASE_URL}/reports/final-results/`;
+    const queryParams: string[] = [];
+    if (params.regNo) queryParams.push(`regNo=${params.regNo}`);
+    if (params.courseCode) queryParams.push(`courseCode=${params.courseCode}`);
+    if (params.academicYear) queryParams.push(`academicYear=${params.academicYear}`);
+    if (queryParams.length > 0) {
+      url += `?${queryParams.join('&')}`;
+    }
+    const res = await fetchWithTimeout(url, { headers: getHeaders() }, 5000);
+    if (!res.ok) throw new Error('Failed to fetch final results');
     return res.json();
   },
 

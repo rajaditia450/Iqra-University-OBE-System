@@ -55,6 +55,7 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
   // Dynamic API Report States
   const [studentSummary, setStudentSummary] = useState<any>(null);
   const [studentGA, setStudentGA] = useState<any>(null);
+  const [finalTranscripts, setFinalTranscripts] = useState<any[]>([]);
 
   // UI States
   const [expandedCourseCode, setExpandedCourseCode] = useState<string | null>(null);
@@ -78,6 +79,18 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
       } catch (err) {
         console.warn("Failed to fetch student GA attainment from backend:", err);
         setStudentGA(null);
+      }
+
+      try {
+        const finalResults = await apiService.getFinalResults({ regNo: activeRegNo });
+        if (finalResults && Array.isArray(finalResults.results)) {
+          setFinalTranscripts(finalResults.results);
+        } else {
+          setFinalTranscripts([]);
+        }
+      } catch (err) {
+        console.warn("Failed to fetch final results / transcripts from backend:", err);
+        setFinalTranscripts([]);
       }
     };
 
@@ -841,6 +854,61 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
                 exit={{ opacity: 0, y: -10 }}
                 className="space-y-6"
               >
+                {finalTranscripts.length > 0 && (
+                  <div className="bg-white border border-slate-200 rounded-3xl shadow-xs overflow-hidden animate-fade-in">
+                    <div className="bg-gradient-to-r from-slate-900 to-indigo-950 px-6 py-5 flex items-center justify-between border-b border-slate-100">
+                      <div className="flex items-center gap-2.5 text-white">
+                        <Award className="h-5 w-5 text-indigo-400" />
+                        <div>
+                          <h3 className="text-sm font-bold tracking-tight uppercase">Official Academic Transcript Record</h3>
+                          <p className="text-[10px] text-slate-300 font-medium">Permanent snapshot ledger of finalized semesters (Snapshotted & Sealed)</p>
+                        </div>
+                      </div>
+                      <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-black tracking-wider uppercase px-2.5 py-1 rounded-full flex items-center gap-1.5 font-mono">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                        SEALED
+                      </span>
+                    </div>
+
+                    <div className="p-0 overflow-x-auto">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="bg-slate-50 border-b border-slate-100 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                            <th className="py-3 px-6">Course / Code</th>
+                            <th className="py-3 px-4">Instructor</th>
+                            <th className="py-3 px-4">Term / Year</th>
+                            <th className="py-3 px-4 text-center">Credit Hours</th>
+                            <th className="py-3 px-4 text-center">Final Mark</th>
+                            <th className="py-3 px-4 text-center">Grade / GPA</th>
+                            <th className="py-3 px-4">Finalized On</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
+                          {finalTranscripts.map((t, idx) => (
+                            <tr key={idx} className="hover:bg-slate-50/50 transition-colors font-medium">
+                              <td className="py-4 px-6">
+                                <div className="font-bold text-slate-900">{t.courseTitle}</div>
+                                <div className="font-mono text-[10px] text-slate-400 mt-0.5">{t.courseCode}</div>
+                              </td>
+                              <td className="py-4 px-4 text-slate-600 font-semibold">{t.instructorName}</td>
+                              <td className="py-4 px-4 text-slate-500 font-semibold">{t.academicYear} <span className="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded-md text-slate-600 font-mono ml-1">{t.semester || '6th'}</span></td>
+                              <td className="py-4 px-4 text-center font-mono text-slate-500">{t.creditHours || 3}</td>
+                              <td className="py-4 px-4 text-center font-mono font-black text-indigo-950">{t.finalPercentage ? t.finalPercentage.toFixed(2) : '0.00'}%</td>
+                              <td className="py-4 px-4 text-center">
+                                <div className="font-black text-indigo-650">{t.grade}</div>
+                                <div className="text-[10px] text-slate-400 font-mono mt-0.5">{t.gradePoints ? t.gradePoints.toFixed(2) : '0.00'} GP</div>
+                              </td>
+                              <td className="py-4 px-4 font-mono text-[10px] text-slate-400">
+                                {t.finalizedAt ? new Date(t.finalizedAt).toLocaleDateString() : 'N/A'}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
                 {enrolledCoursesWithGrades.length === 0 ? (
                   <div className="bg-white border border-slate-200 rounded-3xl py-16 px-4 text-center space-y-3 shadow-sm">
                     <BookOpen className="h-12 w-12 text-slate-300 mx-auto" />

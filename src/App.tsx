@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { UserType } from './types';
 import Login from './components/Login';
 import QADashboard from './components/QADashboard';
@@ -22,6 +22,15 @@ export default function App() {
     localStorage.removeItem('backend_offline');
     setCurrentUser(null);
   };
+
+  useEffect(() => {
+    const handleSessionExpired = () => {
+      alert("Your session has expired. Please log in again to preserve real-time sync with the server.");
+      handleLogout();
+    };
+    window.addEventListener('session-expired', handleSessionExpired);
+    return () => window.removeEventListener('session-expired', handleSessionExpired);
+  }, []);
 
   return (
     <div className="min-h-screen font-sans text-gray-900 bg-white selection:bg-gray-900 selection:text-white">

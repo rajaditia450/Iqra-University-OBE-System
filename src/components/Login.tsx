@@ -66,7 +66,7 @@ export default function Login({ onLogin }: LoginProps) {
       // Use registration number or employee ID if available, otherwise fall back to name or email
       const identifier = data.user.regNo || data.user.reg_no || data.user.employeeId || data.user.employee_id || data.user.name || data.user.email;
 
-      if (data.user.mustChangePassword || password === 'zeeshan123') {
+      if (data.user.mustChangePassword) {
         setTempCredentials({
           email,
           currentPassword: password,

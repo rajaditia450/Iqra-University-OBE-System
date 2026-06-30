@@ -114,4 +114,6 @@ export interface InstructorCourse {
   cloCount?: number;
   selectedGradingSystem?: string;
   customGradingSystem?: { grade: string; percentage: string; points: string }[];
+  academicYear?: string;
+  status?: 'active' | 'closed';
 }

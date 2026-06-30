@@ -21,7 +21,9 @@ import {
   Sliders, 
   Download,
   Info,
-  BarChart3
+  BarChart3,
+  Lock,
+  Award
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -51,6 +53,8 @@ interface TeacherCourseAssignment {
   courseCode: string;
   programId?: string;
   section?: string;
+  academicYear?: string;
+  status?: 'active' | 'closed';
 }
 
 interface DeptAdminDashboardProps {
@@ -260,6 +264,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
   const [selectedTeacherId, setSelectedTeacherId] = useState('');
   const [selectedCourseCodeForTeacher, setSelectedCourseCodeForTeacher] = useState('');
   const [selectedProgramForTeacher, setSelectedProgramForTeacher] = useState('');
+  const [assignmentAcademicYear, setAssignmentAcademicYear] = useState('Fall-2024');
   const [assignmentSearch, setAssignmentSearch] = useState('');
 
   // Tab 5: Student Binding State
@@ -696,7 +701,9 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
           loadedAssignments = fetchedAssignments.map((a: any) => ({
             teacherId: a.teacherId || a.instructor || a.employeeId,
             courseCode: a.courseCode || a.course_code || a.code,
-            programId: a.programId || a.program_id || a.program
+            programId: a.programId || a.program_id || a.program,
+            academicYear: a.academicYear || a.academic_year || 'Fall-2024',
+            status: a.status || 'active'
           }));
         }
       } catch (err) {
@@ -750,13 +757,21 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
     // For each teacher assignment, we make sure an InstructorCourse exists.
     // If a course is not assigned to any teacher, it won't appear in the instructor's courses.
     const updatedInstructorCourses: InstructorCourse[] = currentAssignments.map(assignment => {
-      const teacher = currentTeachers.find(t => t.id === assignment.teacherId);
+      const teacher = currentTeachers.find(t => 
+        t.id === assignment.teacherId || 
+        (t.employeeId && t.employeeId === assignment.teacherId) || 
+        ((t as any).employee_id && (t as any).employee_id === assignment.teacherId)
+      );
       const course = currentCourses.find(c => c.code === assignment.courseCode);
       const matchedDept = departments.find(d => d.id === (course?.departmentId || 'computing'));
-      const finalProgramId = assignment.programId || course?.programId || 'bscs';
+      
+      const defaultDeptProgram = programs.find(p => p.departmentId === managedDeptId)?.id || 'bscs';
+      const fallbackProgramId = course?.programId || programs.find(p => p.departmentId === course?.departmentId)?.id || defaultDeptProgram;
+      const finalProgramId = assignment.programId || fallbackProgramId;
       const matchedProg = programs.find(p => p.id === finalProgramId);
 
-      const uniqId = `course-${assignment.courseCode}-${assignment.teacherId}-${finalProgramId}`;
+      const teacherIdForId = teacher?.employeeId || (teacher as any)?.employee_id || teacher?.id || assignment.teacherId;
+      const uniqId = `course-assigned-${assignment.courseCode}-${teacherIdForId}-${finalProgramId}`;
 
       // Find matching students for this course based on bindings
       const studentRegs = currentBindings
@@ -834,7 +849,9 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
         students: courseStudents,
         obeQuestions: existingCourse?.obeQuestions || [],
         obeMarks: existingCourse?.obeMarks || {},
-        selectedGradingSystem: existingCourse?.selectedGradingSystem || 'relative'
+        selectedGradingSystem: existingCourse?.selectedGradingSystem || 'relative',
+        academicYear: assignment.academicYear || existingCourse?.academicYear || 'Fall-2024',
+        status: assignment.status || existingCourse?.status || 'active'
       };
     });
 
@@ -1108,22 +1125,30 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
     const exists = teacherAssignments.some(
       a => a.teacherId === selectedTeacherId && 
            a.courseCode === selectedCourseCodeForTeacher &&
-           a.programId === (selectedProgramForTeacher || undefined)
+           a.programId === (selectedProgramForTeacher || undefined) &&
+           a.academicYear === assignmentAcademicYear
     );
 
     if (exists) {
-      triggerNotification("This teacher assignment with specified program already exists.", true);
+      triggerNotification(`This teacher assignment for course code ${selectedCourseCodeForTeacher} in program/term ${assignmentAcademicYear} already exists.`, true);
       return;
     }
 
     const newAssignment: TeacherCourseAssignment = {
       teacherId: selectedTeacherId,
       courseCode: selectedCourseCodeForTeacher,
-      programId: selectedProgramForTeacher || undefined
+      programId: selectedProgramForTeacher || undefined,
+      academicYear: assignmentAcademicYear,
+      status: 'active'
     };
 
     try {
-      await apiService.assignCourse(selectedTeacherId, selectedCourseCodeForTeacher, selectedProgramForTeacher || undefined);
+      await apiService.assignCourse(
+        selectedTeacherId,
+        selectedCourseCodeForTeacher,
+        selectedProgramForTeacher || undefined,
+        assignmentAcademicYear
+      );
     } catch (err) {
       console.warn("Failed to save course assignment to backend. Syncing locally.", err);
     }
@@ -1135,17 +1160,33 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
     // Instantly sync changes into IQRA_OBE_INSTRUCTOR_COURSES
     syncToInstructorCourses(courses, teachers, updatedAssignments, studentBindings, students);
 
-    const teacherObj = teachers.find(t => t.id === selectedTeacherId);
+    const teacherObj = teachers.find(t => 
+      t.id === selectedTeacherId || 
+      t.employeeId === selectedTeacherId || 
+      (t as any).employee_id === selectedTeacherId
+    );
     const progObj = programs.find(p => p.id === selectedProgramForTeacher);
     const suffix = progObj ? ` for ${progObj.code.toUpperCase()}` : '';
     triggerNotification(`Successfully assigned course ${selectedCourseCodeForTeacher}${suffix} to ${teacherObj?.name}`);
   };
 
   const handleRemoveTeacherAssignment = async (teacherId: string, courseCode: string, programId?: string) => {
+    const assignment = teacherAssignments.find(
+      a => a.teacherId === teacherId && 
+           a.courseCode === courseCode && 
+           a.programId === programId
+    );
+    const t = teachers.find(x => x.id === teacherId || x.employeeId === teacherId || (x as any).employee_id === teacherId);
+    const empId = t?.employeeId || t?.employee_id || t?.id || teacherId;
+    const assignmentProgId = assignment?.programId || programId;
+    const finalProgId = assignmentProgId || courses.find(c => c.code === courseCode)?.programId || programs.find(p => p.departmentId === managedDeptId)?.id || 'bscs';
+    const backendCourseId = `course-assigned-${courseCode}-${empId}-${finalProgId}`;
+
     try {
       await apiService.removeCourseAssignment(teacherId, courseCode, programId);
+      await apiService.deleteInstructorCourse(backendCourseId);
     } catch (err) {
-      console.warn("Failed to remove course assignment from backend. Syncing locally.", err);
+      console.warn("Failed to remove course assignment or instructor course from backend. Syncing locally.", err);
     }
 
     const updatedAssignments = teacherAssignments.filter(
@@ -1158,6 +1199,49 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
 
     syncToInstructorCourses(courses, teachers, updatedAssignments, studentBindings, students);
     triggerNotification(`Removed course assignment ${courseCode} from teacher.`);
+  };
+
+  const handleFinalizeCourse = async (assignment: TeacherCourseAssignment) => {
+    const teacher = teachers.find(t => 
+      t.id === assignment.teacherId || 
+      t.employeeId === assignment.teacherId || 
+      (t as any).employee_id === assignment.teacherId
+    );
+    const course = courses.find(c => c.code === assignment.courseCode);
+    const defaultDeptProgram = programs.find(p => p.departmentId === managedDeptId)?.id || 'bscs';
+    const fallbackProgramId = course?.programId || programs.find(p => p.departmentId === course?.departmentId)?.id || defaultDeptProgram;
+    const finalProgramId = assignment.programId || fallbackProgramId;
+    const teacherIdForId = teacher?.employeeId || (teacher as any)?.employee_id || teacher?.id || assignment.teacherId;
+    const courseId = `course-assigned-${assignment.courseCode}-${teacherIdForId}-${finalProgramId}`;
+    const academicYear = assignment.academicYear || 'Fall-2024';
+
+    if (!window.confirm(`Are you sure you want to CLOSE THE SEMESTER for course ${assignment.courseCode} (${course?.title || ''})?\n\nThis will lock the course, snapshot current student marks, compute final letter grades & GPA, and finalize official transcripts. Instructors will NO LONGER be able to modify any marks.`)) {
+      return;
+    }
+
+    try {
+      // 1. Hit the backend finalize-course endpoint
+      await apiService.finalizeCourse(courseId, academicYear);
+
+      // 2. Locally mark assignment as closed
+      const updatedAssignments = teacherAssignments.map(a => {
+        if (a.teacherId === assignment.teacherId && a.courseCode === assignment.courseCode && a.programId === assignment.programId) {
+          return { ...a, status: 'closed' as const };
+        }
+        return a;
+      });
+
+      setTeacherAssignments(updatedAssignments);
+      localStorage.setItem('IQRA_OBE_TEACHER_ASSIGNMENTS', JSON.stringify(updatedAssignments));
+
+      // 3. Instantly sync changes to InstructorCourses
+      syncToInstructorCourses(courses, teachers, updatedAssignments, studentBindings, students);
+
+      triggerNotification(`Successfully finalized and closed ${assignment.courseCode} for academic year ${academicYear}. Transcripts generated!`);
+    } catch (err: any) {
+      console.error(err);
+      triggerNotification(err.message || "Failed to finalize and close course.", true);
+    }
   };
 
   // 5. Manage Predefined Plans
@@ -1350,7 +1434,11 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
   // Teacher Assignments Grid (Tab 4)
   const filteredAssignments = useMemo(() => {
     return teacherAssignments.filter(a => {
-      const teacher = teachers.find(t => t.id === a.teacherId);
+      const teacher = teachers.find(t => 
+        t.id === a.teacherId || 
+        t.employeeId === a.teacherId || 
+        (t as any).employee_id === a.teacherId
+      );
       const course = courses.find(c => c.code === a.courseCode);
       if (!course || course.departmentId !== managedDeptId) {
         return false;
@@ -2001,7 +2089,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                 <h2 className="text-xl font-bold text-slate-900 mb-1">Teacher Course Assignments</h2>
                 <p className="text-xs text-slate-500 mb-6">Assign courses to faculty members. This automatically provisions their digital grading spreadsheets.</p>
 
-                <form onSubmit={handleAssignCourseToTeacher} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end bg-slate-50/40 p-4 rounded-2xl border border-slate-100 mb-8">
+                <form onSubmit={handleAssignCourseToTeacher} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end bg-slate-50/40 p-4 rounded-2xl border border-slate-100 mb-8">
                   <div>
                     <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Select Teacher</label>
                     <select 
@@ -2044,6 +2132,21 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                     </select>
                   </div>
                   <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Academic Year</label>
+                    <select 
+                      value={assignmentAcademicYear}
+                      onChange={(e) => setAssignmentAcademicYear(e.target.value)}
+                      className="w-full px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none transition-all"
+                      required
+                    >
+                      <option value="Fall-2023">Fall-2023</option>
+                      <option value="Spring-2024">Spring-2024</option>
+                      <option value="Fall-2024">Fall-2024</option>
+                      <option value="Spring-2025">Spring-2025</option>
+                      <option value="Fall-2025">Fall-2025</option>
+                    </select>
+                  </div>
+                  <div>
                     <button 
                       type="submit"
                       className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 px-4 rounded-xl text-xs shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
@@ -2073,38 +2176,80 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                     <thead className="bg-slate-50 text-[10px] uppercase font-bold tracking-wider text-slate-400">
                       <tr>
                         <th className="px-5 py-3 text-left">Teacher</th>
-                        <th className="px-5 py-3 text-left">Course Code</th>
-                        <th className="px-5 py-3 text-left">Course Title</th>
+                        <th className="px-5 py-3 text-left">Course</th>
                         <th className="px-5 py-3 text-left">Program</th>
+                        <th className="px-5 py-3 text-center">Term / Year</th>
+                        <th className="px-5 py-3 text-center">Status</th>
                         <th className="px-5 py-3 text-center">Action</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-600 bg-white">
                       {filteredAssignments.map((a, idx) => {
-                        const teacher = teachers.find(t => t.id === a.teacherId);
+                        const teacher = teachers.find(t => 
+                          t.id === a.teacherId || 
+                          t.employeeId === a.teacherId || 
+                          (t as any).employee_id === a.teacherId
+                        );
                         const course = courses.find(c => c.code === a.courseCode);
                         const prog = programs.find(p => p.id === a.programId);
+                        const isClosed = a.status === 'closed';
+
                         return (
                           <tr key={idx} className="hover:bg-slate-50/50 transition-all">
                             <td className="px-5 py-3.5">
                               <div className="font-bold text-slate-800">{teacher?.name || 'Unknown Teacher'}</div>
                               <div className="text-[10px] text-slate-400 font-mono font-normal">{teacher?.email || ''}</div>
                             </td>
-                            <td className="px-5 py-3.5 text-indigo-600 font-mono font-bold">{a.courseCode}</td>
-                            <td className="px-5 py-3.5 text-slate-700 font-medium">{course?.title || ''}</td>
+                            <td className="px-5 py-3.5">
+                              <div className="font-mono font-bold text-indigo-650">{a.courseCode}</div>
+                              <div className="text-[10px] text-slate-500 font-medium mt-0.5">{course?.title || ''}</div>
+                            </td>
                             <td className="px-5 py-3.5">
                               <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${prog ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-600'}`}>
                                 {prog ? prog.code.toUpperCase() : 'ALL PROGRAMS'}
                               </span>
                             </td>
+                            <td className="px-5 py-3.5 text-center font-mono text-slate-500 font-bold">
+                              {a.academicYear || 'Fall-2024'}
+                            </td>
                             <td className="px-5 py-3.5 text-center">
-                              <button
-                                onClick={() => handleRemoveTeacherAssignment(a.teacherId, a.courseCode, a.programId)}
-                                className="inline-flex items-center gap-1 text-xs font-bold text-red-500 hover:text-red-700 hover:bg-red-50 px-2.5 py-1 rounded-lg transition-all"
-                              >
-                                <Unlink className="h-3.5 w-3.5" />
-                                <span>Unassign</span>
-                              </button>
+                              {isClosed ? (
+                                <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full text-[9px] font-black uppercase font-mono border border-emerald-200">
+                                  <Lock className="w-2.5 h-2.5" />
+                                  CLOSED
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 bg-sky-50 text-sky-700 px-2 py-0.5 rounded-full text-[9px] font-black uppercase font-mono border border-sky-200">
+                                  <span className="w-1 h-1 rounded-full bg-sky-500 animate-pulse" />
+                                  ACTIVE
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-5 py-3.5 text-center">
+                              <div className="flex items-center justify-center gap-2">
+                                {!isClosed ? (
+                                  <button
+                                    onClick={() => handleFinalizeCourse(a)}
+                                    className="inline-flex items-center gap-1 text-[11px] font-black text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 px-2.5 py-1.5 rounded-lg border border-indigo-150 shadow-xs transition-all cursor-pointer"
+                                    title="Close Semester & Generate Permanent Transcripts"
+                                  >
+                                    <Award className="h-3.5 w-3.5" />
+                                    <span>Close Semester</span>
+                                  </button>
+                                ) : (
+                                  <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1 italic bg-emerald-50/50 px-2 py-1 rounded-lg border border-emerald-100">
+                                    <Award className="h-3.5 w-3.5" />
+                                    Sealed
+                                  </span>
+                                )}
+                                <button
+                                  onClick={() => handleRemoveTeacherAssignment(a.teacherId, a.courseCode, a.programId)}
+                                  className="inline-flex items-center gap-1 text-xs font-bold text-red-500 hover:text-red-700 hover:bg-red-50 px-2.5 py-1 rounded-lg transition-all"
+                                >
+                                  <Unlink className="h-3.5 w-3.5" />
+                                  <span>Unassign</span>
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         );
