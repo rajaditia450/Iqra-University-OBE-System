@@ -683,7 +683,6 @@ export const apiService = {
   },
 
   async enrollStudents(courseId: string, students: { regNo: string; name: string }[]): Promise<void> {
-    if (!students.length) return;
     const res = await fetchWithTimeout(`${BASE_URL}/admin/enroll/`, {
       method: 'POST',
       headers: getHeaders(),
