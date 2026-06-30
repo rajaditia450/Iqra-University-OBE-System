@@ -840,6 +840,13 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
 
     // Save to local storage
     localStorage.setItem('IQRA_OBE_INSTRUCTOR_COURSES', JSON.stringify(updatedInstructorCourses));
+
+    // Sync enrollments to backend in background
+    for (const ic of updatedInstructorCourses) {
+      if (ic.students && ic.students.length > 0) {
+        apiService.enrollStudents(ic.id, ic.students.map(s => ({ regNo: s.regNo, name: s.name })));
+      }
+    }
   };
 
   // Show a status update or feedback message helper

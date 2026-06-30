@@ -682,6 +682,21 @@ export const apiService = {
     return getLocalInstructorCourses();
   },
 
+  async enrollStudents(courseId: string, students: { regNo: string; name: string }[]) {
+    try {
+      const res = await fetchWithTimeout(`${BASE_URL}/admin/enroll/`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({ courseId, students }),
+      }, 8000);
+      if (!res.ok) {
+        console.warn('Enrollment sync failed');
+      }
+    } catch (e) {
+      console.warn('Failed to sync enrollment on backend', e);
+    }
+  },
+
   getLocalStorageData(): OBEData {
     return getLocalStorageData();
   },
