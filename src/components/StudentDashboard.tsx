@@ -115,7 +115,7 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
           if (parsedUser.user_type === 'student' || parsedUser.user_type === 'STUDENT' || parsedUser.userType === 'student' || parsedUser.role === 'student') {
             loggedInStudent = {
               regNo: parsedUser.regNo || parsedUser.reg_no || studentRegNo,
-              name: parsedUser.name || parsedUser.username || studentRegNo.split('.').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
+              name: parsedUser.name || studentRegNo.split('.').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
               email: parsedUser.email || '',
               departmentId: parsedUser.departmentId || parsedUser.department_id || 'computing',
               programId: parsedUser.programId || parsedUser.program_id || 'bscs',
@@ -137,7 +137,6 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
              s.regNo.toLowerCase() === rawRegToMatch ||
              s.regNo.toLowerCase().replace(/[^a-z0-9]/g, '') === cleanRegToMatch.replace(/[^a-z0-9]/g, '') ||
              s.name.toLowerCase() === rawRegToMatch ||
-             (s as any).username?.toLowerCase() === rawRegToMatch ||
              s.email?.toLowerCase() === rawRegToMatch ||
              s.email?.toLowerCase().split('@')[0] === cleanRegToMatch ||
              s.email?.toLowerCase().split('@')[0] === rawRegToMatch
