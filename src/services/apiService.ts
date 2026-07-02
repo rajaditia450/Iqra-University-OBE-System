@@ -503,6 +503,8 @@ const refreshAccessToken = async (): Promise<string | null> => {
       if (res.ok) {
         const data = await res.json();
         if (data.access) {
+          // SECURITY NOTE: Storing JWT tokens in localStorage is susceptible to XSS.
+          // For production hardening, transition to using secure, httpOnly cookies set by the backend.
           localStorage.setItem('access', data.access);
           return data.access;
         }
@@ -515,13 +517,25 @@ const refreshAccessToken = async (): Promise<string | null> => {
 };
 
 const fetchWithTimeout = async (url: string, options: RequestInit = {}, timeoutMs = 15000): Promise<Response> => {
-  if (localStorage.getItem('backend_offline') === 'true') {
-    throw new Error('Backend offline cached');
+  // If previously marked offline, try with a short timeout to probe and potentially recover
+  const wasOffline = localStorage.getItem('backend_offline') === 'true';
+  const effectiveTimeout = wasOffline ? 2500 : timeoutMs;
+
+  // Security Interceptor: Block authenticated requests if the user must change their default password
+  const savedUserStr = localStorage.getItem('IQRA_OBE_LOGGED_IN_USER');
+  if (savedUserStr) {
+    try {
+      const user = JSON.parse(savedUserStr);
+      if (user && user.mustChangePassword && !url.includes('/auth/change-password') && !url.includes('/auth/login') && !url.includes('/auth/token/refresh')) {
+        window.dispatchEvent(new CustomEvent('session-expired'));
+        throw new Error('You must change your default password before accessing any application features.');
+      }
+    } catch (e) {}
   }
 
   const makeRequest = async (tokenOverride?: string) => {
     const controller = new AbortController();
-    const id = setTimeout(() => controller.abort(), timeoutMs);
+    const id = setTimeout(() => controller.abort(), effectiveTimeout);
     try {
       let reqOptions = { ...options };
       if (tokenOverride) {
@@ -541,9 +555,25 @@ const fetchWithTimeout = async (url: string, options: RequestInit = {}, timeoutM
         signal: controller.signal,
       });
       clearTimeout(id);
+
+      // On success, recover online status
+      if (response.ok) {
+        if (localStorage.getItem('backend_offline') === 'true') {
+          localStorage.setItem('backend_offline', 'false');
+          window.dispatchEvent(new CustomEvent('backend-online-detected'));
+        }
+      }
+
       return response;
     } catch (error) {
       clearTimeout(id);
+
+      // On network failure or timeout, ensure offline status is flagged
+      if (localStorage.getItem('backend_offline') !== 'true') {
+        localStorage.setItem('backend_offline', 'true');
+        window.dispatchEvent(new CustomEvent('backend-offline-detected'));
+      }
+
       throw error;
     }
   };

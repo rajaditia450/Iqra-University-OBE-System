@@ -3,6 +3,7 @@ import { motion } from 'motion/react';
 import { UserType } from '../types';
 import { GraduationCap, BookOpen, ShieldCheck } from 'lucide-react';
 import { BASE_URL } from '../services/apiService';
+import { DEFAULT_TEMP_PASSWORD } from '../utils/config';
 
 interface LoginProps {
   onLogin: (userType: UserType, name: string) => void;
@@ -53,6 +54,8 @@ export default function Login({ onLogin }: LoginProps) {
       }
 
       // Save tokens
+      // SECURITY NOTE: Storing JWT tokens in localStorage is susceptible to XSS.
+      // For production hardening, transition to using secure, httpOnly cookies set by the backend.
       localStorage.setItem('access',  data.access);
       localStorage.setItem('refresh', data.refresh);
       localStorage.setItem('backend_offline', 'false');
@@ -82,41 +85,9 @@ export default function Login({ onLogin }: LoginProps) {
 
     } catch (err) {
       clearTimeout(timeoutId);
-      localStorage.setItem('backend_offline', 'true');
-      
-      const fallbackUser = {
-        username: email.split('@')[0],
-        email: email,
-        name: email.split('@')[0].split('.').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
-        user_type: userType,
-        reg_no: email.includes('@') && /\d/.test(email) ? email.split('@')[0].toUpperCase() : '052-SP23-33222',
-        department_id: 'computing',
-        program_id: 'bscs'
-      };
-      localStorage.setItem('IQRA_OBE_LOGGED_IN_USER', JSON.stringify(fallbackUser));
-
-      if (password === 'zeeshan123') {
-        setTempCredentials({
-          email,
-          currentPassword: password,
-          userType: userType as UserType,
-          identifier: email.split('@')[0] || 'QA Advisor'
-        });
-        setMustChangePassword(true);
-        setLoading(false);
-        return;
-      }
-
-      setError('Connection to backend failed. Logging you into offline corporate sandbox demo...');
-      setTimeout(() => {
-        // Fallback login
-        onLogin(userType as UserType, email.split('@')[0] || 'QA Advisor');
-      }, 1200);
+      setError('Connection to server failed. Unable to reach the backend service. Please check your network connection or try again later.');
     } finally {
-      // delay state reset to make transition look native
-      setTimeout(() => {
-        setLoading(false);
-      }, 1200);
+      setLoading(false);
     }
   };
 

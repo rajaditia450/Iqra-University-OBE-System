@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
+import WeightageAndStudents from './instructor/WeightageAndStudents';
+import Toast from './Toast';
 import * as XLSX from 'xlsx';
 import { 
   BookOpen, 
@@ -769,6 +771,14 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
   const [loading, setLoading] = useState(true);
   const [obeData, setObeData] = useState<OBEData | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+
+  const showNotification = (message: string, type: 'success' | 'error' | 'info' = 'error') => {
+    setNotification({ message, type });
+    setTimeout(() => {
+      setNotification(null);
+    }, 4000);
+  };
 
   const [activeCourseId, setActiveCourseId] = useState<string>(() => {
     const saved = localStorage.getItem('IQRA_OBE_INSTRUCTOR_ACTIVE_ID');
@@ -985,7 +995,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
         window.print();
       } catch (e) {
         console.error("Print failed:", e);
-        alert("The print dialog is blocked in this container preview. Please use the 'Download' button instead to get a PDF.");
+        showNotification("The print dialog is blocked in this container preview. Please use the 'Download' button instead to get a PDF.");
       }
       
       // Instantly restore normal applet layout in a secondary frame context
@@ -998,7 +1008,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
   const handleDownloadPDF = async () => {
     const element = document.getElementById('marksheet-real-view');
     if (!element) {
-      alert("Error: Mark sheet preview element not found. Please select a course first.");
+      showNotification("Error: Mark sheet preview element not found. Please select a course first.");
       return;
     }
 
@@ -1108,7 +1118,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
       }
     } catch (error) {
       console.error("PDF download compilation error:", error);
-      alert("Direct PDF compilation encountered a delay. Please Click 'Print' and select 'Save as PDF' instead.");
+      showNotification("Direct PDF compilation encountered a delay. Please Click 'Print' and select 'Save as PDF' instead.");
       if (downloadBtn && oldText) {
         downloadBtn.innerHTML = oldText;
         downloadBtn.disabled = false;
@@ -1420,20 +1430,20 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
   const handleSaveObeQuestion = () => {
     if (!selectedCourse) return;
     if (!qName.trim()) {
-      alert("Please enter a question name (e.g. Question 1).");
+      showNotification("Please enter a question name (e.g. Question 1).");
       return;
     }
     const maxM = parseFloat(qMaxMarks);
     if (isNaN(maxM) || maxM <= 0) {
-      alert("Max marks must be greater than 0.");
+      showNotification("Max marks must be greater than 0.");
       return;
     }
     if (qClos.length === 0) {
-      alert("Please map this question to at least one CLO target.");
+      showNotification("Please map this question to at least one CLO target.");
       return;
     }
     if (!selectedObeAssKey) {
-      alert("Please select an assessment component first.");
+      showNotification("Please select an assessment component first.");
       return;
     }
 
@@ -1703,12 +1713,12 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
     if (!selectedCourse) return;
     if (currentTotalWeight > 100) {
       setSaveStatus('error-over');
-      alert("Please set the total weightage to 100%");
+      showNotification("Please set the total weightage to 100%");
       return;
     }
     if (currentTotalWeight < 100) {
       setSaveStatus('error-under');
-      alert("Please set the total weightage to 100%");
+      showNotification("Please set the total weightage to 100%");
       return;
     }
 
@@ -2035,7 +2045,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
 
   const handleRemoveUnitRow = () => {
     if (tempUnits.length <= 1) {
-      alert("At least 1 unit is required.");
+      showNotification("At least 1 unit is required.");
       return;
     }
     setTempUnits(prev => prev.slice(0, prev.length - 1));
@@ -2070,7 +2080,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
     const isSumValid = Math.abs(weightSum - 100) <= 0.05;
 
     if (!isSumValid) {
-      alert(`Validation Error: Total weightage sum must be exactly 100% to save! Your current weightage sum is ${weightSum.toFixed(1)}%. Please adjust unit weightages to sum up to exactly 100% before saving.`);
+      showNotification(`Validation Error: Total weightage sum must be exactly 100% to save! Your current weightage sum is ${weightSum.toFixed(1)}%. Please adjust unit weightages to sum up to exactly 100% before saving.`);
       return;
     }
 
@@ -2132,7 +2142,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
 
     // Check duplicate
     if (selectedCourse.students.some(s => s.regNo === cleanReg)) {
-      alert(`Student with registration number "${cleanReg}" already enrolled!`);
+      showNotification(`Student with registration number "${cleanReg}" already enrolled!`);
       return;
     }
 
@@ -2183,11 +2193,11 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
     const cleanNewName = editStudentNameVal.trim();
 
     if (!cleanNewRegNo) {
-      alert("Registration number cannot be empty!");
+      showNotification("Registration number cannot be empty!");
       return;
     }
     if (!cleanNewName) {
-      alert("Student name cannot be empty!");
+      showNotification("Student name cannot be empty!");
       return;
     }
 
@@ -2195,7 +2205,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
     if (cleanNewRegNo !== oldRegNo) {
       const exists = selectedCourse.students.some(s => s.regNo === cleanNewRegNo);
       if (exists) {
-        alert(`Student with registration number "${cleanNewRegNo}" already exists!`);
+        showNotification(`Student with registration number "${cleanNewRegNo}" already exists!`);
         return;
       }
     }
@@ -2283,14 +2293,14 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
         });
 
         if (list.length === 0) {
-          alert("No valid student records could be parsed. Ensure Column 1 has the Registration Number and Column 2 has the Student Name.");
+          showNotification("No valid student records could be parsed. Ensure Column 1 has the Registration Number and Column 2 has the Student Name.");
           setParsedStudents([]);
         } else {
           setParsedStudents(list);
         }
       } catch (err) {
         console.error(err);
-        alert("Failed to parse sheet. Please ensure it is a valid Excel (.xlsx, .xls) or CSV template file.");
+        showNotification("Failed to parse sheet. Please ensure it is a valid Excel (.xlsx, .xls) or CSV template file.");
         setParsedStudents([]);
       }
     };
@@ -2315,7 +2325,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
       if (ext === 'xlsx' || ext === 'xls' || ext === 'csv') {
         parseExcelFile(file);
       } else {
-        alert("Invalid file format. Please upload an Excel (.xlsx, .xls) or CSV (.csv) file.");
+        showNotification("Invalid file format. Please upload an Excel (.xlsx, .xls) or CSV (.csv) file.");
       }
     }
   };
@@ -2332,7 +2342,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
     });
 
     if (addedList.length === 0) {
-      alert("All parsed student registration numbers from the Excel sheet are already enrolled in this course.");
+      showNotification("All parsed student registration numbers from the Excel sheet are already enrolled in this course.");
       return;
     }
 
@@ -3051,329 +3061,26 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
 
                   {/* TAB PANES */}
                   <div className="bg-white/85 border border-slate-200/80 backdrop-blur-md rounded-2xl p-4 sm:p-6 shadow-md text-slate-800">
-                    {/* TAB 1: SET WEIGHTAGE */}
-                    {activeTab === 'weightage' && selectedCourse && (
-                      <div className="space-y-4">
-                        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-                    {/* Weightage Data Grid left column */}
-                    <div className="lg:col-span-7 border border-slate-200 rounded-xl overflow-hidden bg-white shadow-xs">
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-left border-collapse text-xs">
-                          <thead>
-                            <tr className="bg-slate-50 border-b border-slate-200 text-slate-700 font-bold">
-                              <th className="py-2.5 px-4 w-12 text-center">Sel</th>
-                              <th className="py-2.5 px-4">Marks Title</th>
-                              <th className="py-2.5 px-4 text-center border-l border-slate-200/60 bg-indigo-50/10">Percentage</th>
-                              <th className="py-2.5 px-4 text-center border-l border-slate-200/60">No of Units</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-200 font-mono text-slate-755">
-                            {tempCategories.map((item, idx) => (
-                              <tr
-                                key={item.name}
-                                onClick={() => setSelectedWeightIndex(idx)}
-                                className={`cursor-pointer transition-colors ${
-                                  selectedWeightIndex === idx
-                                    ? 'bg-indigo-50/50 text-indigo-950 font-bold border-l-4 border-l-indigo-600'
-                                    : 'hover:bg-slate-50'
-                                }`}
-                              >
-                                <td className="py-2.5 px-4 text-center">
-                                  <div className="flex items-center justify-center">
-                                    {selectedWeightIndex === idx ? (
-                                      <span className="text-indigo-600 text-[10px]">▶</span>
-                                    ) : (
-                                      <span className="w-1.5 h-1.5 rounded-full bg-slate-300"></span>
-                                    )}
-                                  </div>
-                                </td>
-                                <td className="py-2.5 px-4 font-sans text-slate-800">
-                                  {item.name}
-                                </td>
-                                <td className="py-2.5 px-4 text-center font-bold text-indigo-600 border-l border-slate-200/60 bg-indigo-50/10">
-                                  {item.percentage}%
-                                </td>
-                                <td className="py-2.5 px-4 text-center text-slate-650 border-l border-slate-200/60">
-                                  {item.units}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                          <tfoot>
-                            <tr className="bg-slate-50 border-t border-slate-200 text-xs font-semibold text-slate-800">
-                              <td colSpan={2} className="py-2.5 px-4 text-right pr-4 font-sans text-slate-550 border-r border-slate-150">
-                                Total Weightage:
-                              </td>
-                              <td className="py-2.5 px-4 text-center bg-white border-r border-slate-150">
-                                <span className={`px-2 py-0.5 rounded font-mono text-xs font-extrabold ${
-                                  currentTotalWeight === 100
-                                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-300'
-                                    : 'bg-rose-50 text-rose-700 border border-rose-300 animate-pulse'
-                                }`}>
-                                  {currentTotalWeight.toFixed(2)}%
-                                </span>
-                              </td>
-                              <td></td>
-                            </tr>
-                          </tfoot>
-                        </table>
-                      </div>
-                    </div>
-
-                    {/* Row Editor Card right column */}
-                    <div className="lg:col-span-5">
-                      {tempCategories[selectedWeightIndex] ? (
-                        <div className="bg-[#f8fafc] border border-slate-200 rounded-xl p-4 space-y-4">
-                          <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-                            <span className="text-[10px] font-mono text-indigo-600 uppercase tracking-widest font-extrabold">
-                              Active Component Editor
-                            </span>
-                            <span className="text-xs font-bold text-indigo-950 bg-indigo-50 border border-indigo-100 px-3 py-1 rounded-lg">
-                              {tempCategories[selectedWeightIndex].name}
-                            </span>
-                          </div>
-
-                          <div className="space-y-3">
-                            <div>
-                              <label className="block text-[10px] uppercase tracking-wider text-slate-600 mb-1 font-bold font-mono">
-                                Category Percentage (%)
-                              </label>
-                              <input
-                                type="number"
-                                min="0"
-                                max="100"
-                                value={editWeightPercent}
-                                onChange={(e) => handleWeightPercentChange(e.target.value)}
-                                className="bg-white text-slate-950 text-xs px-3 py-1.5 rounded-lg border border-slate-300 focus:ring-1 focus:ring-indigo-500 outline-none w-full font-mono font-bold"
-                              />
-                              <p className="text-[10px] text-slate-500 mt-1 font-sans">
-                                Percentage weight of student's aggregate.
-                              </p>
-                            </div>
-
-                            <div>
-                              <label className="block text-[10px] uppercase tracking-wider text-slate-600 mb-1 font-bold font-mono">
-                                Number of Units
-                              </label>
-                              <input
-                                type="number"
-                                min="0"
-                                max="20"
-                                value={editWeightUnits}
-                                onChange={(e) => handleWeightUnitsChange(e.target.value)}
-                                className="bg-white text-slate-950 text-xs px-3 py-1.5 rounded-lg border border-slate-300 focus:ring-1 focus:ring-indigo-500 outline-none w-full font-mono font-bold"
-                              />
-                              <p className="text-[10px] text-slate-500 mt-1 font-sans">
-                                Number of assessment units (e.g. 3 quizzes).
-                              </p>
-                            </div>
-                          </div>
-
-                          <div className="flex justify-end pt-2">
-                            <button
-                              onClick={handleUpdateCategorySingle}
-                              className="w-full px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg shadow-xs transition-colors cursor-pointer text-center"
-                            >
-                              Update Highlighted Row
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="bg-[#f8fafc] border border-dashed border-slate-300 rounded-xl p-6 text-center text-slate-450 text-xs">
-                          Select a row to adjust values
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Submission and reset actions */}
-                  <div className="pt-4 border-t border-slate-200 space-y-3">
-                    {saveStatus === 'error-over' && (
-                      <div className="bg-rose-50 border border-rose-200 text-rose-700 px-4 py-2.5 rounded-xl flex items-center gap-2 text-xs font-sans shadow-2xs">
-                        <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
-                        <div>
-                          <span className="font-bold">Error:</span> Total weightage must be exactly 100%. Currently it is <strong className="font-mono">{currentTotalWeight.toFixed(2)}%</strong> (which is greater than 100%). Please set the total weightage to 100%.
-                        </div>
-                      </div>
+                    {/* TAB 1: SET WEIGHTAGE, TAB 2: EDIT ITEMS, TAB 3: REGISTER STUDENTS (MODULARIZED) */}
+                    {selectedCourse && (activeTab === 'weightage' || activeTab === 'edit-items' || activeTab === 'students') && (
+                      <WeightageAndStudents
+                        activeTab={activeTab}
+                        selectedCourse={selectedCourse}
+                        tempCategories={tempCategories}
+                        selectedWeightIndex={selectedWeightIndex}
+                        setSelectedWeightIndex={setSelectedWeightIndex}
+                        currentTotalWeight={currentTotalWeight}
+                        editWeightPercent={editWeightPercent}
+                        editWeightUnits={editWeightUnits}
+                        handleWeightPercentChange={handleWeightPercentChange}
+                        handleWeightUnitsChange={handleWeightUnitsChange}
+                        handleUpdateCategorySingle={handleUpdateCategorySingle}
+                        saveStatus={saveStatus}
+                        handleResetWeightage={handleResetWeightage}
+                        handleSaveAllWeightage={handleSaveAllWeightage}
+                        handleOpenUnitEditor={handleOpenUnitEditor}
+                      />
                     )}
-                    {saveStatus === 'error-under' && (
-                      <div className="bg-rose-50 border border-rose-200 text-rose-700 px-4 py-2.5 rounded-xl flex items-center gap-2 text-xs font-sans shadow-2xs">
-                        <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
-                        <div>
-                          <span className="font-bold">Error:</span> Total weightage must be exactly 100%. Currently it is <strong className="font-mono">{currentTotalWeight.toFixed(2)}%</strong> (which is less than 100%). Please set the total weightage to 100%.
-                        </div>
-                      </div>
-                    )}
-                    {saveStatus === 'success' && (
-                      <div className="bg-emerald-50 border border-emerald-300 border-l-4 border-l-emerald-600 p-3.5 rounded-xl flex items-start gap-3 shadow-2xs animate-fade-in text-xs font-sans">
-                        <Check className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
-                        <div>
-                          <h4 className="text-xs font-extrabold text-emerald-950 uppercase tracking-wider">Saved Successfully</h4>
-                          <p className="text-[11px] text-emerald-850 mt-1 font-sans font-medium">
-                            Weightage configuration updated successfully!
-                          </p>
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="flex items-center justify-between gap-4">
-                      <p className="text-[11px] text-slate-500 font-sans">
-                        Changes above require selecting <strong className="font-bold">Ok</strong> to finalize.
-                      </p>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={handleResetWeightage}
-                          className="px-4 py-1.5 hover:bg-slate-100 border border-slate-300 text-slate-700 text-xs font-semibold rounded-lg transition-colors"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          onClick={handleSaveAllWeightage}
-                          className={`px-5 py-1.5 text-white text-xs font-bold rounded-lg shadow-md flex items-center gap-1.5 transition-all ${
-                            saveStatus === 'success'
-                              ? 'bg-emerald-600 hover:bg-emerald-700 font-extrabold px-6 scale-105'
-                              : saveStatus === 'error-over'
-                              ? 'bg-rose-600 hover:bg-rose-700 scale-105'
-                              : saveStatus === 'error-under'
-                              ? 'bg-rose-600 hover:bg-rose-700 scale-105'
-                              : 'bg-indigo-600 hover:bg-indigo-700'
-                          }`}
-                        >
-                          <Save className="w-3.5 h-3.5" />
-                          Ok
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                </div>
-              )}
-
-              {/* TAB 2: EDIT ITEMS */}
-              {activeTab === 'edit-items' && selectedCourse && (
-                <div className="space-y-6">
-                  
-                  <div>
-                    <h3 className="text-base font-bold text-slate-900 flex items-center gap-1.5">
-                      <ClipboardList className="w-4 h-4 text-indigo-600" />
-                      Configure Category Unit Marks Details
-                    </h3>
-                    <p className="text-xs text-slate-600 mt-1">
-                      Choose an assessment item below to adjust each individual unit's total marks and relative weights. Items set to 0% cannot have unit configs.
-                    </p>
-                  </div>
-
-                  {/* Categories Selector list representing the dropdown items visually */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {selectedCourse.categories.map(cat => {
-                      const hasWeight = cat.percentage > 0;
-                      return (
-                        <div
-                          key={cat.name}
-                          onClick={() => handleOpenUnitEditor(cat.name)}
-                          className={`p-4 rounded-xl border text-left cursor-pointer transition-all ${
-                            hasWeight
-                              ? 'bg-white border-slate-200 hover:border-indigo-600/80 hover:bg-slate-50/50 hover:shadow-sm relative overflow-hidden group'
-                              : 'bg-slate-100/40 border-dashed border-slate-300 opacity-60 hover:opacity-100 hover:border-slate-400'
-                          }`}
-                        >
-                          <div className="flex justify-between items-start mb-2">
-                            <h4 className="text-xs font-bold text-slate-800 select-none whitespace-nowrap">
-                              {cat.name}
-                            </h4>
-                            <span className={`text-[10px] px-2 py-0.5 rounded-md font-mono font-bold ${
-                              hasWeight ? 'bg-indigo-50 text-indigo-600 border border-indigo-100' : 'bg-slate-200 text-slate-500'
-                            }`}>
-                              {cat.percentage}% Weight
-                            </span>
-                          </div>
-
-                          <div className="flex items-center justify-between text-[11px] text-slate-500 mt-3 font-mono">
-                            <span>Units: {cat.units}</span>
-                            <span className="text-indigo-650 opacity-0 group-hover:opacity-100 font-bold transition-opacity font-sans">
-                              Edit Units &rarr;
-                            </span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* Note: Assessment Design Principle is persistently mounted at the base of the left sidebar list context. */}
-
-                </div>
-              )}
-
-              {/* TAB 3: REGISTER STUDENTS */}
-              {activeTab === 'students' && selectedCourse && (
-                <div className="space-y-6">
-                  
-
-                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                    
-                    {/* DEPARTMENTAL ENROLLMENT INFO CARD */}
-                    <div className="lg:col-span-4 space-y-6">
-                      <div className="bg-[#f8fafc] border border-slate-200 rounded-2xl p-5 shadow-xs text-left relative overflow-hidden font-sans">
-                        <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-indigo-600"></div>
-                        <div className="flex items-center gap-2 mb-3">
-                          <Building className="w-4 h-4 text-indigo-600 shrink-0" />
-                          <h4 className="font-sans font-bold text-slate-900 text-xs tracking-wider uppercase">Departmental Enrollment</h4>
-                        </div>
-                        <p className="text-xs text-slate-600 leading-relaxed font-medium mb-3">
-                          Student registration and course enrollments are centrally managed at the departmental level by the Department Administration.
-                        </p>
-                        <p className="text-[11px] text-slate-500 leading-relaxed">
-                          To request student roster updates, add/remove students, or correct details, please coordinate with your department admin office or the QA focal person.
-                        </p>
-                        <div className="mt-4 pt-3.5 border-t border-slate-200/80 flex items-center gap-2 text-[10px] text-indigo-700 font-mono font-bold uppercase tracking-wider">
-                          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
-                          Centralized OBE Sync Active
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* ENROLLED MATRIX */}
-                    <div className="lg:col-span-8 bg-white rounded-xl border border-slate-205 overflow-hidden shadow-xs">
-                      <div className="overflow-auto max-h-[380px]">
-                        <table className="w-full text-left text-xs font-sans relative">
-                          <thead className="sticky top-0 bg-slate-50 z-20 shadow-xs border-b border-slate-200">
-                            <tr className="bg-slate-50 text-slate-705 font-bold">
-                              <th className="py-2.5 px-4 w-12 text-center sticky top-0 bg-slate-50 z-20">S.#</th>
-                              <th className="py-2.5 px-4 font-sans sticky top-0 bg-slate-50 z-20">Registration No.</th>
-                              <th className="py-2.5 px-4 font-sans sticky top-0 bg-slate-50 z-20">Student Name</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-200 font-mono text-slate-700">
-                          {selectedCourse.students.map((student, index) => {
-                            return (
-                              <tr key={student.regNo} className="hover:bg-slate-55">
-                                <td className="py-3 px-4 text-center text-slate-400 font-mono">
-                                  {index + 1}
-                                </td>
-                                <td className="py-3 px-4 text-indigo-650 font-bold font-mono text-[11px]">
-                                  {student.regNo}
-                                </td>
-                                <td className="py-3 px-4 font-sans text-slate-800">
-                                  {student.name}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                          {selectedCourse.students.length === 0 && (
-                            <tr>
-                              <td colSpan={4} className="py-8 text-center text-slate-500 font-sans">
-                                No students enrolled yet. Register students to view the assessment grid.
-                              </td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
             {/* TAB: CLO SPECIFICATION */}
             {activeTab === 'clo' && selectedCourse && (
               <div id="clo-setup-view" className="space-y-6 animate-fadeIn">
@@ -3475,7 +3182,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                         <button
                           onClick={async () => {
                             if (!cloFormDesc.trim()) {
-                              alert("Please write a meaningful outcome description.");
+                              showNotification("Please write a meaningful outcome description.");
                               return;
                             }
                             setLoadingCLOs(true);
@@ -3507,7 +3214,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                               await fetchCurrentCourseCLOs(selectedCourse.id);
                               setTimeout(() => setSaveStatus('idle'), 3000);
                             } catch (err) {
-                              alert("Failed to save CLO. Check connection or try again.");
+                              showNotification("Failed to save CLO. Check connection or try again.");
                             } finally {
                               setLoadingCLOs(false);
                             }
@@ -3581,7 +3288,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                               }
                               await fetchCurrentCourseCLOs(selectedCourse.id);
                             } catch (err) {
-                              alert("Failed to auto-generate default CLOs.");
+                              showNotification("Failed to auto-generate default CLOs.");
                             } finally {
                               setLoadingCLOs(false);
                             }
@@ -3641,7 +3348,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                                       await apiService.deleteCourseCLO(selectedCourse.id, clo.id);
                                       await fetchCurrentCourseCLOs(selectedCourse.id);
                                     } catch (err) {
-                                      alert("Failed to delete CLO record.");
+                                      showNotification("Failed to delete CLO record.");
                                     } finally {
                                       setLoadingCLOs(false);
                                     }
@@ -4144,6 +3851,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                     handleWizardPartition={handleWizardPartition}
                     handleClearInlineQuestions={handleClearInlineQuestions}
                     handleOpenUnitEditor={handleOpenUnitEditor}
+                    onShowNotification={showNotification}
                   />
 
                   {false && (() => {
@@ -4552,7 +4260,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                                                             if (val === '' || /^\d*\.?\d*$/.test(val)) {
                                                               const numVal = (val === '' || val === '.') ? 0 : parseFloat(val);
                                                               if (numVal > q.maxMarks) {
-                                                                alert(`Warning: Entered marks (${numVal}) cannot be greater than the maximum marks (${q.maxMarks}) for this subquestion. Please enter a value less than or equal to ${q.maxMarks}.`);
+                                                                showNotification(`Warning: Entered marks (${numVal}) cannot be greater than the maximum marks (${q.maxMarks}) for this subquestion. Please enter a value less than or equal to ${q.maxMarks}.`);
                                                                 return;
                                                               }
                                                               handleSaveQuestionMark(student.regNo, curCat, curUnit, q.id, numVal);
@@ -4563,7 +4271,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                                                             if (isNaN(val) || val < 0) {
                                                               handleSaveQuestionMark(student.regNo, curCat, curUnit, q.id, 0);
                                                             } else if (val > q.maxMarks) {
-                                                              alert(`Warning: Entered marks (${val}) is greater than the maximum marks (${q.maxMarks}) for this subquestion. Reverting to ${q.maxMarks}.`);
+                                                              showNotification(`Warning: Entered marks (${val}) is greater than the maximum marks (${q.maxMarks}) for this subquestion. Reverting to ${q.maxMarks}.`);
                                                               handleSaveQuestionMark(student.regNo, curCat, curUnit, q.id, q.maxMarks);
                                                             }
                                                           }}
@@ -4809,16 +4517,16 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                                               type="button"
                                               onClick={() => {
                                                 if (!inlineQName.trim()) {
-                                                  alert(`Please enter a ${singularLab.toLowerCase()} label (e.g. ${preLabel}1).`);
+                                                  showNotification(`Please enter a ${singularLab.toLowerCase()} label (e.g. ${preLabel}1).`);
                                                   return;
                                                 }
                                                 const marks = parseFloat(inlineQMaxMarks);
                                                 if (isNaN(marks) || marks <= 0) {
-                                                  alert("Please enter a valid positive number for marks.");
+                                                  showNotification("Please enter a valid positive number for marks.");
                                                   return;
                                                 }
                                                 if (inlineQMappedCLOs.length === 0) {
-                                                  alert(`Please map this ${singularLab.toLowerCase()} to at least one CLO target.`);
+                                                  showNotification(`Please map this ${singularLab.toLowerCase()} to at least one CLO target.`);
                                                   return;
                                                 }
                                                 
@@ -4963,7 +4671,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                                                           if (val === '' || /^\d*\.?\d*$/.test(val)) {
                                                             const numVal = (val === '' || val === '.') ? 0 : parseFloat(val);
                                                             if (numVal > totalMarksMax) {
-                                                              alert(`Warning: Entered marks (${numVal}) cannot be greater than the maximum marks (${totalMarksMax}) for this unit assessment. Please enter a value less than or equal to ${totalMarksMax}.`);
+                                                              showNotification(`Warning: Entered marks (${numVal}) cannot be greater than the maximum marks (${totalMarksMax}) for this unit assessment. Please enter a value less than or equal to ${totalMarksMax}.`);
                                                               return;
                                                             }
                                                             handleSaveUnitDirectMark(student.regNo, curCat, curUnit, numVal);
@@ -4974,7 +4682,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                                                           if (isNaN(val) || val < 0) {
                                                             handleSaveUnitDirectMark(student.regNo, curCat, curUnit, 0);
                                                           } else if (val > totalMarksMax) {
-                                                            alert(`Warning: Entered marks (${val}) is greater than the maximum marks (${totalMarksMax}) for this unit assessment. Reverting to ${totalMarksMax}.`);
+                                                            showNotification(`Warning: Entered marks (${val}) is greater than the maximum marks (${totalMarksMax}) for this unit assessment. Reverting to ${totalMarksMax}.`);
                                                             handleSaveUnitDirectMark(student.regNo, curCat, curUnit, totalMarksMax);
                                                           }
                                                         }}
@@ -5158,16 +4866,16 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                                             type="button"
                                             onClick={() => {
                                               if (!inlineQName.trim()) {
-                                                alert("Please enter a question label (e.g. Q1).");
+                                                showNotification("Please enter a question label (e.g. Q1).");
                                                 return;
                                               }
                                               const marks = parseFloat(inlineQMaxMarks);
                                               if (isNaN(marks) || marks <= 0) {
-                                                alert("Please enter a valid positive number for marks.");
+                                                showNotification("Please enter a valid positive number for marks.");
                                                 return;
                                               }
                                               if (inlineQMappedCLOs.length === 0) {
-                                                alert("Please associate this question with at least one Course Learning Outcome (CLO).");
+                                                showNotification("Please associate this question with at least one Course Learning Outcome (CLO).");
                                                 return;
                                               }
 
@@ -5545,7 +5253,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                                                   return;
                                                 }
                                                 if (num > q.maxMarks) {
-                                                  alert(`Warning: Entered marks (${num}) cannot be greater than the maximum marks (${q.maxMarks}) allowed for this question.\n\nPlease enter a value less than or equal to ${q.maxMarks}.`);
+                                                  showNotification(`Warning: Entered marks (${num}) cannot be greater than the maximum marks (${q.maxMarks}) allowed for this question.\n\nPlease enter a value less than or equal to ${q.maxMarks}.`);
                                                   return;
                                                 }
                                                 handleSaveObeMark(student.regNo, q.id, num);
@@ -5555,7 +5263,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                                                 if (isNaN(val) || val < 0) {
                                                   handleSaveObeMark(student.regNo, q.id, 0);
                                                 } else if (val > q.maxMarks) {
-                                                  alert(`Warning: Entered marks (${val}) is greater than the maximum marks (${q.maxMarks}) allowed for this question. Reverting to ${q.maxMarks}.`);
+                                                  showNotification(`Warning: Entered marks (${val}) is greater than the maximum marks (${q.maxMarks}) allowed for this question. Reverting to ${q.maxMarks}.`);
                                                   handleSaveObeMark(student.regNo, q.id, q.maxMarks);
                                                 }
                                               }}
@@ -6778,6 +6486,16 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
         </div>,
         document.body
       )}
+
+      <AnimatePresence>
+        {notification && (
+          <Toast
+            message={notification.message}
+            type={notification.type}
+            onClose={() => setNotification(null)}
+          />
+        )}
+      </AnimatePresence>
 
     </div>
   );

@@ -367,7 +367,7 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
   // Handle adding custom program
   const handleAddProgram = async () => {
     if (!newProgramName.trim() || !newProgramCode.trim() || !data) {
-      alert("Please provide name and code details for the program.");
+      showNotification("Please provide name and code details for the program.", "error");
       return;
     }
 
@@ -375,7 +375,7 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
     
     // Check if program exists
     if (data.programs.some(p => p.id === newId)) {
-      alert("A program with this code already exists.");
+      showNotification("A program with this code already exists.", "error");
       return;
     }
 
@@ -455,9 +455,9 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
       setNewProgramName('');
       setNewProgramCode('');
       setActiveModal(null);
-      alert(`Program ${newProg.code} successfully registered! Separate Graduate Attributes (GA-${codeUpper}-1 to GA-${codeUpper}-10) have been generated uniquely for this program.`);
+      showNotification(`Program ${newProg.code} successfully registered! Separate Graduate Attributes (GA-${codeUpper}-1 to GA-${codeUpper}-10) have been generated uniquely for this program.`, "success");
     } catch (e) {
-      alert("Error saving new program.");
+      showNotification("Error saving new program.", "error");
     } finally {
       setSavingLoad(false);
     }
@@ -466,7 +466,7 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
   // Handle adding custom course
   const handleAddCourse = async () => {
     if (!newCourseCode.trim() || !newCourseTitle.trim() || !data) {
-      alert("Please provide course registration info containing valid code and title.");
+      showNotification("Please provide course registration info containing valid code and title.", "error");
       return;
     }
 
@@ -474,7 +474,7 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
     
     // Check if code matches existing course in the department
     if (data.courses.some(c => c.code.trim().toUpperCase() === newCourseCode.trim().toUpperCase() && c.departmentId === newCourseDeptId && c.programId === newCourseProgramId)) {
-      alert("A course with this exact code is already registered under this program.");
+      showNotification("A course with this exact code is already registered under this program.", "error");
       return;
     }
 
@@ -503,9 +503,9 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
       setNewCourseTitle('');
       setNewCourseType('core');
       setActiveModal(null);
-      alert(`Course "${newC.code} — ${newC.title}" successfully added! You can now map GAs to this course in the Active Allocation Matrix.`);
+      showNotification(`Course "${newC.code} — ${newC.title}" successfully added! You can now map GAs to this course in the Active Allocation Matrix.`, "success");
     } catch (err) {
-      alert("Error adding custom course.");
+      showNotification("Error adding custom course.", "error");
     } finally {
       setSavingLoad(false);
     }
@@ -514,7 +514,7 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
   // Handle editing custom course
   const handleEditCourseSubmit = async () => {
     if (!editingCourse || !editCourseCode.trim() || !editCourseTitle.trim() || !data) {
-      alert("Please provide valid course code and title.");
+      showNotification("Please provide valid course code and title.", "error");
       return;
     }
 
@@ -540,9 +540,9 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
 
       setEditingCourse(null);
       setActiveModal(null);
-      alert("Course specifications updated successfully!");
+      showNotification("Course specifications updated successfully!", "success");
     } catch (err) {
-      alert("Error saving course changes.");
+      showNotification("Error saving course changes.", "error");
     } finally {
       setSavingLoad(false);
     }
@@ -561,9 +561,9 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
       const updated = await apiService.updateProgram(activeProgram.id, { pos: editPOs });
       const upgraded = data.programs.map(p => p.id === activeProgram.id ? updated : p);
       setData({ ...data, programs: upgraded });
-      alert("Program Objectives updated and synchronized successfully.");
+      showNotification("Program Objectives updated and synchronized successfully.", "success");
     } catch (e) {
-      alert("Failed to sync objectives");
+      showNotification("Failed to sync objectives", "error");
     } finally {
       setSavingLoad(false);
     }
@@ -572,7 +572,7 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
   // Export active department matrix to downloadable CSV file
   const handleExportCSV = () => {
     if (!data || !activeDepartment) {
-      alert("No active data to export.");
+      showNotification("No active data to export.", "error");
       return;
     }
     const coursesInDept = data.courses.filter(c => c.departmentId === activeDeptId);
@@ -604,7 +604,7 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
   // Export full database state to downloadable JSON backup file
   const handleExportJSON = () => {
     if (!data) {
-      alert("No active database loaded.");
+      showNotification("No active database loaded.", "error");
       return;
     }
     const jsonStr = JSON.stringify(data, null, 2);
@@ -1274,9 +1274,9 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                                               
                                               const localData = { ...data, courses: updatedCourses };
                                               localStorage.setItem('IQRA_OBE_FALLBACK_DB', JSON.stringify(localData));
-                                              alert("Course deletion committed successfully.");
+                                              showNotification("Course deletion committed successfully.", "success");
                                             } catch (evt) {
-                                              alert("Error deleting course.");
+                                              showNotification("Error deleting course.", "error");
                                             } finally {
                                               setSavingLoad(false);
                                             }

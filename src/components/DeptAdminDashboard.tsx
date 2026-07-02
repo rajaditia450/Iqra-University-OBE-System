@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Department, Program, Course, Student, InstructorCourse } from '../types';
 import { apiService } from '../services/apiService';
+import { DEFAULT_TEMP_PASSWORD } from '../utils/config';
 import { 
   BookOpen, 
   Users, 
@@ -1080,7 +1081,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
       setTeacherEmployeeId('');
       setTeacherDesignation('Lecturer');
 
-      triggerNotification(`Teacher ${newTeacher.name} registered. Default login password: zeeshan123`);
+      triggerNotification(`Teacher ${newTeacher.name} registered. Default login password: ${DEFAULT_TEMP_PASSWORD}`);
     } catch (err: any) {
       console.error(err);
       triggerNotification(err.message || "Failed to onboard faculty.", true);

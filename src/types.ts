@@ -8,7 +8,6 @@ export interface Student {
   batch: 'Spring' | 'Summer' | 'Fall';
   semester?: string;
   email?: string;
-  password?: string;
 }
 
 export interface GA {

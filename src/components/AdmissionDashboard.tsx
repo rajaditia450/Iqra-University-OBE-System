@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { apiService } from '../services/apiService';
 import { Student, Department, Program } from '../types';
+import { DEFAULT_TEMP_PASSWORD } from '../utils/config';
 import * as XLSX from 'xlsx';
 import StudentDirectory from './admission/StudentDirectory';
 import StudentDelete from './admission/StudentDelete';
@@ -328,7 +329,7 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
 
         const created = await apiService.createStudent(newStudent);
         setStudents(prev => [...prev, created]);
-        setSuccessMsg(`Student "${cleanName}" has been successfully registered. Default password is zeeshan123.`);
+        setSuccessMsg(`Student "${cleanName}" has been successfully registered. Default password is ${DEFAULT_TEMP_PASSWORD}.`);
         resetForm();
       }
 
@@ -557,7 +558,7 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
 
       setImportStatus({
         type: 'success',
-        message: `Successfully registered ${results.length} new students with default password 'zeeshan123'! Any rows with errors were skipped.`
+        message: `Successfully registered ${results.length} new students with default password '${DEFAULT_TEMP_PASSWORD}'! Any rows with errors were skipped.`
       });
       setPreviewData([]);
       setImportFile(null);

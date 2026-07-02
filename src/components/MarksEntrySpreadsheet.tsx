@@ -25,6 +25,7 @@ interface MarksEntrySpreadsheetProps {
   handleWizardPartition: (categoryName: string, unitNo: number, numQuestions: number) => void;
   handleClearInlineQuestions: (categoryName: string, unitNo: number) => void;
   handleOpenUnitEditor?: (categoryName: string, unitIndex?: number) => void; 
+  onShowNotification?: (message: string, type?: 'success' | 'error' | 'info') => void;
 }
 
 interface ColumnGroup {
@@ -56,7 +57,8 @@ export default function MarksEntrySpreadsheet({
   handleAddInlineQuestion,
   handleWizardPartition,
   handleClearInlineQuestions,
-  handleOpenUnitEditor
+  handleOpenUnitEditor,
+  onShowNotification
 }: MarksEntrySpreadsheetProps) {
   
   // 1. Get list of all active categories (percentage > 0 && units > 0)
@@ -546,7 +548,11 @@ export default function MarksEntrySpreadsheet({
                                     if (val === '' || /^\d*\.?\d*$/.test(val)) {
                                       const numVal = (val === '' || val === '.') ? 0 : parseFloat(val);
                                       if (numVal > col.maxMarks) {
-                                        alert(`Warning: Entered marks (${numVal}) cannot be greater than the maximum marks (${col.maxMarks}) allowed for this assessment.\n\nPlease enter a value less than or equal to ${col.maxMarks}.`);
+                                        if (onShowNotification) {
+                                          onShowNotification(`Warning: Entered marks (${numVal}) cannot be greater than the maximum marks (${col.maxMarks}) allowed for this assessment.`, 'error');
+                                        } else {
+                                          console.warn(`Warning: Entered marks (${numVal}) cannot be greater than the maximum marks (${col.maxMarks}) allowed for this assessment.`);
+                                        }
                                         return;
                                       }
                                       if (col.type === 'question' && col.qId && col.unitNo) {
@@ -565,7 +571,11 @@ export default function MarksEntrySpreadsheet({
                                         handleSaveUnitDirectMark(student.regNo, currentCategory.name, col.unitNo, 0);
                                       }
                                     } else if (val > col.maxMarks) {
-                                      alert(`Warning: Went over the maximum marks limit. Reverting to maximum (${col.maxMarks}m).`);
+                                      if (onShowNotification) {
+                                        onShowNotification(`Warning: Went over the maximum marks limit. Reverting to maximum (${col.maxMarks}m).`, 'error');
+                                      } else {
+                                        console.warn(`Warning: Went over the maximum marks limit. Reverting to maximum (${col.maxMarks}m).`);
+                                      }
                                       if (col.type === 'question' && col.qId && col.unitNo) {
                                         handleSaveQuestionMark(student.regNo, currentCategory.name, col.unitNo, col.qId, col.maxMarks);
                                       } else if (col.type === 'direct' && col.unitNo) {
