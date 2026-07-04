@@ -488,30 +488,27 @@ const refreshAccessToken = async (): Promise<string | null> => {
   const refreshToken = localStorage.getItem('refresh');
   if (!refreshToken) return null;
 
-  const endpoints = [
-    `${BASE_URL}/auth/token/refresh/`,
-    `${BASE_URL}/auth/refresh/`,
-    `${BASE_URL}/token/refresh/`
-  ];
-  for (const url of endpoints) {
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refresh: refreshToken }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.access) {
-          // SECURITY NOTE: Storing JWT tokens in localStorage is susceptible to XSS.
-          // For production hardening, transition to using secure, httpOnly cookies set by the backend.
-          localStorage.setItem('access', data.access);
-          return data.access;
+  const url = `${BASE_URL}/auth/token/refresh/`;
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh: refreshToken }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.access) {
+        // SECURITY NOTE: Storing JWT tokens in localStorage is susceptible to XSS.
+        // For production hardening, transition to using secure, httpOnly cookies set by the backend.
+        localStorage.setItem('access', data.access);
+        if (data.refresh) {
+          localStorage.setItem('refresh', data.refresh);
         }
+        return data.access;
       }
-    } catch (e) {
-      console.warn(`Token refresh failed on endpoint ${url}:`, e);
     }
+  } catch (e) {
+    console.warn(`Token refresh failed on endpoint ${url}:`, e);
   }
   return null;
 };
@@ -635,6 +632,10 @@ const fetchWithTimeout = async (url: string, options: RequestInit = {}, timeoutM
   return response;
 };
 
+const isBackendUser = (): boolean => {
+  return !!localStorage.getItem('access');
+};
+
 export const apiService = {
   async checkHealth(): Promise<boolean> {
     try {
@@ -687,9 +688,15 @@ export const apiService = {
         headers: getHeaders(),
         body: JSON.stringify(data),
       }, 8000);
-      if (!response.ok) throw new Error('Failed to update department on server');
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.detail || errData.error || errData.message || 'Failed to update department on server');
+      }
       return response.json();
     } catch (err) {
+      if (isBackendUser()) {
+        throw err;
+      }
       console.warn("Saving department changes strictly in client-side storage (mock fallback active).");
       const localData = getLocalStorageData();
       const updatedDepts = localData.departments.map(d => {
@@ -711,9 +718,15 @@ export const apiService = {
         headers: getHeaders(),
         body: JSON.stringify(data),
       }, 8000);
-      if (!response.ok) throw new Error('Failed to update program on server');
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.detail || errData.error || errData.message || 'Failed to update program on server');
+      }
       return response.json();
     } catch (err) {
+      if (isBackendUser()) {
+        throw err;
+      }
       console.warn("Saving program changes strictly in client-side storage (mock fallback active).");
       const localData = getLocalStorageData();
       const updatedPrograms = localData.programs.map(p => {
@@ -737,7 +750,12 @@ export const apiService = {
         body: JSON.stringify(data),
       }, 8000);
       if (response.ok) return response.json();
+      const errData = await response.json().catch(() => ({}));
+      throw new Error(errData.detail || errData.error || errData.message || 'Failed to update course on server');
     } catch (err) {
+      if (isBackendUser()) {
+        throw err;
+      }
       // Squelch fetch error and update locally
     }
     const localData = getLocalStorageData();
@@ -763,8 +781,14 @@ export const apiService = {
         const updatedCourses = localData.courses.filter(c => c.id !== id);
         saveLocalStorageData({ ...localData, courses: updatedCourses });
         return true;
+      } else {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.detail || errData.error || errData.message || 'Failed to delete course on server');
       }
     } catch (err) {
+      if (isBackendUser()) {
+        throw err;
+      }
       console.warn("Backend API for course delete offline. Fallback to local storage.");
     }
     const localData = getLocalStorageData();
@@ -782,9 +806,13 @@ export const apiService = {
               method: 'POST',
               headers: getHeaders(),
               body: JSON.stringify(ga),
-            }, 3000).catch(e => console.warn("Failed to save GA to backend", ga.id, e));
+            }, 3000).catch(e => {
+              if (isBackendUser()) throw e;
+              console.warn("Failed to save GA to backend", ga.id, e);
+            });
           }));
         } catch (gaErr) {
+          if (isBackendUser()) throw gaErr;
           console.warn("Failed to batch save GAs to backend", gaErr);
         }
       }
@@ -794,7 +822,10 @@ export const apiService = {
         headers: getHeaders(),
         body: JSON.stringify(data),
       }, 8000);
-      if (!response.ok) throw new Error('Failed to create program on server');
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.detail || errData.error || errData.message || 'Failed to create program on server');
+      }
       const responseData = await response.json();
 
       const localData = getLocalStorageData();
@@ -804,6 +835,9 @@ export const apiService = {
 
       return responseData;
     } catch (err) {
+      if (isBackendUser()) {
+        throw err;
+      }
       console.warn("Creating program on backend failed or timed out. Falling back to local storage.", err);
       const localData = getLocalStorageData();
       const updatedPrograms = [...localData.programs, data];
@@ -820,7 +854,10 @@ export const apiService = {
         headers: getHeaders(),
         body: JSON.stringify(data),
       }, 8000);
-      if (!response.ok) throw new Error('Failed to create course on server');
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.detail || errData.error || errData.message || 'Failed to create course on server');
+      }
       const responseData = await response.json();
 
       const localData = getLocalStorageData();
@@ -829,6 +866,9 @@ export const apiService = {
 
       return responseData;
     } catch (err) {
+      if (isBackendUser()) {
+        throw err;
+      }
       console.warn("Creating course on backend failed or timed out. Falling back to local storage.", err);
       const localData = getLocalStorageData();
       const updatedCourses = [...localData.courses, data];
@@ -895,11 +935,28 @@ export const apiService = {
         headers: getHeaders(),
         body: JSON.stringify({ courses }),
       }, 8000);
-      if (response.ok) {
-        const data = await response.json();
-        if (Array.isArray(data)) return data;
+
+      if (response.status === 207) {
+        const data = await response.json().catch(() => ({}));
+        if (data && data.errors && Array.isArray(data.errors)) {
+          const failedCoursesMsg = data.errors.map((e: any) => `${e.courseCode || e.course_code || 'Course'}: ${e.message || e.error || 'Unknown error'}`).join(', ');
+          throw new Error(`Some course mappings failed to sync: ${failedCoursesMsg}`);
+        }
+        throw new Error('Partial success (207) but failed to sync some courses.');
       }
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.detail || errData.error || errData.message || 'Failed to save instructor courses on server');
+      }
+
+      const data = await response.json();
+      if (Array.isArray(data)) return data;
+      return data.courses || courses;
     } catch (err) {
+      if (isBackendUser()) {
+        throw err;
+      }
       console.warn("Saving instructor courses to backend failed, synchronized offline instead.", err);
     }
     return courses;
@@ -1006,8 +1063,14 @@ export const apiService = {
         const updated = [...current.filter(s => s.regNo !== normalizedData.regNo), normalizedData];
         localStorage.setItem('IQRA_OBE_STUDENTS', JSON.stringify(updated));
         return normalizedData;
+      } else {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.detail || errData.error || errData.message || 'Failed to create student on server');
       }
     } catch (err) {
+      if (isBackendUser()) {
+        throw err;
+      }
       console.warn("Backend API for students offline. Adding student to local storage.");
     }
     const current = await this.getStudents();
@@ -1081,6 +1144,9 @@ export const apiService = {
         throw new Error(parsed?.message || parsed?.error || `Server error (${response.status}): ${errorText}`);
       }
     } catch (err: any) {
+      if (isBackendUser()) {
+        throw err;
+      }
       if (err.message && (err.message.includes('Server error') || err.message.includes('validation') || err.message.includes('not found') || err.message.includes('Conflict'))) {
         throw err;
       }
@@ -1118,6 +1184,9 @@ export const apiService = {
         throw new Error(parsed?.message || parsed?.error || `Server error (${response.status}): ${errorText}`);
       }
     } catch (err: any) {
+      if (isBackendUser()) {
+        throw err;
+      }
       if (err.message && (err.message.includes('Server error') || err.message.includes('validation') || err.message.includes('Conflict'))) {
         throw err;
       }
