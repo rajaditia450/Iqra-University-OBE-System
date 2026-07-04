@@ -9,6 +9,7 @@ import StudentDashboard from './components/StudentDashboard';
 import ComingSoon from './components/ComingSoon';
 import Toast from './components/Toast';
 import { AnimatePresence, motion } from 'motion/react';
+import { apiService } from './services/apiService';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<{ type: UserType; name: string } | null>(null);
@@ -32,6 +33,44 @@ export default function App() {
     return () => {
       window.removeEventListener('backend-offline-detected', handleOfflineDetected);
       window.removeEventListener('backend-online-detected', handleOnlineDetected);
+    };
+  }, []);
+
+  // Periodic and on-demand health check probe to GET /api/health/
+  useEffect(() => {
+    let timerId: any = null;
+
+    const runProbe = async () => {
+      if (timerId) clearTimeout(timerId);
+      const isHealthy = await apiService.checkHealth();
+      const wasOffline = localStorage.getItem('backend_offline') === 'true';
+
+      if (isHealthy) {
+        if (wasOffline) {
+          localStorage.setItem('backend_offline', 'false');
+          setIsOfflineMode(false);
+        }
+      } else {
+        if (!wasOffline) {
+          localStorage.setItem('backend_offline', 'true');
+          setIsOfflineMode(true);
+        }
+      }
+
+      // 5s when offline (fast retry), 20s when online (low overhead)
+      const delay = isHealthy ? 20000 : 5000;
+      timerId = setTimeout(runProbe, delay);
+    };
+
+    runProbe();
+
+    window.addEventListener('focus', runProbe);
+    window.addEventListener('online', runProbe);
+
+    return () => {
+      if (timerId) clearTimeout(timerId);
+      window.removeEventListener('focus', runProbe);
+      window.removeEventListener('online', runProbe);
     };
   }, []);
 
@@ -66,8 +105,13 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const handleSessionExpired = () => {
-      setToastMsg("Your session has expired. Please log in again to preserve real-time sync with the server.");
+    const handleSessionExpired = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      if (customEvent.detail?.isPasswordReset) {
+        setToastMsg("An administrator has reset your password or a password change is required. You must change your default password to continue.");
+      } else {
+        setToastMsg("Your session has expired. Please log in again to preserve real-time sync with the server.");
+      }
       handleLogout();
     };
     window.addEventListener('session-expired', handleSessionExpired);

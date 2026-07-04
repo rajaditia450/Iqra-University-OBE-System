@@ -608,6 +608,25 @@ const fetchWithTimeout = async (url: string, options: RequestInit = {}, timeoutM
     }
   }
 
+  // If Forbidden (403), check if it's due to required password change
+  if (response.status === 403 && !url.includes('/auth/login')) {
+    try {
+      const clonedRes = response.clone();
+      const body = await clonedRes.json();
+      if (body && (body.detail?.toLowerCase().includes('password change') || body.detail?.toLowerCase().includes('must_change_password') || body.detail?.toLowerCase().includes('password_change'))) {
+        const savedUserStr = localStorage.getItem('IQRA_OBE_LOGGED_IN_USER');
+        if (savedUserStr) {
+          try {
+            const user = JSON.parse(savedUserStr);
+            user.mustChangePassword = true;
+            localStorage.setItem('IQRA_OBE_LOGGED_IN_USER', JSON.stringify(user));
+          } catch (e) {}
+        }
+        window.dispatchEvent(new CustomEvent('session-expired', { detail: { isPasswordReset: true } }));
+      }
+    } catch (e) {}
+  }
+
   // If STILL unauthorized (401), trigger session expiration to alert user and logout gracefully
   if (response.status === 401 && !url.includes('/auth/login') && !url.includes('/refresh')) {
     window.dispatchEvent(new CustomEvent('session-expired'));
@@ -617,6 +636,21 @@ const fetchWithTimeout = async (url: string, options: RequestInit = {}, timeoutM
 };
 
 export const apiService = {
+  async checkHealth(): Promise<boolean> {
+    try {
+      const controller = new AbortController();
+      const id = setTimeout(() => controller.abort(), 3000);
+      const response = await fetch(`${BASE_URL}/health/`, {
+        signal: controller.signal,
+        headers: { 'Accept': 'application/json' }
+      });
+      clearTimeout(id);
+      return response.ok;
+    } catch (e) {
+      return false;
+    }
+  },
+
   async getAllData(): Promise<OBEData> {
     try {
       const [depts, programs, gas, courses] = await Promise.all([
