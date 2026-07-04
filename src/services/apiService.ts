@@ -1,6 +1,6 @@
 import { OBEData, Department, Program, GA, Course, ProgramObjective, InstructorCourse, Student } from '../types';
 
-export const BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:8000/api';
+export const BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL || 'https://zeeshanbalti.pythonanywhere.com/api';
 
 // Detailed institutional mock data for Iqra University OBE fallback
 const DEFAULT_FALLBACK_DATA: OBEData = {
