@@ -537,7 +537,8 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
 
     try {
       setLoading(true);
-      const createdPromises = validStudentsOnly.map(async (ps) => {
+      const results: Student[] = [];
+      for (const ps of validStudentsOnly) {
         const payload: Student = {
           regNo: ps.regNo,
           name: ps.name,
@@ -547,10 +548,9 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
           batch: ps.batch,
           semester: ps.semester
         };
-        return await apiService.createStudent(payload);
-      });
-
-      const results = await Promise.all(createdPromises);
+        const created = await apiService.createStudent(payload);
+        results.push(created);
+      }
       setStudents(prev => {
         const filterRegs = results.map(r => r.regNo);
         return [...prev.filter(s => !filterRegs.includes(s.regNo)), ...results];
