@@ -49,6 +49,8 @@ export interface Course {
   mappedGAs: string[]; // array of GA ids
   departmentId: string;
   programId?: string; // separate courses for each program
+  creditHours?: number;
+  courseType?: 'Theory' | 'Lab';
 }
 
 export interface OBEData {

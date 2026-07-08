@@ -275,6 +275,8 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
   const [courseCode, setCourseCode] = useState('');
   const [courseTitle, setCourseTitle] = useState('');
   const [courseType, setCourseType] = useState<'core' | 'elective'>('core');
+  const [courseCreditHours, setCourseCreditHours] = useState<number>(3);
+  const [courseSubtype, setCourseSubtype] = useState<'Theory' | 'Lab'>('Theory');
   const [courseDept, setCourseDept] = useState('computing');
   const [courseProg, setCourseProg] = useState('bscs');
   const [courseGAs, setCourseGAs] = useState<string[]>([]);
@@ -641,7 +643,8 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
         if (Array.isArray(fetchedTeachers)) {
           loadedTeachers = fetchedTeachers.map((t: any) => ({
             ...t,
-            id: t.employeeId || t.employee_id || t.id,
+            id: t.id,
+            employeeId: t.employeeId || t.employee_id || t.id,
             name: t.name,
             email: t.email,
             departmentId: t.departmentId || t.department_id
@@ -807,6 +810,8 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
     // 2. We want to construct or update the list of InstructorCourses.
     // For each teacher assignment, we make sure an InstructorCourse exists.
     // If a course is not assigned to any teacher, it won't appear in the instructor's courses.
+    const assignmentMap = new Map<string, { teacherId: string; courseCode: string; programId?: string; academicYear?: string }>();
+
     const updatedInstructorCourses: InstructorCourse[] = currentAssignments.map(assignment => {
       const teacher = currentTeachers.find(t => matchTeacher(t, assignment.teacherId));
       const course = currentCourses.find(c => c.code === assignment.courseCode);
@@ -817,12 +822,20 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
       const finalProgramId = assignment.programId || fallbackProgramId;
       const matchedProg = programs.find(p => p.id === finalProgramId);
 
-      const teacherIdForId = teacher ? getTeacherId(teacher) : assignment.teacherId;
-      const academicYear = assignment.academicYear || '';
-      const termSuffix = academicYear
-        ? `-${academicYear.toLowerCase().replace(/ /g, '')}`
-        : '';
-      const uniqId = `course-assigned-${assignment.courseCode}-${teacherIdForId}-${finalProgramId}${termSuffix}`;
+      const employeeId = teacher?.employeeId || assignment.teacherId;
+      let academicYear = assignment.academicYear || 'Fall-2024';
+      academicYear = academicYear.replace(/ /g, '-');
+      if (academicYear) {
+        academicYear = academicYear.charAt(0).toUpperCase() + academicYear.slice(1);
+      }
+      const uniqId = `course-assigned-${assignment.courseCode}-${employeeId}-${finalProgramId}-${academicYear}`;
+
+      assignmentMap.set(uniqId, {
+        teacherId: employeeId,
+        courseCode: assignment.courseCode,
+        programId: finalProgramId || undefined,
+        academicYear: academicYear || 'Fall-2024'
+      });
 
       // Find matching students for this course based on bindings
       const studentRegs = currentBindings
@@ -889,19 +902,19 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
         id: existingCourse?.id || uniqId,
         code: assignment.courseCode,
         title: finalTitle,
-        courseType: 'Theory',
+        courseType: course?.courseType || 'Theory',
         departmentId: course?.departmentId || 'computing',
         departmentName: matchedDept?.name || 'Department of Computing and Technology',
         programId: finalProgramId,
         programName: matchedProg?.name || 'Bachelor of Science in Computer Science',
-        creditHours: 3,
+        creditHours: course?.creditHours !== undefined ? course.creditHours : 3,
         categories: existingCourse?.categories || standardCategories,
         unitsData: existingCourse?.unitsData || standardUnitsData,
         students: courseStudents,
         obeQuestions: existingCourse?.obeQuestions || [],
         obeMarks: existingCourse?.obeMarks || {},
         selectedGradingSystem: existingCourse?.selectedGradingSystem || 'relative',
-        academicYear: assignment.academicYear || existingCourse?.academicYear || 'Fall-2024',
+        academicYear: academicYear || existingCourse?.academicYear || 'Fall-2024',
         status: assignment.status || existingCourse?.status || 'active'
       };
     });
@@ -919,8 +932,33 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
               ic.students.map(s => ({ regNo: s.regNo, name: s.name }))
             );
           } catch (e: any) {
-            console.error('Enrollment sync error:', e);
-            // Non-blocking notification
+            console.warn('Enrollment sync failed, attempting self-healing for:', ic.id, e);
+            const errMsg = e.message || '';
+            if (errMsg.toLowerCase().includes('not found')) {
+              // Try to recreate assignment on backend
+              const details = assignmentMap.get(ic.id);
+              if (details) {
+                try {
+                  console.log('Re-creating missing assignment on backend for self-healing:', details);
+                  await apiService.assignCourse(
+                    details.teacherId,
+                    details.courseCode,
+                    details.programId,
+                    details.academicYear
+                  );
+                  // Retry enrollment
+                  await apiService.enrollStudents(
+                    ic.id,
+                    ic.students.map(s => ({ regNo: s.regNo, name: s.name }))
+                  );
+                  console.log('Self-healing enrollment sync successful for:', ic.id);
+                  continue; // Succeeded! Skip warning toast
+                } catch (retryErr: any) {
+                  console.error('Self-healing retry failed:', retryErr);
+                }
+              }
+            }
+            // If self-healing failed or was not applicable, trigger warning toast
             triggerNotification(`Enrollment sync warning: ${e.message}`, true);
           }
         }
@@ -966,7 +1004,9 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
       type: courseType,
       departmentId: courseDept,
       programId: courseProg,
-      mappedGAs: courseGAs.length > 0 ? courseGAs : ['GA-1', 'GA-2']
+      mappedGAs: courseGAs.length > 0 ? courseGAs : ['GA-1', 'GA-2'],
+      creditHours: courseCreditHours,
+      courseType: courseSubtype
     };
 
     try {
@@ -978,6 +1018,8 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
       setCourseCode('');
       setCourseTitle('');
       setCourseGAs([]);
+      setCourseCreditHours(3);
+      setCourseSubtype('Theory');
 
       triggerNotification(`Course ${uppercaseCode} - ${newCourse.title} created successfully!`);
     } catch (err) {
@@ -1289,18 +1331,19 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
            a.programId === programId
     );
     const t = teachers.find(x => matchTeacher(x, teacherId));
-    const empId = t ? getTeacherId(t) : teacherId;
+    const employeeId = t?.employeeId || teacherId;
     const assignmentProgId = assignment?.programId || programId;
     const finalProgId = assignmentProgId || courses.find(c => c.code === courseCode)?.programId || programs.find(p => p.departmentId === managedDeptId)?.id || 'bscs';
     
-    const academicYear = assignment?.academicYear || '';
-    const termSuffix = academicYear
-      ? `-${academicYear.toLowerCase().replace(/ /g, '')}`
-      : '';
-    const backendCourseId = `course-assigned-${courseCode}-${empId}-${finalProgId}${termSuffix}`;
+    let acadYear = assignment?.academicYear || 'Fall-2024';
+    acadYear = acadYear.replace(/ /g, '-');
+    if (acadYear) {
+      acadYear = acadYear.charAt(0).toUpperCase() + acadYear.slice(1);
+    }
+    const backendCourseId = `course-assigned-${courseCode}-${employeeId}-${finalProgId}-${acadYear}`;
 
     try {
-      await apiService.removeCourseAssignment(teacherId, courseCode, programId, academicYear);
+      await apiService.removeCourseAssignment(teacherId, courseCode, programId, acadYear);
       await apiService.deleteInstructorCourse(backendCourseId);
     } catch (err: any) {
       console.warn("Failed to remove course assignment or instructor course from backend. Syncing locally.", err);
@@ -1337,12 +1380,13 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
     const defaultDeptProgram = programs.find(p => p.departmentId === managedDeptId)?.id || 'bscs';
     const fallbackProgramId = course?.programId || programs.find(p => p.departmentId === course?.departmentId)?.id || defaultDeptProgram;
     const finalProgramId = assignment.programId || fallbackProgramId;
-    const teacherIdForId = teacher ? getTeacherId(teacher) : assignment.teacherId;
-    const academicYear = assignment.academicYear || 'Fall-2024';
-    const termSuffix = academicYear
-      ? `-${academicYear.toLowerCase().replace(/ /g, '')}`
-      : '';
-    const courseId = `course-assigned-${assignment.courseCode}-${teacherIdForId}-${finalProgramId}${termSuffix}`;
+    const employeeId = teacher?.employeeId || assignment.teacherId;
+    let acadYear = assignment.academicYear || 'Fall-2024';
+    acadYear = acadYear.replace(/ /g, '-');
+    if (acadYear) {
+      acadYear = acadYear.charAt(0).toUpperCase() + acadYear.slice(1);
+    }
+    const courseId = `course-assigned-${assignment.courseCode}-${employeeId}-${finalProgramId}-${acadYear}`;
 
     if (!window.confirm(`Are you sure you want to CLOSE THE SEMESTER for course ${assignment.courseCode} (${course?.title || ''})?\n\nThis will lock the course, snapshot current student marks, compute final letter grades & GPA, and finalize official transcripts. Instructors will NO LONGER be able to modify any marks.`)) {
       return;
@@ -1350,7 +1394,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
 
     try {
       // 1. Hit the backend finalize-course endpoint
-      await apiService.finalizeCourse(courseId, academicYear);
+      await apiService.finalizeCourse(courseId, acadYear);
 
       // 2. Locally mark assignment as closed
       const updatedAssignments = teacherAssignments.map(a => {
@@ -1366,7 +1410,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
       // 3. Instantly sync changes to InstructorCourses
       syncToInstructorCourses(courses, teachers, updatedAssignments, studentBindings, students);
 
-      triggerNotification(`Successfully finalized and closed ${assignment.courseCode} for academic year ${academicYear}. Transcripts generated!`);
+      triggerNotification(`Successfully finalized and closed ${assignment.courseCode} for academic year ${acadYear}. Transcripts generated!`);
     } catch (err: any) {
       console.error(err);
       triggerNotification(err.message || "Failed to finalize and close course.", true);
@@ -2040,6 +2084,30 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                     </select>
                   </div>
                   <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Course Subtype</label>
+                    <select 
+                      value={courseSubtype} 
+                      onChange={(e) => setCourseSubtype(e.target.value as 'Theory' | 'Lab')}
+                      className="w-full px-4 py-2.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none transition-all"
+                    >
+                      <option value="Theory">Theory</option>
+                      <option value="Lab">Lab (Practical)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Credit Hours</label>
+                    <select 
+                      value={courseCreditHours} 
+                      onChange={(e) => setCourseCreditHours(parseInt(e.target.value, 10))}
+                      className="w-full px-4 py-2.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none transition-all"
+                    >
+                      <option value="1">1 Credit Hour</option>
+                      <option value="2">2 Credit Hours</option>
+                      <option value="3">3 Credit Hours</option>
+                      <option value="4">4 Credit Hours</option>
+                    </select>
+                  </div>
+                  <div>
                     <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Department</label>
                     <select 
                       value={courseDept} 
@@ -2160,6 +2228,8 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                         <th className="px-5 py-3 text-left">Code</th>
                         <th className="px-5 py-3 text-left">Title</th>
                         <th className="px-5 py-3 text-left">Type</th>
+                        <th className="px-5 py-3 text-left">Subtype</th>
+                        <th className="px-5 py-3 text-left">Credits</th>
                         <th className="px-5 py-3 text-left">Curriculum Program</th>
                         <th className="px-5 py-3 text-right">Actions</th>
                       </tr>
@@ -2177,6 +2247,16 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                               }`}>
                                 {c.type}
                               </span>
+                            </td>
+                            <td className="px-5 py-3.5">
+                              <span className={`inline-block px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${
+                                c.courseType === 'Lab' ? 'bg-emerald-50 text-emerald-600' : 'bg-sky-50 text-sky-600'
+                              }`}>
+                                {c.courseType || 'Theory'}
+                              </span>
+                            </td>
+                            <td className="px-5 py-3.5 font-mono text-slate-700 font-bold">
+                              {c.creditHours !== undefined ? `${c.creditHours} Cr. Hr` : '3 Cr. Hr'}
                             </td>
                             <td className="px-5 py-3.5 text-slate-500">{matchedProg?.name || 'Computing Global'}</td>
                             <td className="px-5 py-3.5 text-right">
