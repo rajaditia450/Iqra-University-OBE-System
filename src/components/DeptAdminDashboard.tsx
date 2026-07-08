@@ -820,7 +820,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
       const teacherIdForId = teacher ? getTeacherId(teacher) : assignment.teacherId;
       const academicYear = assignment.academicYear || '';
       const termSuffix = academicYear
-        ? `-${academicYear.toLowerCase().replace(/\s+/g, '')}`
+        ? `-${academicYear.toLowerCase().replace(/ /g, '')}`
         : '';
       const uniqId = `course-assigned-${assignment.courseCode}-${teacherIdForId}-${finalProgramId}${termSuffix}`;
 
@@ -1297,15 +1297,18 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
     
     const academicYear = assignment?.academicYear || '';
     const termSuffix = academicYear
-      ? `-${academicYear.toLowerCase().replace(/\s+/g, '')}`
+      ? `-${academicYear.toLowerCase().replace(/ /g, '')}`
       : '';
     const backendCourseId = `course-assigned-${courseCode}-${empId}-${finalProgId}${termSuffix}`;
 
     try {
-      await apiService.removeCourseAssignment(teacherId, courseCode, programId);
+      await apiService.removeCourseAssignment(teacherId, courseCode, programId, academicYear);
       await apiService.deleteInstructorCourse(backendCourseId);
-    } catch (err) {
+    } catch (err: any) {
       console.warn("Failed to remove course assignment or instructor course from backend. Syncing locally.", err);
+      if (err && err.message) {
+        triggerNotification(`Warning: ${err.message}`, true);
+      }
     }
 
     const updatedAssignments = teacherAssignments.filter(
@@ -1339,7 +1342,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
     const teacherIdForId = teacher ? getTeacherId(teacher) : assignment.teacherId;
     const academicYear = assignment.academicYear || 'Fall-2024';
     const termSuffix = academicYear
-      ? `-${academicYear.toLowerCase().replace(/\s+/g, '')}`
+      ? `-${academicYear.toLowerCase().replace(/ /g, '')}`
       : '';
     const courseId = `course-assigned-${assignment.courseCode}-${teacherIdForId}-${finalProgramId}${termSuffix}`;
 

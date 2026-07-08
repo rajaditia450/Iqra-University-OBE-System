@@ -895,16 +895,15 @@ export const apiService = {
   },
 
   async deleteInstructorCourse(courseId: string): Promise<boolean> {
-    try {
-      const res = await fetchWithTimeout(`${BASE_URL}/instructor/courses/${courseId}/`, {
-        method: 'DELETE',
-        headers: getHeaders(),
-      }, 8000);
-      return res.ok;
-    } catch (e) {
-      console.warn('Failed to delete instructor course from backend', e);
-      return false;
+    const res = await fetchWithTimeout(`${BASE_URL}/instructor/courses/${courseId}/`, {
+      method: 'DELETE',
+      headers: getHeaders(),
+    }, 8000);
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || errData.message || 'Failed to delete course');
     }
+    return true;
   },
 
   getLocalStorageData(): OBEData {
@@ -1162,31 +1161,18 @@ export const apiService = {
   },
 
   async deleteStudent(regNo: string): Promise<boolean> {
-    const currentStudents = await this.getStudents();
-    const matchedStudent = currentStudents.find(s => s.regNo.toLowerCase() === regNo.toLowerCase());
-    const backendId = matchedStudent ? (matchedStudent as any).id : null;
-    const urlSuffix = backendId !== undefined && backendId !== null ? backendId : regNo;
-
     try {
-      const response = await fetchWithTimeout(`${BASE_URL}/students/${urlSuffix}/`, {
+      const response = await fetchWithTimeout(`${BASE_URL}/students/${regNo}/`, {
         method: 'DELETE',
         headers: getHeaders(),
       }, 8000);
 
-      // Attempt to cascade delete to user account and admission student records on backend if endpoints are available
-      try {
-        await fetchWithTimeout(`${BASE_URL}/users/${regNo}/`, {
-          method: 'DELETE',
-          headers: getHeaders(),
-        }, 3000).catch(() => {});
-      } catch (e) {}
-
-      try {
-        await fetchWithTimeout(`${BASE_URL}/admission-students/${regNo}/`, {
-          method: 'DELETE',
-          headers: getHeaders(),
-        }, 3000).catch(() => {});
-      } catch (e) {}
+      if (!response.ok) {
+        const errorText = await response.text();
+        let parsed;
+        try { parsed = JSON.parse(errorText); } catch (e) {}
+        throw new Error(parsed?.message || parsed?.error || `Server error (${response.status}): ${errorText}`);
+      }
 
       // Always clear local storage student cache and related student-specific records
       const current = await this.getStudents();
@@ -1363,11 +1349,11 @@ export const apiService = {
     return res.json();
   },
 
-  async removeCourseAssignment(teacherId: string, courseCode: string, programId?: string) {
+  async removeCourseAssignment(teacherId: string, courseCode: string, programId?: string, academicYear?: string) {
     const res = await fetchWithTimeout(`${BASE_URL}/admin/course-assignments/`, {
       method: 'DELETE',
       headers: getHeaders(),
-      body: JSON.stringify({ teacherId, courseCode, programId }),
+      body: JSON.stringify({ teacherId, courseCode, programId, academicYear }),
     }, 8000);
     if (!res.ok) throw new Error('Failed to remove course assignment');
     return;
