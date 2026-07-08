@@ -914,10 +914,8 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
       for (const ic of updatedInstructorCourses) {
         if (ic.students && ic.students.length > 0) {
           try {
-            const matchedCourse = currentCourses.find(c => c.code === ic.code);
-            const backendCourseId = matchedCourse?.id || ic.code;
             await apiService.enrollStudents(
-              backendCourseId,
+              ic.id,
               ic.students.map(s => ({ regNo: s.regNo, name: s.name }))
             );
           } catch (e: any) {
