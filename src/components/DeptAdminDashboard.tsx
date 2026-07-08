@@ -24,7 +24,13 @@ import {
   Info,
   BarChart3,
   Lock,
-  Award
+  Award,
+  Calendar,
+  ChevronDown,
+  ChevronUp,
+  Clock,
+  CheckCircle2,
+  ArrowRight
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import FacultyDirectoryTab from './admin/FacultyDirectoryTab';
@@ -318,6 +324,18 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
     setTeacherDept(managedDeptId);
   }, [managedDeptId]);
   const [selectedCourseCodeForStudent, setSelectedCourseCodeForStudent] = useState('');
+  const [studentCourseStatuses, setStudentCourseStatuses] = useState<Record<string, Record<string, 'studied' | 'studying' | 'failed' | 'later' | 'deferred'>>>({});
+  const [studentTab, setStudentTab] = useState<'all' | 'studying' | 'failed' | 'studied' | 'deferred'>('all');
+  const [expandedSemesters, setExpandedSemesters] = useState<Record<string, boolean>>({
+    "1st": true,
+    "2nd": true,
+    "3rd": true,
+    "4th": true,
+    "5th": true,
+    "6th": true,
+    "7th": true,
+    "8th": true
+  });
 
   // Tab 6 Reports computed list
   const reportCourses = useMemo(() => {
@@ -714,6 +732,16 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
 
         localStorage.setItem('IQRA_OBE_STUDENT_BINDINGS', JSON.stringify(defaultBindings));
         setStudentBindings(defaultBindings);
+      }
+
+      // 6.5 Load Custom Student Course Statuses
+      const savedStatuses = localStorage.getItem('IQRA_OBE_STUDENT_COURSE_STATUSES');
+      if (savedStatuses) {
+        try {
+          setStudentCourseStatuses(JSON.parse(savedStatuses));
+        } catch (e) {
+          console.error("Failed to parse custom student course statuses", e);
+        }
       }
 
       // 7. Load Teacher Course Assignments from backend or fallback to Local Storage
@@ -1156,6 +1184,37 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
       return;
     }
 
+    // Validation check: Another teacher cannot teach the same course in the same program/academic year
+    const targetProg = selectedProgramForTeacher || undefined;
+    const conflictingAssignment = teacherAssignments.find(a => {
+      // Must be the same course code
+      if (a.courseCode !== selectedCourseCodeForTeacher) return false;
+      // Must be the same academic year
+      if (a.academicYear !== assignmentAcademicYear) return false;
+      // Must be a different teacher
+      if (a.teacherId === selectedTeacherId) return false;
+
+      // Program check:
+      if (targetProg) {
+        // Conflicting if the existing is "All Programs (Shared)" (undefined) or matches our target program
+        return !a.programId || a.programId === targetProg;
+      }
+      // If we are assigning to "All Programs", it conflicts with any existing assignment for this course
+      return true;
+    });
+
+    if (conflictingAssignment) {
+      const conflictingTeacher = teachers.find(t => matchTeacher(t, conflictingAssignment.teacherId));
+      const conflictingProgObj = programs.find(p => p.id === conflictingAssignment.programId);
+      const progDesc = conflictingProgObj ? conflictingProgObj.code.toUpperCase() : 'All Programs (Shared)';
+      
+      triggerNotification(
+        `Cannot assign course: ${selectedCourseCodeForTeacher} is already being taught by ${conflictingTeacher?.name || 'another teacher'} in ${progDesc} for ${assignmentAcademicYear}.`,
+        true
+      );
+      return;
+    }
+
     const newAssignment: TeacherCourseAssignment = {
       teacherId: selectedTeacherId,
       courseCode: selectedCourseCodeForTeacher,
@@ -1400,6 +1459,106 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
 
     const studentObj = students.find(s => s.regNo === regNo);
     triggerNotification(`Unenrolled ${studentObj?.name} from course ${code}`);
+  };
+
+  // Student academic pathway course status helpers
+  const getCourseStatus = (studentRegNo: string, courseCode: string): 'studied' | 'studying' | 'failed' | 'later' | 'deferred' => {
+    // 1. Is it currently bound/enrolled? If so, status is always 'studying'
+    const isStudying = studentBindings.some(
+      b => b.studentRegNo === studentRegNo && b.courseCode === courseCode
+    );
+    if (isStudying) return 'studying';
+
+    // 2. Is there an explicit override?
+    const studentOverrides = studentCourseStatuses[studentRegNo];
+    if (studentOverrides && studentOverrides[courseCode]) {
+      const overrideStatus = studentOverrides[courseCode];
+      // If override is 'studying' but it's not in bindings anymore, it means it was unenrolled, so treat as deferred/failed/etc.
+      if (overrideStatus !== 'studying') {
+        return overrideStatus;
+      }
+    }
+
+    // 3. Fallback to default calculation based on student's current semester vs course's semester
+    const student = students.find(s => s.regNo === studentRegNo);
+    if (!student) return 'deferred';
+
+    // Find the course's semester in the student's program plans
+    const coursePlan = semesterPlans.find(
+      p => p.programId === student.programId && p.courseCodes.includes(courseCode)
+    );
+
+    if (!coursePlan) {
+      // Not in the regular curriculum for this program (e.g. general department course)
+      return 'deferred';
+    }
+
+    const parseSem = (semStr: string): number => {
+      const num = parseInt(semStr);
+      return isNaN(num) ? 1 : num;
+    };
+
+    const studentSemNum = parseSem(student.semester || '1st');
+    const courseSemNum = parseSem(coursePlan.semester);
+
+    if (courseSemNum < studentSemNum) {
+      return 'studied'; // By default, courses in previous semesters are already completed
+    } else if (courseSemNum === studentSemNum) {
+      return 'deferred'; // Remaining/Deferred (not currently in bindings, but in current semester)
+    } else {
+      return 'later'; // Future semester
+    }
+  };
+
+  const updateStudentCourseStatus = (studentRegNo: string, courseCode: string, newStatus: 'studied' | 'studying' | 'failed' | 'later' | 'deferred') => {
+    // 1. Update bindings based on the new status
+    let updatedBindings = [...studentBindings];
+    const isCurrentlyEnrolled = studentBindings.some(
+      b => b.studentRegNo === studentRegNo && b.courseCode === courseCode
+    );
+
+    if (newStatus === 'studying') {
+      if (!isCurrentlyEnrolled) {
+        updatedBindings.push({ studentRegNo, courseCode });
+      }
+    } else {
+      if (isCurrentlyEnrolled) {
+        updatedBindings = updatedBindings.filter(
+          b => !(b.studentRegNo === studentRegNo && b.courseCode === courseCode)
+        );
+      }
+    }
+
+    setStudentBindings(updatedBindings);
+    localStorage.setItem('IQRA_OBE_STUDENT_BINDINGS', JSON.stringify(updatedBindings));
+    syncToInstructorCourses(courses, teachers, teacherAssignments, updatedBindings, students);
+
+    // 2. Update custom statuses
+    const updatedStatuses = {
+      ...studentCourseStatuses,
+      [studentRegNo]: {
+        ...(studentCourseStatuses[studentRegNo] || {}),
+        [courseCode]: newStatus
+      }
+    };
+    setStudentCourseStatuses(updatedStatuses);
+    localStorage.setItem('IQRA_OBE_STUDENT_COURSE_STATUSES', JSON.stringify(updatedStatuses));
+
+    const studentObj = students.find(s => s.regNo === studentRegNo);
+    const courseObj = courses.find(c => c.code === courseCode);
+    
+    // Custom notifications depending on transition
+    let msg = `Updated ${courseCode} status for ${studentObj?.name}`;
+    if (newStatus === 'studying') {
+      msg = `Enrolled ${studentObj?.name} in ${courseCode} - ${courseObj?.title}`;
+    } else if (newStatus === 'failed') {
+      msg = `Marked ${courseCode} as Failed / Backlog for ${studentObj?.name}. They need to register for this backlog course.`;
+    } else if (newStatus === 'studied') {
+      msg = `Marked ${courseCode} as Already Studied / Passed for ${studentObj?.name}.`;
+    } else if (newStatus === 'deferred') {
+      msg = `Unenrolled ${studentObj?.name} from ${courseCode} (Moved to Deferred / Remaining).`;
+    }
+    triggerNotification(msg);
   };
 
 
@@ -1941,7 +2100,6 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                         <th className="px-5 py-3 text-left">Title</th>
                         <th className="px-5 py-3 text-left">Type</th>
                         <th className="px-5 py-3 text-left">Curriculum Program</th>
-                        <th className="px-5 py-3 text-left">Mapped GAs</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-600 bg-white">
@@ -1959,9 +2117,6 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                               </span>
                             </td>
                             <td className="px-5 py-3.5 text-slate-500">{matchedProg?.name || 'Computing Global'}</td>
-                            <td className="px-5 py-3.5 font-mono text-[10px] text-slate-400 max-w-xs truncate" title={c.mappedGAs.join(', ')}>
-                              {c.mappedGAs.join(', ')}
-                            </td>
                           </tr>
                         );
                       })}
@@ -2284,32 +2439,102 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                       {/* Student Details Card */}
                       {(() => {
                         const s = students.find(x => x.regNo === selectedStudentRegNo);
-                        const matchedProg = programs.find(p => p.id === s?.programId);
+                        if (!s) return null;
+                        const matchedProg = programs.find(p => p.id === s.programId);
+                        
+                        // Get all curriculum courses for this program
+                        const progPlans = semesterPlans.filter(p => p.programId === s.programId);
+                        const curriculumCodes: string[] = Array.from(new Set(progPlans.flatMap(p => p.courseCodes))) as string[];
+
+                        let studiedCount = 0;
+                        let studyingCount = 0;
+                        let failedCount = 0;
+                        let deferredCount = 0;
+                        let laterCount = 0;
+
+                        curriculumCodes.forEach(code => {
+                          const stat = getCourseStatus(s.regNo, code);
+                          if (stat === 'studied') studiedCount++;
+                          else if (stat === 'studying') studyingCount++;
+                          else if (stat === 'failed') failedCount++;
+                          else if (stat === 'deferred') deferredCount++;
+                          else if (stat === 'later') laterCount++;
+                        });
+
+                        // Count additional enrolled courses outside standard curriculum
+                        const additionalEnrolled = selectedStudentCurrentCourses.filter(c => !curriculumCodes.includes(c.code));
+                        studyingCount += additionalEnrolled.length;
+
                         return (
-                          <div className="bg-slate-50/50 p-4 border border-slate-200/80 rounded-2xl">
-                            <div className="flex items-center justify-between">
-                              <div>
-                                <h3 className="text-sm font-bold text-slate-800">{s?.name}</h3>
-                                <p className="text-xs text-slate-500 font-mono uppercase tracking-tight">{s?.regNo}</p>
+                          <div className="space-y-4">
+                            <div className="bg-slate-50/50 p-5 border border-slate-200/80 rounded-2xl">
+                              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <h3 className="text-sm font-black text-slate-800">{s.name}</h3>
+                                    <span className="bg-slate-100 text-slate-600 text-[9px] font-bold px-2 py-0.5 rounded-md border border-slate-200 uppercase font-mono">{s.regNo}</span>
+                                  </div>
+                                  <p className="text-xs text-slate-500 mt-1">{matchedProg?.name || 'Undergraduate student'} • <span className="font-bold text-indigo-600">{s.semester || '1st'} Semester</span></p>
+                                </div>
+                                <div className="text-right flex flex-wrap md:flex-col gap-1.5 justify-start items-start md:items-end">
+                                  <span className="bg-indigo-50 text-indigo-700 text-[10px] font-bold px-2.5 py-1 rounded-full border border-indigo-100">
+                                    Managed Course Load: <span className="text-xs font-black">{studyingCount}</span> Active Courses
+                                  </span>
+                                  {studyingCount > 5 && (
+                                    <span className="bg-amber-50 text-amber-700 text-[9px] font-bold px-2 py-0.5 rounded-full border border-amber-100">
+                                      ⚠️ Overloaded (&gt; 5 courses)
+                                    </span>
+                                  )}
+                                </div>
                               </div>
-                              <div className="text-right">
-                                <span className="bg-indigo-50 text-indigo-700 text-[10px] font-bold px-2.5 py-1 rounded-full border border-indigo-100">
-                                  {matchedProg?.name} ({s?.semester || '1st'} Sem)
-                                </span>
+                            </div>
+
+                            {/* Counters Panel */}
+                            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                              <div className="bg-emerald-50/50 hover:bg-emerald-50 border border-emerald-100 rounded-xl p-3 text-center transition-all">
+                                <span className="text-[9px] font-bold text-emerald-700 uppercase tracking-wider">Completed</span>
+                                <div className="text-lg font-black text-emerald-800 mt-0.5">{studiedCount}</div>
+                              </div>
+                              <div className="bg-indigo-50/50 hover:bg-indigo-50 border border-indigo-100 rounded-xl p-3 text-center transition-all">
+                                <span className="text-[9px] font-bold text-indigo-700 uppercase tracking-wider">Studying</span>
+                                <div className="text-lg font-black text-indigo-800 mt-0.5">{studyingCount}</div>
+                              </div>
+                              <div className="bg-red-50/50 hover:bg-red-50 border border-red-100 rounded-xl p-3 text-center transition-all">
+                                <span className="text-[9px] font-bold text-red-700 uppercase tracking-wider">Backlogs / Failed</span>
+                                <div className="text-lg font-black text-red-800 mt-0.5">{failedCount}</div>
+                              </div>
+                              <div className="bg-amber-50/50 hover:bg-amber-50 border border-amber-100 rounded-xl p-3 text-center transition-all">
+                                <span className="text-[9px] font-bold text-amber-700 uppercase tracking-wider">Deferred</span>
+                                <div className="text-lg font-black text-amber-800 mt-0.5">{deferredCount}</div>
+                              </div>
+                              <div className="bg-slate-50 hover:bg-slate-100/70 border border-slate-200 rounded-xl p-3 text-center transition-all col-span-2 sm:col-span-1">
+                                <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Future</span>
+                                <div className="text-lg font-black text-slate-700 mt-0.5">{laterCount}</div>
                               </div>
                             </div>
                           </div>
                         );
                       })()}
 
-                      {/* Add Course manual binding */}
-                      <div>
-                        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3">Enroll Student in Custom Course</h4>
+                      {/* Pathway Advising policy tip */}
+                      <div className="bg-indigo-50/60 border border-indigo-100 rounded-2xl p-4 flex gap-3 text-xs text-indigo-950 leading-relaxed">
+                        <Info className="h-5 w-5 text-indigo-600 shrink-0 mt-0.5" />
+                        <div className="space-y-1">
+                          <p className="font-bold">Student Pathway Advising Note</p>
+                          <p className="text-[11px] text-slate-600 leading-relaxed">
+                            To register a student for a previous <strong>Failed / Backlog</strong> course, simply click <strong>Enroll Now</strong>. To keep their course load balanced (e.g. at 5 courses), you may drop a current semester course by marking it as <strong>Deferred / Remaining</strong>.
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Add Custom Elective or Outside Course */}
+                      <div className="bg-slate-50/40 border border-slate-200 p-4 rounded-xl space-y-2.5">
+                        <h4 className="text-[11px] font-black uppercase tracking-wider text-slate-500">Enroll in Outside / Department Elective Course</h4>
                         <form onSubmit={handleManualBindCourse} className="flex gap-3">
                           <select
                             value={selectedCourseCodeForStudent}
                             onChange={(e) => setSelectedCourseCodeForStudent(e.target.value)}
-                            className="flex-1 px-4 py-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none transition-all"
+                            className="flex-1 px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-600/10 focus:border-indigo-600 transition-all"
                             required
                           >
                             <option value="">Choose Course...</option>
@@ -2319,50 +2544,403 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                           </select>
                           <button
                             type="submit"
-                            className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 py-2 rounded-xl text-xs transition-all shadow-md flex items-center gap-1.5 shrink-0 cursor-pointer"
+                            className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs transition-all shadow-md flex items-center gap-1.5 shrink-0 cursor-pointer"
                           >
-                            <Plus className="h-3.5 w-3.5" />
+                            <Plus className="h-4 w-4" />
                             <span>Enroll</span>
                           </button>
                         </form>
                       </div>
 
-                      {/* Current Enrolled Courses */}
-                      <div>
-                        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3">Enrolled Course Catalog ({selectedStudentCurrentCourses.length} courses)</h4>
-                        {selectedStudentCurrentCourses.length === 0 ? (
-                          <div className="text-center py-6 text-slate-400 border border-dashed border-slate-200 rounded-2xl text-xs font-medium">
-                            This student has no course registrations currently. Enroll them above or trigger Auto-Enroll.
-                          </div>
-                        ) : (
-                          <div className="space-y-2">
-                            {selectedStudentCurrentCourses.map(c => (
-                              <div 
-                                key={c.code}
-                                className="bg-white border border-slate-200 p-3.5 rounded-xl shadow-sm flex items-center justify-between gap-4 hover:border-slate-300 transition-all"
-                              >
-                                <div>
-                                  <div className="flex items-center gap-2 mb-0.5">
-                                    <span className="font-mono text-[10px] font-bold text-indigo-600 uppercase">{c.code}</span>
-                                    <span className={`text-[9px] font-bold px-1.5 rounded-full capitalize ${
-                                      c.type === 'core' ? 'bg-indigo-50 text-indigo-600' : 'bg-amber-50 text-amber-600'
-                                    }`}>
-                                      {c.type}
-                                    </span>
-                                  </div>
-                                  <h5 className="text-xs font-bold text-slate-800">{c.title}</h5>
+                      {/* Filter Sub-Tabs */}
+                      <div className="flex border-b border-slate-200 gap-1 overflow-x-auto pb-1.5">
+                        <button
+                          onClick={() => setStudentTab('all')}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+                            studentTab === 'all' 
+                              ? 'bg-slate-900 text-white shadow-xs' 
+                              : 'text-slate-600 hover:bg-slate-100'
+                          }`}
+                        >
+                          📋 All Curriculum
+                        </button>
+                        <button
+                          onClick={() => setStudentTab('studying')}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap ${
+                            studentTab === 'studying' 
+                              ? 'bg-indigo-600 text-white shadow-xs' 
+                              : 'text-slate-600 hover:bg-slate-100'
+                          }`}
+                        >
+                          <BookOpen className="h-3.5 w-3.5" />
+                          Studying Now
+                        </button>
+                        <button
+                          onClick={() => setStudentTab('failed')}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap ${
+                            studentTab === 'failed' 
+                              ? 'bg-red-600 text-white shadow-xs' 
+                              : 'text-slate-600 hover:bg-slate-100'
+                          }`}
+                        >
+                          <AlertCircle className="h-3.5 w-3.5" />
+                          Failed / Backlogs
+                        </button>
+                        <button
+                          onClick={() => setStudentTab('studied')}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap ${
+                            studentTab === 'studied' 
+                              ? 'bg-emerald-600 text-white shadow-xs' 
+                              : 'text-slate-600 hover:bg-slate-100'
+                          }`}
+                        >
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                          Completed
+                        </button>
+                        <button
+                          onClick={() => setStudentTab('deferred')}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap ${
+                            studentTab === 'deferred' 
+                              ? 'bg-amber-600 text-white shadow-xs' 
+                              : 'text-slate-600 hover:bg-slate-100'
+                          }`}
+                        >
+                          <Clock className="h-3.5 w-3.5" />
+                          Deferred
+                        </button>
+                      </div>
+
+                      {/* Course Catalog List Display */}
+                      <div className="space-y-4">
+                        {(() => {
+                          const s = students.find(x => x.regNo === selectedStudentRegNo);
+                          if (!s) return null;
+
+                          const progPlans = semesterPlans.filter(p => p.programId === s.programId);
+                          const orderedSemestersList = ["1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th"];
+                          
+                          // Sort semester plans in typical ordered list
+                          const sortedPlans = progPlans.sort((a, b) => orderedSemestersList.indexOf(a.semester) - orderedSemestersList.indexOf(b.semester));
+
+                          // If showing filtered tabs (e.g. Failed, Studying, etc.)
+                          if (studentTab !== 'all') {
+                            const filteredCourses = courses.filter(c => {
+                              // Filter courses matching the specific status
+                              const isSameProg = c.programId === s.programId;
+                              const isSameDept = c.departmentId === s.departmentId;
+                              if (!isSameProg && !isSameDept) return false;
+                              
+                              const stat = getCourseStatus(s.regNo, c.code);
+                              return stat === studentTab;
+                            });
+
+                            if (filteredCourses.length === 0) {
+                              return (
+                                <div className="text-center py-10 text-slate-400 border border-dashed border-slate-200 rounded-2xl text-xs font-medium bg-slate-50/50">
+                                  No courses found with status "{studentTab.toUpperCase()}" for this student.
                                 </div>
-                                <button
-                                  onClick={() => handleManualUnbindCourse(selectedStudentRegNo, c.code)}
-                                  className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-2 rounded-xl transition-all"
-                                  title="Unenroll student"
-                                >
-                                  <Unlink className="h-3.5 w-3.5" />
-                                </button>
+                              );
+                            }
+
+                            return (
+                              <div className="space-y-2.5">
+                                {filteredCourses.map(c => {
+                                  const status = getCourseStatus(s.regNo, c.code);
+                                  return (
+                                    <div 
+                                      key={c.code}
+                                      className="bg-white border border-slate-200 p-3.5 rounded-xl shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:border-slate-300 transition-all"
+                                    >
+                                      <div>
+                                        <div className="flex items-center gap-2 mb-1">
+                                          <span className="font-mono text-[10px] font-black text-indigo-600 uppercase">{c.code}</span>
+                                          <span className={`text-[9px] font-bold px-1.5 rounded-full capitalize ${
+                                            c.type === 'core' ? 'bg-indigo-50 text-indigo-600' : 'bg-amber-50 text-amber-600'
+                                          }`}>
+                                            {c.type}
+                                          </span>
+                                        </div>
+                                        <h5 className="text-xs font-black text-slate-800">{c.title}</h5>
+                                      </div>
+
+                                      <div className="flex items-center gap-2">
+                                        {/* Status actions */}
+                                        {status === 'studying' && (
+                                          <div className="flex items-center gap-1.5">
+                                            <button
+                                              onClick={() => updateStudentCourseStatus(s.regNo, c.code, 'studied')}
+                                              className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-1 rounded-lg border border-emerald-150 transition-all flex items-center gap-1 cursor-pointer"
+                                              title="Mark course as successfully passed"
+                                            >
+                                              <Check className="h-3 w-3" />
+                                              <span>Pass</span>
+                                            </button>
+                                            <button
+                                              onClick={() => updateStudentCourseStatus(s.regNo, c.code, 'failed')}
+                                              className="bg-red-50 hover:bg-red-100 text-red-700 text-[10px] font-bold px-2 py-1 rounded-lg border border-red-150 transition-all flex items-center gap-1 cursor-pointer"
+                                              title="Mark course as failed (needs repeat)"
+                                            >
+                                              <AlertCircle className="h-3 w-3" />
+                                              <span>Fail</span>
+                                            </button>
+                                            <button
+                                              onClick={() => updateStudentCourseStatus(s.regNo, c.code, 'deferred')}
+                                              className="bg-slate-50 hover:bg-slate-100 text-slate-600 text-[10px] font-bold px-2 py-1 rounded-lg border border-slate-200 transition-all flex items-center gap-1 cursor-pointer"
+                                              title="Unenroll and defer to later"
+                                            >
+                                              <Unlink className="h-3 w-3" />
+                                              <span>Drop</span>
+                                            </button>
+                                          </div>
+                                        )}
+
+                                        {status === 'failed' && (
+                                          <div className="flex items-center gap-1.5">
+                                            <button
+                                              onClick={() => updateStudentCourseStatus(s.regNo, c.code, 'studying')}
+                                              className="bg-indigo-600 hover:bg-indigo-750 text-white text-[10px] font-bold px-3 py-1 rounded-lg transition-all flex items-center gap-1 shadow-sm cursor-pointer"
+                                              title="Enroll student in current semester as backlog repeat"
+                                            >
+                                              <Plus className="h-3 w-3" />
+                                              <span>Enroll Now</span>
+                                            </button>
+                                            <button
+                                              onClick={() => updateStudentCourseStatus(s.regNo, c.code, 'studied')}
+                                              className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2.5 py-1 rounded-lg border border-emerald-150 transition-all cursor-pointer"
+                                              title="Mark course as passed/completed"
+                                            >
+                                              <span>Mark Passed</span>
+                                            </button>
+                                          </div>
+                                        )}
+
+                                        {status === 'deferred' && (
+                                          <div className="flex items-center gap-1.5">
+                                            <button
+                                              onClick={() => updateStudentCourseStatus(s.regNo, c.code, 'studying')}
+                                              className="bg-indigo-600 hover:bg-indigo-750 text-white text-[10px] font-bold px-3 py-1 rounded-lg transition-all flex items-center gap-1 shadow-sm cursor-pointer"
+                                              title="Enroll in current term studying schedule"
+                                            >
+                                              <Plus className="h-3 w-3" />
+                                              <span>Enroll Now</span>
+                                            </button>
+                                            <button
+                                              onClick={() => updateStudentCourseStatus(s.regNo, c.code, 'studied')}
+                                              className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2.5 py-1 rounded-lg border border-emerald-150 transition-all cursor-pointer"
+                                              title="Mark as already completed"
+                                            >
+                                              <span>Mark Passed</span>
+                                            </button>
+                                          </div>
+                                        )}
+
+                                        {status === 'studied' && (
+                                          <div className="flex items-center gap-1.5">
+                                            <button
+                                              onClick={() => updateStudentCourseStatus(s.regNo, c.code, 'failed')}
+                                              className="bg-red-50 hover:bg-red-100 text-red-700 text-[10px] font-bold px-2 py-1 rounded-lg border border-red-150 transition-all cursor-pointer"
+                                              title="Change status to failed backlog"
+                                            >
+                                              <span>Mark Failed</span>
+                                            </button>
+                                            <button
+                                              onClick={() => updateStudentCourseStatus(s.regNo, c.code, 'studying')}
+                                              className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold px-2 py-1 rounded-lg border border-slate-300 transition-all cursor-pointer"
+                                              title="Repeat course enrollment"
+                                            >
+                                              <span>Enroll (Repeat)</span>
+                                            </button>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
                               </div>
-                            ))}
-                          </div>
-                        )}
+                            );
+                          }
+
+                          // General "All Curriculum" View - grouped by curriculum semesters
+                          return (
+                            <div className="space-y-4">
+                              {sortedPlans.map(plan => {
+                                const isExpanded = expandedSemesters[plan.semester] !== false;
+                                return (
+                                  <div 
+                                    key={plan.semester} 
+                                    className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-xs"
+                                  >
+                                    {/* Semester header row */}
+                                    <button
+                                      onClick={() => setExpandedSemesters({
+                                        ...expandedSemesters,
+                                        [plan.semester]: !isExpanded
+                                      })}
+                                      className="w-full bg-slate-50/55 hover:bg-slate-50 px-4 py-3 border-b border-slate-200/80 flex items-center justify-between text-left transition-all"
+                                    >
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-xs font-black text-slate-800">{plan.semester} Semester Plan</span>
+                                        <span className="bg-slate-200/60 text-slate-600 text-[9px] font-bold px-2 py-0.5 rounded-full border border-slate-200">
+                                          {plan.courseCodes.length} Courses
+                                        </span>
+                                      </div>
+                                      <div>
+                                        {isExpanded ? (
+                                          <ChevronUp className="h-4 w-4 text-slate-400" />
+                                        ) : (
+                                          <ChevronDown className="h-4 w-4 text-slate-400" />
+                                        )}
+                                      </div>
+                                    </button>
+
+                                    {/* Expandable courses list */}
+                                    {isExpanded && (
+                                      <div className="p-4 space-y-3.5 divide-y divide-slate-100 bg-white">
+                                        {plan.courseCodes.map((code, idx) => {
+                                          const cObj = courses.find(c => c.code === code);
+                                          const status = getCourseStatus(s.regNo, code);
+                                          if (!cObj) return null;
+
+                                          return (
+                                            <div 
+                                              key={code} 
+                                              className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3.5 ${idx === 0 ? 'pt-0' : ''}`}
+                                            >
+                                              <div>
+                                                <div className="flex items-center gap-2 mb-1">
+                                                  <span className="font-mono text-[10px] font-black text-indigo-600 uppercase">{code}</span>
+                                                  
+                                                  {/* Status badge */}
+                                                  {status === 'studied' && (
+                                                    <span className="bg-emerald-50 text-emerald-700 text-[9px] font-bold px-2 py-0.5 rounded-full border border-emerald-100 flex items-center gap-0.5">
+                                                      <Check className="h-2.5 w-2.5" /> Completed
+                                                    </span>
+                                                  )}
+                                                  {status === 'studying' && (
+                                                    <span className="bg-indigo-50 text-indigo-700 text-[9px] font-bold px-2 py-0.5 rounded-full border border-indigo-150 flex items-center gap-0.5">
+                                                      <BookOpen className="h-2.5 w-2.5" /> Studying Now
+                                                    </span>
+                                                  )}
+                                                  {status === 'failed' && (
+                                                    <span className="bg-red-50 text-red-700 text-[9px] font-bold px-2 py-0.5 rounded-full border border-red-100 flex items-center gap-0.5">
+                                                      <AlertCircle className="h-2.5 w-2.5" /> Failed / Backlog
+                                                    </span>
+                                                  )}
+                                                  {status === 'deferred' && (
+                                                    <span className="bg-amber-50 text-amber-700 text-[9px] font-bold px-2 py-0.5 rounded-full border border-amber-100 flex items-center gap-0.5">
+                                                      <Clock className="h-2.5 w-2.5" /> Deferred
+                                                    </span>
+                                                  )}
+                                                  {status === 'later' && (
+                                                    <span className="bg-slate-100 text-slate-500 text-[9px] font-bold px-2 py-0.5 rounded-full border border-slate-200">
+                                                      Future Sem
+                                                    </span>
+                                                  )}
+                                                </div>
+                                                <h5 className="text-xs font-black text-slate-800">{cObj.title}</h5>
+                                              </div>
+
+                                              {/* Actions column */}
+                                              <div className="flex items-center gap-1.5 shrink-0 self-start sm:self-center">
+                                                {status === 'studying' && (
+                                                  <>
+                                                    <button
+                                                      onClick={() => updateStudentCourseStatus(s.regNo, code, 'studied')}
+                                                      className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-[9px] font-bold px-2 py-1 rounded-lg border border-emerald-150 transition-all flex items-center gap-0.5 cursor-pointer"
+                                                      title="Mark as passed"
+                                                    >
+                                                      <Check className="h-2.5 w-2.5" /> Pass
+                                                    </button>
+                                                    <button
+                                                      onClick={() => updateStudentCourseStatus(s.regNo, code, 'failed')}
+                                                      className="bg-red-50 hover:bg-red-100 text-red-700 text-[9px] font-bold px-2 py-1 rounded-lg border border-red-150 transition-all flex items-center gap-0.5 cursor-pointer"
+                                                      title="Mark as failed"
+                                                    >
+                                                      <AlertCircle className="h-2.5 w-2.5" /> Fail
+                                                    </button>
+                                                    <button
+                                                      onClick={() => updateStudentCourseStatus(s.regNo, code, 'deferred')}
+                                                      className="bg-slate-50 hover:bg-slate-100 text-slate-500 text-[9px] font-bold px-2 py-1 rounded-lg border border-slate-200 transition-all cursor-pointer"
+                                                      title="Unenroll/Drop course"
+                                                    >
+                                                      Drop
+                                                    </button>
+                                                  </>
+                                                )}
+
+                                                {status === 'failed' && (
+                                                  <>
+                                                    <button
+                                                      onClick={() => updateStudentCourseStatus(s.regNo, code, 'studying')}
+                                                      className="bg-indigo-600 hover:bg-indigo-750 text-white text-[9px] font-black px-2.5 py-1 rounded-lg shadow-xs transition-all flex items-center gap-0.5 cursor-pointer"
+                                                      title="Enroll backlog in current term"
+                                                    >
+                                                      <Plus className="h-2.5 w-2.5" /> Enroll Now
+                                                    </button>
+                                                    <button
+                                                      onClick={() => updateStudentCourseStatus(s.regNo, code, 'studied')}
+                                                      className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-[9px] font-bold px-2 py-1 rounded-lg border border-emerald-150 transition-all cursor-pointer"
+                                                    >
+                                                      Mark Passed
+                                                    </button>
+                                                  </>
+                                                )}
+
+                                                {status === 'deferred' && (
+                                                  <>
+                                                    <button
+                                                      onClick={() => updateStudentCourseStatus(s.regNo, code, 'studying')}
+                                                      className="bg-indigo-600 hover:bg-indigo-750 text-white text-[9px] font-black px-2.5 py-1 rounded-lg shadow-xs transition-all flex items-center gap-0.5 cursor-pointer"
+                                                    >
+                                                      <Plus className="h-2.5 w-2.5" /> Enroll Now
+                                                    </button>
+                                                    <button
+                                                      onClick={() => updateStudentCourseStatus(s.regNo, code, 'studied')}
+                                                      className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-[9px] font-bold px-2 py-1 rounded-lg border border-emerald-150 transition-all cursor-pointer"
+                                                    >
+                                                      Mark Passed
+                                                    </button>
+                                                  </>
+                                                )}
+
+                                                {status === 'studied' && (
+                                                  <>
+                                                    <button
+                                                      onClick={() => updateStudentCourseStatus(s.regNo, code, 'failed')}
+                                                      className="bg-red-50 hover:bg-red-100 text-red-700 text-[9px] font-bold px-2 py-1 rounded-lg border border-red-150 transition-all cursor-pointer"
+                                                    >
+                                                      Mark Failed
+                                                    </button>
+                                                    <button
+                                                      onClick={() => updateStudentCourseStatus(s.regNo, code, 'studying')}
+                                                      className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-[9px] font-bold px-2 py-1 rounded-lg border border-slate-200 transition-all cursor-pointer"
+                                                    >
+                                                      Repeat
+                                                    </button>
+                                                  </>
+                                                )}
+
+                                                {status === 'later' && (
+                                                  <button
+                                                    onClick={() => updateStudentCourseStatus(s.regNo, code, 'studying')}
+                                                    className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-[9px] font-bold px-2.5 py-1 rounded-lg border border-slate-200 transition-all flex items-center gap-0.5 cursor-pointer"
+                                                    title="Enroll early"
+                                                  >
+                                                    <Plus className="h-2.5 w-2.5" /> Enroll Early
+                                                  </button>
+                                                )}
+                                              </div>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          );
+                        })()}
                       </div>
                     </div>
                   )}
