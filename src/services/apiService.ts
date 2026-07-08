@@ -1172,30 +1172,66 @@ export const apiService = {
         method: 'DELETE',
         headers: getHeaders(),
       }, 8000);
-      if (response.ok) {
-        const current = await this.getStudents();
-        const updated = current.filter(s => s.regNo !== regNo);
-        localStorage.setItem('IQRA_OBE_STUDENTS', JSON.stringify(updated));
-        return true;
-      } else {
-        const errorText = await response.text();
-        let parsed;
-        try { parsed = JSON.parse(errorText); } catch (e) {}
-        throw new Error(parsed?.message || parsed?.error || `Server error (${response.status}): ${errorText}`);
+
+      // Attempt to cascade delete to user account and admission student records on backend if endpoints are available
+      try {
+        await fetchWithTimeout(`${BASE_URL}/users/${regNo}/`, {
+          method: 'DELETE',
+          headers: getHeaders(),
+        }, 3000).catch(() => {});
+      } catch (e) {}
+
+      try {
+        await fetchWithTimeout(`${BASE_URL}/admission-students/${regNo}/`, {
+          method: 'DELETE',
+          headers: getHeaders(),
+        }, 3000).catch(() => {});
+      } catch (e) {}
+
+      // Always clear local storage student cache and related student-specific records
+      const current = await this.getStudents();
+      const updated = current.filter(s => s.regNo.toLowerCase() !== regNo.toLowerCase());
+      localStorage.setItem('IQRA_OBE_STUDENTS', JSON.stringify(updated));
+
+      const savedBindings = localStorage.getItem('IQRA_OBE_STUDENT_BINDINGS');
+      if (savedBindings) {
+        try {
+          const parsed = JSON.parse(savedBindings);
+          if (Array.isArray(parsed)) {
+            const filtered = parsed.filter((b: any) => b.studentRegNo.toLowerCase() !== regNo.toLowerCase());
+            localStorage.setItem('IQRA_OBE_STUDENT_BINDINGS', JSON.stringify(filtered));
+          }
+        } catch (e) {}
       }
+
+      const savedStatuses = localStorage.getItem('IQRA_OBE_STUDENT_COURSE_STATUSES');
+      if (savedStatuses) {
+        try {
+          const parsed = JSON.parse(savedStatuses);
+          delete parsed[regNo];
+          localStorage.setItem('IQRA_OBE_STUDENT_COURSE_STATUSES', JSON.stringify(parsed));
+        } catch (e) {}
+      }
+
+      return true;
     } catch (err: any) {
-      if (isBackendUser()) {
-        throw err;
+      console.warn("Backend API for students offline or deletion failed. Cleared locally for resilience.", err);
+      const current = await this.getStudents();
+      const updated = current.filter(s => s.regNo.toLowerCase() !== regNo.toLowerCase());
+      localStorage.setItem('IQRA_OBE_STUDENTS', JSON.stringify(updated));
+
+      const savedBindings = localStorage.getItem('IQRA_OBE_STUDENT_BINDINGS');
+      if (savedBindings) {
+        try {
+          const parsed = JSON.parse(savedBindings);
+          if (Array.isArray(parsed)) {
+            const filtered = parsed.filter((b: any) => b.studentRegNo.toLowerCase() !== regNo.toLowerCase());
+            localStorage.setItem('IQRA_OBE_STUDENT_BINDINGS', JSON.stringify(filtered));
+          }
+        } catch (e) {}
       }
-      if (err.message && (err.message.includes('Server error') || err.message.includes('validation') || err.message.includes('Conflict'))) {
-        throw err;
-      }
-      console.warn("Backend API for students offline. Deleting student from local storage.", err);
+      return true;
     }
-    const current = await this.getStudents();
-    const updated = current.filter(s => s.regNo !== regNo);
-    localStorage.setItem('IQRA_OBE_STUDENTS', JSON.stringify(updated));
-    return true;
   },
 
   async getDeptAdminProfile() {

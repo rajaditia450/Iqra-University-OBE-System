@@ -818,7 +818,11 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
       const matchedProg = programs.find(p => p.id === finalProgramId);
 
       const teacherIdForId = teacher ? getTeacherId(teacher) : assignment.teacherId;
-      const uniqId = `course-assigned-${assignment.courseCode}-${teacherIdForId}-${finalProgramId}`;
+      const academicYear = assignment.academicYear || '';
+      const termSuffix = academicYear
+        ? `-${academicYear.toLowerCase().replace(/\s+/g, '')}`
+        : '';
+      const uniqId = `course-assigned-${assignment.courseCode}-${teacherIdForId}-${finalProgramId}${termSuffix}`;
 
       // Find matching students for this course based on bindings
       const studentRegs = currentBindings
@@ -905,18 +909,25 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
     // Save to local storage
     localStorage.setItem('IQRA_OBE_INSTRUCTOR_COURSES', JSON.stringify(updatedInstructorCourses));
 
-    // Sync enrollments to backend
-    for (const ic of updatedInstructorCourses) {
-      if (ic.students && ic.students.length > 0) {
-        apiService.enrollStudents(
-          ic.id,
-          ic.students.map(s => ({ regNo: s.regNo, name: s.name }))
-        ).catch(e => {
-          console.error('Enrollment sync error:', e);
-          triggerNotification(`Enrollment sync failed: ${e.message}`, true);
-        });
+    // Sync enrollments to backend sequentially to avoid SQLite database locks (500 errors)
+    (async () => {
+      for (const ic of updatedInstructorCourses) {
+        if (ic.students && ic.students.length > 0) {
+          try {
+            const matchedCourse = currentCourses.find(c => c.code === ic.code);
+            const backendCourseId = matchedCourse?.id || ic.code;
+            await apiService.enrollStudents(
+              backendCourseId,
+              ic.students.map(s => ({ regNo: s.regNo, name: s.name }))
+            );
+          } catch (e: any) {
+            console.error('Enrollment sync error:', e);
+            // Non-blocking notification
+            triggerNotification(`Enrollment sync warning: ${e.message}`, true);
+          }
+        }
       }
-    }
+    })();
   };
 
   // Show a status update or feedback message helper
@@ -931,7 +942,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
     setTimeout(() => {
       setErrorMsg(null);
       setSuccessMsg(null);
-    }, 5000);
+    }, 2000);
   };
 
   // === CORE FUNCTIONALITIES ===
@@ -973,6 +984,20 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
       triggerNotification(`Course ${uppercaseCode} - ${newCourse.title} created successfully!`);
     } catch (err) {
       triggerNotification("Failed to save the new course.", true);
+    }
+  };
+
+  const handleDeleteCourse = async (course: Course) => {
+    if (!window.confirm(`Are you sure you want to permanently delete the course "${course.code} - ${course.title}"?`)) {
+      return;
+    }
+    try {
+      const idToDelete = course.id || course.code;
+      await apiService.deleteCourse(idToDelete);
+      setCourses(prev => prev.filter(c => (c.id !== course.id && c.code !== course.code)));
+      triggerNotification(`Course ${course.code} deleted successfully.`);
+    } catch (err: any) {
+      triggerNotification(err.message || "Failed to delete the course.", true);
     }
   };
 
@@ -1154,7 +1179,17 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
         localStorage.setItem('IQRA_OBE_TEACHERS', JSON.stringify(updatedTeachers));
         localStorage.setItem('IQRA_OBE_TEACHER_ASSIGNMENTS', JSON.stringify(updatedAssignments));
 
-        syncToInstructorCourses(courses, updatedTeachers, updatedAssignments, studentBindings, students);
+        // Get all course codes that still have an active assignment after this removal
+        const activeCourseCodesAfterRemoval = new Set(updatedAssignments.map(a => a.courseCode));
+
+        // Drop bindings for courses that no longer have any teacher assigned
+        const cleanedBindings = studentBindings.filter(b =>
+          activeCourseCodesAfterRemoval.has(b.courseCode)
+        );
+        setStudentBindings(cleanedBindings);
+        localStorage.setItem('IQRA_OBE_STUDENT_BINDINGS', JSON.stringify(cleanedBindings));
+
+        syncToInstructorCourses(courses, updatedTeachers, updatedAssignments, cleanedBindings, students);
         triggerNotification(`Teacher ${t.name} and their assignments successfully deleted.`);
       } catch (err: any) {
         console.error(err);
@@ -1259,7 +1294,12 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
     const empId = t ? getTeacherId(t) : teacherId;
     const assignmentProgId = assignment?.programId || programId;
     const finalProgId = assignmentProgId || courses.find(c => c.code === courseCode)?.programId || programs.find(p => p.departmentId === managedDeptId)?.id || 'bscs';
-    const backendCourseId = `course-assigned-${courseCode}-${empId}-${finalProgId}`;
+    
+    const academicYear = assignment?.academicYear || '';
+    const termSuffix = academicYear
+      ? `-${academicYear.toLowerCase().replace(/\s+/g, '')}`
+      : '';
+    const backendCourseId = `course-assigned-${courseCode}-${empId}-${finalProgId}${termSuffix}`;
 
     try {
       await apiService.removeCourseAssignment(teacherId, courseCode, programId);
@@ -1276,7 +1316,17 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
     setTeacherAssignments(updatedAssignments);
     localStorage.setItem('IQRA_OBE_TEACHER_ASSIGNMENTS', JSON.stringify(updatedAssignments));
 
-    syncToInstructorCourses(courses, teachers, updatedAssignments, studentBindings, students);
+    // Get all course codes that still have an active assignment after this removal
+    const activeCourseCodesAfterRemoval = new Set(updatedAssignments.map(a => a.courseCode));
+
+    // Drop bindings for courses that no longer have any teacher assigned
+    const cleanedBindings = studentBindings.filter(b =>
+      activeCourseCodesAfterRemoval.has(b.courseCode)
+    );
+    setStudentBindings(cleanedBindings);
+    localStorage.setItem('IQRA_OBE_STUDENT_BINDINGS', JSON.stringify(cleanedBindings));
+
+    syncToInstructorCourses(courses, teachers, updatedAssignments, cleanedBindings, students);
     triggerNotification(`Removed course assignment ${courseCode} from teacher.`);
   };
 
@@ -1287,8 +1337,11 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
     const fallbackProgramId = course?.programId || programs.find(p => p.departmentId === course?.departmentId)?.id || defaultDeptProgram;
     const finalProgramId = assignment.programId || fallbackProgramId;
     const teacherIdForId = teacher ? getTeacherId(teacher) : assignment.teacherId;
-    const courseId = `course-assigned-${assignment.courseCode}-${teacherIdForId}-${finalProgramId}`;
     const academicYear = assignment.academicYear || 'Fall-2024';
+    const termSuffix = academicYear
+      ? `-${academicYear.toLowerCase().replace(/\s+/g, '')}`
+      : '';
+    const courseId = `course-assigned-${assignment.courseCode}-${teacherIdForId}-${finalProgramId}${termSuffix}`;
 
     if (!window.confirm(`Are you sure you want to CLOSE THE SEMESTER for course ${assignment.courseCode} (${course?.title || ''})?\n\nThis will lock the course, snapshot current student marks, compute final letter grades & GPA, and finalize official transcripts. Instructors will NO LONGER be able to modify any marks.`)) {
       return;
@@ -1463,11 +1516,17 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
 
   // Student academic pathway course status helpers
   const getCourseStatus = (studentRegNo: string, courseCode: string): 'studied' | 'studying' | 'failed' | 'later' | 'deferred' => {
-    // 1. Is it currently bound/enrolled? If so, status is always 'studying'
+    const student = students.find(s => s.regNo === studentRegNo);
+
+    // 1. Is it currently bound/enrolled? If so, check if there is an active teacher assigned to this course.
+    const hasTeacherAssigned = teacherAssignments.some(
+      a => a.courseCode === courseCode && (!a.programId || a.programId === student?.programId)
+    );
+
     const isStudying = studentBindings.some(
       b => b.studentRegNo === studentRegNo && b.courseCode === courseCode
     );
-    if (isStudying) return 'studying';
+    if (isStudying && hasTeacherAssigned) return 'studying';
 
     // 2. Is there an explicit override?
     const studentOverrides = studentCourseStatuses[studentRegNo];
@@ -1480,7 +1539,6 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
     }
 
     // 3. Fallback to default calculation based on student's current semester vs course's semester
-    const student = students.find(s => s.regNo === studentRegNo);
     if (!student) return 'deferred';
 
     // Find the course's semester in the student's program plans
@@ -1786,18 +1844,20 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
       </header>
 
       {/* DYNAMIC NOTIFICATIONS */}
-      {successMsg && (
-        <div className="bg-emerald-500 text-white text-center py-2 px-4 font-semibold text-xs flex items-center justify-center gap-2 shadow-inner transition-all animate-fadeIn">
-          <Check className="h-4 w-4 shrink-0" />
-          <span>{successMsg}</span>
-        </div>
-      )}
-      {errorMsg && (
-        <div className="bg-rose-500 text-white text-center py-2 px-4 font-semibold text-xs flex items-center justify-center gap-2 shadow-inner transition-all animate-fadeIn">
-          <AlertCircle className="h-4 w-4 shrink-0" />
-          <span>{errorMsg}</span>
-        </div>
-      )}
+      <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[9999] flex flex-col gap-2 w-full max-w-md px-4 pointer-events-none">
+        {successMsg && (
+          <div className="pointer-events-auto bg-emerald-600 border border-emerald-500 text-white font-sans font-bold text-xs sm:text-sm px-5 py-3.5 rounded-2xl shadow-2xl flex items-center gap-3 animate-slideDown">
+            <Check className="h-4 w-4 shrink-0" />
+            <span>{successMsg}</span>
+          </div>
+        )}
+        {errorMsg && (
+          <div className="pointer-events-auto bg-rose-600 border border-rose-500 text-white font-sans font-bold text-xs sm:text-sm px-5 py-3.5 rounded-2xl shadow-2xl flex items-center gap-3 animate-slideDown">
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            <span>{errorMsg}</span>
+          </div>
+        )}
+      </div>
 
       {/* DASHBOARD CONTENT WRAPPER */}
       <main className="max-w-7xl mx-auto w-full px-6 py-8 flex-1 flex flex-col gap-8">
@@ -2100,6 +2160,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                         <th className="px-5 py-3 text-left">Title</th>
                         <th className="px-5 py-3 text-left">Type</th>
                         <th className="px-5 py-3 text-left">Curriculum Program</th>
+                        <th className="px-5 py-3 text-right">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-600 bg-white">
@@ -2117,6 +2178,16 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                               </span>
                             </td>
                             <td className="px-5 py-3.5 text-slate-500">{matchedProg?.name || 'Computing Global'}</td>
+                            <td className="px-5 py-3.5 text-right">
+                              <button
+                                onClick={() => handleDeleteCourse(c)}
+                                className="text-red-500 hover:text-red-700 font-bold hover:bg-red-50 px-2.5 py-1.5 rounded-xl border border-transparent hover:border-red-100 transition-all inline-flex items-center gap-1.5 cursor-pointer"
+                                title="Delete Course"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                                <span>Delete</span>
+                              </button>
+                            </td>
                           </tr>
                         );
                       })}
