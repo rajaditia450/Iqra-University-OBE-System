@@ -130,6 +130,7 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
   }, []);
 
   const fetchData = async () => {
+    const isBackend = !!localStorage.getItem('access');
     try {
       setLoading(true);
       const res = await apiService.getAllData();
@@ -146,19 +147,29 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
       });
       setError(null);
     } catch (err) {
-      console.warn("Backend server offline, loading local storage sandbox database...", err);
-      const localData = apiService.getLocalStorageData();
+      if (isBackend) {
+        setError("Could not retrieve data from the backend server. Please make sure the server is online.");
+        setData({
+          departments: [],
+          programs: [],
+          courses: [],
+          gas: []
+        });
+      } else {
+        console.warn("Backend server offline, loading local storage sandbox database...", err);
+        const localData = apiService.getLocalStorageData();
 
-      const filteredDepts = (localData.departments || []).filter((d: any) => d.id === activeDeptId);
-      const filteredProgs = (localData.programs || []).filter((p: any) => p.departmentId === activeDeptId);
-      const filteredCourses = (localData.courses || []).filter((c: any) => c.departmentId === activeDeptId);
+        const filteredDepts = (localData.departments || []).filter((d: any) => d.id === activeDeptId);
+        const filteredProgs = (localData.programs || []).filter((p: any) => p.departmentId === activeDeptId);
+        const filteredCourses = (localData.courses || []).filter((c: any) => c.departmentId === activeDeptId);
 
-      setData({
-        departments: filteredDepts,
-        programs: filteredProgs,
-        courses: filteredCourses,
-        gas: localData.gas || []
-      });
+        setData({
+          departments: filteredDepts,
+          programs: filteredProgs,
+          courses: filteredCourses,
+          gas: localData.gas || []
+        });
+      }
     } finally {
       setLoading(false);
     }
@@ -646,10 +657,10 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
     }
 
     const defaultPOs: ProgramObjective[] = [
-      { id: 'PO1', text: 'Theoretical comprehension and fundamental engineering/science grounding in ' + codeUpper + '.', mappedGAs: [`GA-${codeUpper}-1`, `GA-${codeUpper}-2`] },
-      { id: 'PO2', text: 'Problem analysis, research validation and algorithmic optimization synthesis in ' + codeUpper + '.', mappedGAs: [`GA-${codeUpper}-1`, `GA-${codeUpper}-2`, `GA-${codeUpper}-3`, `GA-${codeUpper}-4`, `GA-${codeUpper}-5`] },
-      { id: 'PO3', text: 'Critical tool utilization, design deployment, and modern software/AI systems mastery.', mappedGAs: [`GA-${codeUpper}-3`, `GA-${codeUpper}-4`, `GA-${codeUpper}-6`, `GA-${codeUpper}-7`, `GA-${codeUpper}-8`, `GA-${codeUpper}-10`] },
-      { id: 'PO4', text: 'Professional ethics, societal safety considerations, and collaborative team communication.', mappedGAs: [`GA-${codeUpper}-6`, `GA-${codeUpper}-7`, `GA-${codeUpper}-9`] }
+      { id: 'PO1', text: 'Theoretical comprehension and fundamental engineering/science grounding in ' + codeUpper + '.', mappedGAs: [] },
+      { id: 'PO2', text: 'Problem analysis, research validation and algorithmic optimization synthesis in ' + codeUpper + '.', mappedGAs: [] },
+      { id: 'PO3', text: 'Critical tool utilization, design deployment, and modern software/AI systems mastery.', mappedGAs: [] },
+      { id: 'PO4', text: 'Professional ethics, societal safety considerations, and collaborative team communication.', mappedGAs: [] }
     ];
 
     const newProg: Program = {
@@ -964,13 +975,6 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                   >
                     <Compass className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
                     <span>Edit Program Vision & Mission</span>
-                  </button>
-                  <button
-                    onClick={() => { setActiveModal('add_course'); setOpenMenu(null); }}
-                    className="w-full text-left px-3.5 py-1.5 text-xs text-slate-705 hover:bg-indigo-50 hover:text-indigo-950 flex items-center gap-2 rounded focus:outline-none font-medium"
-                  >
-                    <BookOpen className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                    <span>Add Program Course & Map GAs</span>
                   </button>
                 </div>
               )}
@@ -1482,51 +1486,6 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                                     <span className="text-[8px] bg-sky-100 text-sky-800 border border-sky-200 font-bold px-1.5 py-0.5 rounded uppercase">
                                       Elective
                                     </span>
-                                  )}
-                                  {isConfiguring && (
-                                    <>
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          setEditingCourse(course);
-                                          setEditCourseCode(course.code);
-                                          setEditCourseTitle(course.title);
-                                          setEditCourseType(course.type);
-                                          setEditCourseDeptId(course.departmentId);
-                                          setEditCourseProgramId(course.programId || 'bscs');
-                                          setActiveModal('edit_course');
-                                        }}
-                                        className="p-1 text-indigo-600 hover:text-indigo-950 hover:bg-indigo-50 rounded transition-all cursor-pointer"
-                                        title="Edit specifications"
-                                      >
-                                        <Edit className="w-3.5 h-3.5" />
-                                      </button>
-                                      <button
-                                        onClick={async (e) => {
-                                          e.stopPropagation();
-                                          if (confirm(`Are you sure you want to delete the course "${course.code} - ${course.title}"?`)) {
-                                            try {
-                                              setSavingLoad(true);
-                                              await apiService.deleteCourse(course.id);
-                                              const updatedCourses = data.courses.filter(c => c.id !== course.id);
-                                              setData({ ...data, courses: updatedCourses });
-                                              
-                                              const localData = { ...data, courses: updatedCourses };
-                                              localStorage.setItem('IQRA_OBE_FALLBACK_DB', JSON.stringify(localData));
-                                              showNotification("Course deletion committed successfully.", "success");
-                                            } catch (evt) {
-                                              showNotification("Error deleting course.", "error");
-                                            } finally {
-                                              setSavingLoad(false);
-                                            }
-                                          }
-                                        }}
-                                        className="p-1 text-rose-500 hover:text-rose-800 hover:bg-rose-50 rounded transition-all cursor-pointer"
-                                        title="Delete Course row"
-                                      >
-                                        <Trash2 className="w-3.5 h-3.5" />
-                                      </button>
-                                    </>
                                   )}
                                 </div>
                               </div>

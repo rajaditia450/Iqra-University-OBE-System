@@ -444,10 +444,16 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
     try {
       // 1. Load basic OBE data from service or localStorage
       let obData;
+      const isBackend = !!localStorage.getItem('access');
       try {
         obData = await apiService.getAllData();
       } catch (err) {
-        obData = apiService.getLocalStorageData();
+        if (isBackend) {
+          obData = { departments: [], programs: [], courses: [], gas: [] };
+          setErrorMsg("Could not retrieve data from the backend server. Please make sure the server is online.");
+        } else {
+          obData = apiService.getLocalStorageData();
+        }
       }
       setDepartments(obData.departments || []);
       setPrograms(obData.programs || []);
@@ -833,7 +839,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
       type: courseType,
       departmentId: courseDept,
       programId: courseProg,
-      mappedGAs: courseGAs.length > 0 ? courseGAs : ['GA-1', 'GA-2'],
+      mappedGAs: courseGAs,
       creditHours: courseCreditHours,
       courseType: courseSubtype
     };
@@ -902,7 +908,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
           const rawType = row['Type'] || row['type'] || 'core';
           const rawDept = row['Department ID'] || row['departmentId'] || 'computing';
           const rawProg = row['Program ID'] || row['programId'] || 'bscs';
-          const rawGAs = row['Mapped GAs'] || row['mappedGAs'] || 'GA-1, GA-2';
+          const rawGAs = row['Mapped GAs'] || row['mappedGAs'] || '';
 
           if (rawCode && rawTitle) {
             const codeClean = String(rawCode).trim().toUpperCase();

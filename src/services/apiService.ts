@@ -445,14 +445,16 @@ const getLocalStorageData = (): OBEData => {
     return g;
   });
   base.programs = base.programs.map(p => {
+    const cleanedPos = Array.isArray(p.pos) ? p.pos.map(po => ({ ...po, mappedGAs: [] })) : [];
     if (p.id === 'bscs') {
       return {
         ...p,
+        pos: cleanedPos,
         vision: 'To produce computer science graduates of international standards with state-of-the-art skills.',
         mission: 'To empower students with deep scientific computer knowledge, preparing them for leading-edge industry roles.'
       };
     }
-    return p;
+    return { ...p, pos: cleanedPos };
   });
 
   localStorage.setItem('IQRA_OBE_FALLBACK_DB', JSON.stringify(base));
@@ -636,24 +638,28 @@ export const apiService = {
   async getAllData(): Promise<OBEData> {
     try {
       const [depts, programs, gas, courses] = await Promise.all([
-        fetchWithTimeout(`${BASE_URL}/departments/`, { headers: getHeaders() }).then(res => res.json()),
-        fetchWithTimeout(`${BASE_URL}/programs/`, { headers: getHeaders() }).then(res => res.json()),
-        fetchWithTimeout(`${BASE_URL}/gas/`, { headers: getHeaders() }).then(res => res.json()),
+        fetchWithTimeout(`${BASE_URL}/departments/`, { headers: getHeaders() }).then(res => res.json()).catch(() => null),
+        fetchWithTimeout(`${BASE_URL}/programs/`, { headers: getHeaders() }).then(res => res.json()).catch(() => null),
+        fetchWithTimeout(`${BASE_URL}/gas/`, { headers: getHeaders() }).then(res => res.json()).catch(() => null),
         fetchWithTimeout(`${BASE_URL}/courses/`, { headers: getHeaders() }).then(res => res.json()).catch(() => null)
       ]);
 
-      // If backend replies with malformed details or empty arrays, let's gracefully fall back to local storage
-      if (!Array.isArray(depts) || depts.length === 0) {
-        throw new Error('Malformed or empty departments returned from backend');
+      const isBackend = isBackendUser();
+
+      if (!isBackend) {
+        // If not backend, enforce department fallback if down/empty
+        if (!Array.isArray(depts) || depts.length === 0) {
+          throw new Error('Malformed or empty departments returned from backend');
+        }
       }
 
-      const fallbackCourses = getLocalStorageData().courses;
+      const fallbackCourses = isBackend ? [] : getLocalStorageData().courses;
       const mergedCourses = Array.isArray(courses) ? courses : fallbackCourses;
 
       return {
-        departments: depts || [],
-        programs: programs || [],
-        gas: gas || [],
+        departments: Array.isArray(depts) ? depts : (isBackend ? [] : getLocalStorageData().departments),
+        programs: Array.isArray(programs) ? programs : (isBackend ? [] : getLocalStorageData().programs),
+        gas: Array.isArray(gas) ? gas : (isBackend ? [] : getLocalStorageData().gas),
         courses: mergedCourses || [],
       };
     } catch (err) {
