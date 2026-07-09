@@ -765,11 +765,17 @@ export const apiService = {
   },
 
   // Save Course Mapping (allows updating course to GA tick marks in local storage / server mock fallback!)
-  async updateCourse(id: string, data: Partial<Course>): Promise<Course> {
+  async updateCourse(id: string, data: Partial<Course>, programId?: string): Promise<Course> {
     try {
       const isBackend = isBackendUser();
       const mappedData = mapCourseToBackend({ ...data, id } as Course);
-      const response = await fetchWithTimeout(`${BASE_URL}/courses/${id}/`, {
+      const queryProg = programId || data.programId;
+      let url = `${BASE_URL}/courses/${id}/`;
+      if (queryProg) {
+        const cleanProg = String(queryProg).trim();
+        url += `?programId=${encodeURIComponent(cleanProg)}&program_id=${encodeURIComponent(cleanProg)}`;
+      }
+      const response = await fetchWithTimeout(url, {
         method: 'PATCH',
         headers: getHeaders(),
         body: JSON.stringify(mappedData),
@@ -803,10 +809,15 @@ export const apiService = {
     return updatedCourses.find(c => c.id === id)!;
   },
 
-  async deleteCourse(id: string): Promise<boolean> {
+  async deleteCourse(id: string, programId?: string): Promise<boolean> {
     try {
       const isBackend = isBackendUser();
-      const response = await fetchWithTimeout(`${BASE_URL}/courses/${id}/`, {
+      let url = `${BASE_URL}/courses/${id}/`;
+      if (programId) {
+        const cleanProg = String(programId).trim();
+        url += `?programId=${encodeURIComponent(cleanProg)}&program_id=${encodeURIComponent(cleanProg)}`;
+      }
+      const response = await fetchWithTimeout(url, {
         method: 'DELETE',
         headers: getHeaders(),
       }, 8000);

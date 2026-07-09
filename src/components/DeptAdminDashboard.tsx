@@ -892,8 +892,8 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
         }
       }
 
-      await apiService.deleteCourse(idToDelete);
-      setCourses(prev => prev.filter(c => (c.id !== course.id && c.code !== course.code)));
+      await apiService.deleteCourse(idToDelete, course.programId);
+      setCourses(prev => prev.filter(c => !(c.id === course.id || (c.code === course.code && String(c.programId).trim().toLowerCase() === String(course.programId).trim().toLowerCase()))));
       triggerNotification(`Course ${course.code} deleted successfully.`);
     } catch (err: any) {
       // If deleting failed, let's check for reference/foreign key constraint warning
@@ -930,7 +930,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
         title: editingCourse.title.trim(),
       };
 
-      const updated = await apiService.updateCourse(editingCourse.id, updatedCourseData);
+      const updated = await apiService.updateCourse(editingCourse.id, updatedCourseData, editingCourse.programId);
       setCourses(prev => prev.map(c => c.id === editingCourse.id ? { ...c, ...updated } : c));
       setEditingCourse(null);
       triggerNotification(`Course ${uppercaseCode} updated successfully!`);
