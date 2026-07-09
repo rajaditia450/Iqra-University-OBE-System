@@ -247,6 +247,17 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
+  // Custom confirmation dialog state
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    confirmText?: string;
+    cancelText?: string;
+    isDanger?: boolean;
+    onConfirm: () => void | Promise<void>;
+  } | null>(null);
+
   // Tab 6: Reports State
   const [selectedReportProg, setSelectedReportProg] = useState<string>('bscs');
   const [selectedReportCourseCode, setSelectedReportCourseCode] = useState<string>('');
@@ -871,40 +882,47 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
     }
   };
 
-  const handleDeleteCourse = async (course: Course) => {
-    if (!window.confirm(`Are you sure you want to permanently delete the course "${course.code} - ${course.title}"?`)) {
-      return;
-    }
-    try {
-      let idToDelete = course.id || course.code;
-      // Fallback in case ID is a client-side generated string and we are using a backend
-      if (idToDelete.startsWith('course-')) {
-        const matchingRealCourse = courses.find(
-          c => c.code === course.code && 
-               String(c.programId).trim().toLowerCase() === String(course.programId).trim().toLowerCase() && 
-               c.id && 
-               !c.id.startsWith('course-')
-        );
-        if (matchingRealCourse) {
-          idToDelete = matchingRealCourse.id;
-        } else {
-          idToDelete = course.code;
+  const handleDeleteCourse = (course: Course) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: "Confirm Course Deletion",
+      message: `Are you sure you want to permanently delete the course "${course.code} - ${course.title}"?`,
+      confirmText: "Delete Course",
+      cancelText: "Cancel",
+      isDanger: true,
+      onConfirm: async () => {
+        try {
+          let idToDelete = course.id || course.code;
+          // Fallback in case ID is a client-side generated string and we are using a backend
+          if (idToDelete.startsWith('course-')) {
+            const matchingRealCourse = courses.find(
+              c => c.code === course.code && 
+                   String(c.programId).trim().toLowerCase() === String(course.programId).trim().toLowerCase() && 
+                   c.id && 
+                   !c.id.startsWith('course-')
+            );
+            if (matchingRealCourse) {
+              idToDelete = matchingRealCourse.id;
+            } else {
+              idToDelete = course.code;
+            }
+          }
+
+          await apiService.deleteCourse(idToDelete, course.programId);
+          setCourses(prev => prev.filter(c => !(c.id === course.id || (c.code === course.code && String(c.programId).trim().toLowerCase() === String(course.programId).trim().toLowerCase()))));
+          triggerNotification(`Course ${course.code} deleted successfully.`);
+        } catch (err: any) {
+          // If deleting failed, let's check for reference/foreign key constraint warning
+          const hasAssignments = teacherAssignments.some(a => a.courseCode === course.code);
+          const hasBindings = studentBindings.some(b => b.courseCode === course.code);
+          if (hasAssignments || hasBindings) {
+            triggerNotification(`Cannot delete course ${course.code} because it has active teacher assignments or student enrollments. Please remove those first.`, true);
+          } else {
+            triggerNotification(err.message || "Failed to delete the course.", true);
+          }
         }
       }
-
-      await apiService.deleteCourse(idToDelete, course.programId);
-      setCourses(prev => prev.filter(c => !(c.id === course.id || (c.code === course.code && String(c.programId).trim().toLowerCase() === String(course.programId).trim().toLowerCase()))));
-      triggerNotification(`Course ${course.code} deleted successfully.`);
-    } catch (err: any) {
-      // If deleting failed, let's check for reference/foreign key constraint warning
-      const hasAssignments = teacherAssignments.some(a => a.courseCode === course.code);
-      const hasBindings = studentBindings.some(b => b.courseCode === course.code);
-      if (hasAssignments || hasBindings) {
-        triggerNotification(`Cannot delete course ${course.code} because it has active teacher assignments or student enrollments. Please remove those first.`, true);
-      } else {
-        triggerNotification(err.message || "Failed to delete the course.", true);
-      }
-    }
+    });
   };
 
   const handleUpdateCourse = async (e: React.FormEvent) => {
@@ -1144,41 +1162,49 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
     }
   };
 
-  const handleDeleteTeacher = async (id: string) => {
+  const handleDeleteTeacher = (id: string) => {
     const t = teachers.find(x => matchTeacher(x, id));
     if (!t) return;
     
-    if (window.confirm(`Are you sure you want to remove teacher ${t.name}?`)) {
-      try {
-        const empId = getTeacherId(t);
-        await apiService.deleteTeacher(empId);
+    setConfirmDialog({
+      isOpen: true,
+      title: "Remove Faculty Member",
+      message: `Are you sure you want to remove teacher ${t.name}?`,
+      confirmText: "Remove Teacher",
+      cancelText: "Cancel",
+      isDanger: true,
+      onConfirm: async () => {
+        try {
+          const empId = getTeacherId(t);
+          await apiService.deleteTeacher(empId);
 
-        const updatedTeachers = teachers.filter(x => !matchTeacher(x, empId));
-        const updatedAssignments = teacherAssignments.filter(x => x.teacherId !== t.id && x.teacherId !== empId);
+          const updatedTeachers = teachers.filter(x => !matchTeacher(x, empId));
+          const updatedAssignments = teacherAssignments.filter(x => x.teacherId !== t.id && x.teacherId !== empId);
 
-        setTeachers(updatedTeachers);
-        setTeacherAssignments(updatedAssignments);
+          setTeachers(updatedTeachers);
+          setTeacherAssignments(updatedAssignments);
 
-        localStorage.setItem('IQRA_OBE_TEACHERS', JSON.stringify(updatedTeachers));
-        localStorage.setItem('IQRA_OBE_TEACHER_ASSIGNMENTS', JSON.stringify(updatedAssignments));
+          localStorage.setItem('IQRA_OBE_TEACHERS', JSON.stringify(updatedTeachers));
+          localStorage.setItem('IQRA_OBE_TEACHER_ASSIGNMENTS', JSON.stringify(updatedAssignments));
 
-        // Get all course codes that still have an active assignment after this removal
-        const activeCourseCodesAfterRemoval = new Set(updatedAssignments.map(a => a.courseCode));
+          // Get all course codes that still have an active assignment after this removal
+          const activeCourseCodesAfterRemoval = new Set(updatedAssignments.map(a => a.courseCode));
 
-        // Drop bindings for courses that no longer have any teacher assigned
-        const cleanedBindings = studentBindings.filter(b =>
-          activeCourseCodesAfterRemoval.has(b.courseCode)
-        );
-        setStudentBindings(cleanedBindings);
-        localStorage.setItem('IQRA_OBE_STUDENT_BINDINGS', JSON.stringify(cleanedBindings));
+          // Drop bindings for courses that no longer have any teacher assigned
+          const cleanedBindings = studentBindings.filter(b =>
+            activeCourseCodesAfterRemoval.has(b.courseCode)
+          );
+          setStudentBindings(cleanedBindings);
+          localStorage.setItem('IQRA_OBE_STUDENT_BINDINGS', JSON.stringify(cleanedBindings));
 
-        syncToInstructorCourses(courses, updatedTeachers, updatedAssignments, cleanedBindings, students);
-        triggerNotification(`Teacher ${t.name} and their assignments successfully deleted.`);
-      } catch (err: any) {
-        console.error(err);
-        triggerNotification(err.message || `Failed to delete teacher ${t.name}`, true);
+          syncToInstructorCourses(courses, updatedTeachers, updatedAssignments, cleanedBindings, students);
+          triggerNotification(`Teacher ${t.name} and their assignments successfully deleted.`);
+        } catch (err: any) {
+          console.error(err);
+          triggerNotification(err.message || `Failed to delete teacher ${t.name}`, true);
+        }
       }
-    }
+    });
   };
 
   // 4. Assign Course to Teacher
@@ -1318,7 +1344,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
     triggerNotification(`Removed course assignment ${courseCode} from teacher.`);
   };
 
-  const handleFinalizeCourse = async (assignment: TeacherCourseAssignment) => {
+  const handleFinalizeCourse = (assignment: TeacherCourseAssignment) => {
     const teacher = teachers.find(t => matchTeacher(t, assignment.teacherId));
     const assignmentProgClean = assignment.programId ? String(assignment.programId).trim().toLowerCase() : '';
     const course = courses.find(c => c.code === assignment.courseCode && (!assignmentProgClean || String(c.programId).trim().toLowerCase() === assignmentProgClean)) || courses.find(c => c.code === assignment.courseCode);
@@ -1333,33 +1359,39 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
     }
     const courseId = `course-assigned-${assignment.courseCode}-${employeeId}-${finalProgramId}-${acadYear}`;
 
-    if (!window.confirm(`Are you sure you want to CLOSE THE SEMESTER for course ${assignment.courseCode} (${course?.title || ''})?\n\nThis will lock the course, snapshot current student marks, compute final letter grades & GPA, and finalize official transcripts. Instructors will NO LONGER be able to modify any marks.`)) {
-      return;
-    }
+    setConfirmDialog({
+      isOpen: true,
+      title: "Close Semester & Finalize Course",
+      message: `Are you sure you want to CLOSE THE SEMESTER for course ${assignment.courseCode} (${course?.title || ''})?\n\nThis will lock the course, snapshot current student marks, compute final letter grades & GPA, and finalize official transcripts. Instructors will NO LONGER be able to modify any marks.`,
+      confirmText: "Close Semester",
+      cancelText: "Cancel",
+      isDanger: true,
+      onConfirm: async () => {
+        try {
+          // 1. Hit the backend finalize-course endpoint
+          await apiService.finalizeCourse(courseId, acadYear);
 
-    try {
-      // 1. Hit the backend finalize-course endpoint
-      await apiService.finalizeCourse(courseId, acadYear);
+          // 2. Locally mark assignment as closed
+          const updatedAssignments = teacherAssignments.map(a => {
+            if (a.teacherId === assignment.teacherId && a.courseCode === assignment.courseCode && a.programId === assignment.programId) {
+              return { ...a, status: 'closed' as const };
+            }
+            return a;
+          });
 
-      // 2. Locally mark assignment as closed
-      const updatedAssignments = teacherAssignments.map(a => {
-        if (a.teacherId === assignment.teacherId && a.courseCode === assignment.courseCode && a.programId === assignment.programId) {
-          return { ...a, status: 'closed' as const };
+          setTeacherAssignments(updatedAssignments);
+          localStorage.setItem('IQRA_OBE_TEACHER_ASSIGNMENTS', JSON.stringify(updatedAssignments));
+
+          // 3. Instantly sync changes to InstructorCourses
+          syncToInstructorCourses(courses, teachers, updatedAssignments, studentBindings, students);
+
+          triggerNotification(`Successfully finalized and closed ${assignment.courseCode} for academic year ${acadYear}. Transcripts generated!`);
+        } catch (err: any) {
+          console.error(err);
+          triggerNotification(err.message || "Failed to finalize and close course.", true);
         }
-        return a;
-      });
-
-      setTeacherAssignments(updatedAssignments);
-      localStorage.setItem('IQRA_OBE_TEACHER_ASSIGNMENTS', JSON.stringify(updatedAssignments));
-
-      // 3. Instantly sync changes to InstructorCourses
-      syncToInstructorCourses(courses, teachers, updatedAssignments, studentBindings, students);
-
-      triggerNotification(`Successfully finalized and closed ${assignment.courseCode} for academic year ${acadYear}. Transcripts generated!`);
-    } catch (err: any) {
-      console.error(err);
-      triggerNotification(err.message || "Failed to finalize and close course.", true);
-    }
+      }
+    });
   };
 
   // 5. Manage Predefined Plans
@@ -1622,8 +1654,32 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
   // Available courses (global courses that are NOT in any semester plan of the selected program)
   const availableCoursesForPlan = useMemo(() => {
     return courses.filter(c => {
-      // Filter by department and program of current plan
+      // Filter by department of current plan
       const deptMatch = c.departmentId === (programs.find(p => p.id === selectedPlanProg)?.departmentId || 'computing');
+      
+      // A course is considered common if:
+      // 1. It has no program assigned, or is explicitly "common"/"global"
+      // 2. OR its code has a prefix representing a shared/general core course:
+      //    - Computing department: CMC (Computing Core), GER (General Education), MTE (Math & Eng), ESC (Supporting)
+      //    - Business department: BUS, MKT (Management & Marketing)
+      const isCommon = !c.programId || 
+        String(c.programId).trim() === '' || 
+        String(c.programId).trim().toLowerCase() === 'common' ||
+        String(c.programId).trim().toLowerCase() === 'global' ||
+        (c.departmentId === 'computing' && (
+          c.code.toUpperCase().startsWith('CMC') || 
+          c.code.toUpperCase().startsWith('GER') || 
+          c.code.toUpperCase().startsWith('MTE') || 
+          c.code.toUpperCase().startsWith('ESC')
+        )) ||
+        (c.departmentId === 'business' && (
+          c.code.toUpperCase().startsWith('BUS') || 
+          c.code.toUpperCase().startsWith('MKT')
+        ));
+
+      const isCurrentProg = String(c.programId).trim().toLowerCase() === String(selectedPlanProg).trim().toLowerCase();
+      const programMatch = isCurrentProg || isCommon;
+
       const isAlreadyInAnyPlan = semesterPlans
         .filter(p => p.programId === selectedPlanProg)
         .some(p => p.courseCodes.includes(c.code));
@@ -1631,7 +1687,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
         c.code.toLowerCase().includes(planSearch.toLowerCase()) || 
         c.title.toLowerCase().includes(planSearch.toLowerCase());
       
-      return deptMatch && !isAlreadyInAnyPlan && searchMatch;
+      return deptMatch && programMatch && !isAlreadyInAnyPlan && searchMatch;
     });
   }, [courses, selectedPlanProg, semesterPlans, planSearch, programs]);
 
@@ -4020,6 +4076,46 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* CUSTOM CONFIRMATION DIALOG */}
+      {confirmDialog?.isOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-sm w-full p-6 space-y-4 relative animate-in zoom-in-95 duration-150">
+            <div className="flex items-start gap-3">
+              <div className={`p-2 rounded-xl shrink-0 ${confirmDialog.isDanger ? 'bg-red-50 text-red-600' : 'bg-indigo-50 text-indigo-600'}`}>
+                <AlertCircle className="h-5 w-5" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-sm font-extrabold text-slate-900">{confirmDialog.title}</h3>
+                <p className="text-xs text-slate-500 leading-relaxed whitespace-pre-wrap">{confirmDialog.message}</p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setConfirmDialog(null)}
+                className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all cursor-pointer"
+              >
+                {confirmDialog.cancelText || 'Cancel'}
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const onConf = confirmDialog.onConfirm;
+                  setConfirmDialog(null);
+                  await onConf();
+                }}
+                className={`px-4 py-2 text-white rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  confirmDialog.isDanger ? 'bg-red-500 hover:bg-red-600' : 'bg-indigo-600 hover:bg-indigo-700'
+                }`}
+              >
+                {confirmDialog.confirmText || 'Confirm'}
+              </button>
+            </div>
           </div>
         </div>
       )}
