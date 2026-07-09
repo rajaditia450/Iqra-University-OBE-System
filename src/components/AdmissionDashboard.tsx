@@ -15,6 +15,7 @@ import {
   X, 
   UserPlus, 
   AlertCircle,
+  AlertTriangle,
   RefreshCw,
   Clock,
   Calendar,
@@ -140,6 +141,9 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
   const [importFile, setImportFile] = useState<File | null>(null);
   const [previewData, setPreviewData] = useState<any[]>([]);
   const [importStatus, setImportStatus] = useState<{ type: 'idle' | 'success' | 'error', message: string }>({ type: 'idle', message: '' });
+  const [importProgress, setImportProgress] = useState<{ current: number, total: number } | null>(null);
+  const [skippedRows, setSkippedRows] = useState<Array<{ rowNum: number, regNo: string, name: string, reason: string }>>([]);
+  const [isImporting, setIsImporting] = useState(false);
 
   // Filter and Search Logic for Delete Tab Directory
   const deleteFilteredStudents = useMemo(() => {
@@ -412,6 +416,8 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
     if (!file) return;
     setImportFile(file);
     setImportStatus({ type: 'idle', message: '' });
+    setImportProgress(null);
+    setSkippedRows([]);
 
     const reader = new FileReader();
     reader.onload = (event) => {
@@ -529,43 +535,83 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
   };
 
   const handleImportSubmit = async () => {
-    const validStudentsOnly = previewData.filter(p => p.isValid);
-    if (validStudentsOnly.length === 0) {
-      setImportStatus({ type: 'error', message: 'No valid records found to import. Please fix any validation errors in your sheet.' });
+    if (previewData.length === 0) {
+      setImportStatus({ type: 'error', message: 'No records found to import.' });
       return;
     }
 
     try {
-      setLoading(true);
+      setIsImporting(true);
+      setImportProgress({ current: 0, total: previewData.length });
+      setSkippedRows([]);
+      setImportStatus({ type: 'idle', message: '' });
+
       const results: Student[] = [];
-      for (const ps of validStudentsOnly) {
-        const payload: Student = {
-          regNo: ps.regNo,
-          name: ps.name,
-          email: ps.email,
-          departmentId: ps.departmentId,
-          programId: ps.programId,
-          batch: ps.batch,
-          semester: ps.semester
-        };
-        const created = await apiService.createStudent(payload);
-        results.push(created);
+      const skipped: Array<{ rowNum: number; regNo: string; name: string; reason: string }> = [];
+
+      for (let i = 0; i < previewData.length; i++) {
+        const ps = previewData[i];
+        
+        // Update progress counter dynamically (e.g. 1/100, 2/100, etc.)
+        setImportProgress({ current: i + 1, total: previewData.length });
+
+        if (!ps.isValid) {
+          skipped.push({
+            rowNum: ps.rowNum,
+            regNo: ps.regNo || '—',
+            name: ps.name || '—',
+            reason: ps.errors.join(', ') || 'Validation failed'
+          });
+          continue;
+        }
+
+        try {
+          const payload: Student = {
+            regNo: ps.regNo,
+            name: ps.name,
+            email: ps.email,
+            departmentId: ps.departmentId,
+            programId: ps.programId,
+            batch: ps.batch,
+            semester: ps.semester
+          };
+          const created = await apiService.createStudent(payload);
+          results.push(created);
+        } catch (err: any) {
+          skipped.push({
+            rowNum: ps.rowNum,
+            regNo: ps.regNo || '—',
+            name: ps.name || '—',
+            reason: err.message || 'Database registration failed'
+          });
+        }
       }
+
       setStudents(prev => {
         const filterRegs = results.map(r => r.regNo);
         return [...prev.filter(s => !filterRegs.includes(s.regNo)), ...results];
       });
 
-      setImportStatus({
-        type: 'success',
-        message: `Successfully registered ${results.length} new students with default password '${DEFAULT_TEMP_PASSWORD}'! Any rows with errors were skipped.`
-      });
-      setPreviewData([]);
-      setImportFile(null);
+      setSkippedRows(skipped);
+
+      if (results.length > 0) {
+        setImportStatus({
+          type: 'success',
+          message: `Successfully registered ${results.length} new student(s) with default password '${DEFAULT_TEMP_PASSWORD}'! ${skipped.length} record(s) were skipped or failed.`
+        });
+        setPreviewData([]);
+        setImportFile(null);
+      } else {
+        setImportStatus({
+          type: 'error',
+          message: `Failed to import student profiles. All ${skipped.length} record(s) were skipped or failed. See details below.`
+        });
+      }
     } catch (err: any) {
       setImportStatus({ type: 'error', message: err.message || 'An error occurred while importing records.' });
     } finally {
-      setLoading(false);
+      setIsImporting(false);
+      setImportProgress(null);
     }
   };
 
@@ -1280,106 +1326,123 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
                       </div>
 
                       <div className="p-8 space-y-8">
-                        {/* Status Message */}
-                        {importStatus.type !== 'idle' && (
-                          <div className={`p-4 rounded-xl border flex items-start gap-2.5 font-semibold text-sm ${
-                            importStatus.type === 'success' 
-                              ? 'bg-emerald-50 text-emerald-800 border-emerald-100' 
-                              : 'bg-red-50 text-red-700 border-red-100'
-                          }`}>
-                            {importStatus.type === 'success' ? (
-                              <Check className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
-                            ) : (
-                              <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
-                            )}
-                            <div className="space-y-1">
-                              <span>{importStatus.message}</span>
-                              {importStatus.type === 'success' && (
-                                <button
-                                  onClick={() => setActiveTab('directory')}
-                                  className="block text-xs text-emerald-700 hover:text-emerald-950 underline transition-colors cursor-pointer mt-1"
-                                >
-                                  Go to Student Directory &rarr;
-                                </button>
-                              )}
+                        {isImporting && importProgress ? (
+                          <div className="p-12 flex flex-col items-center justify-center text-center space-y-6 bg-slate-50 border border-slate-200 rounded-[20px] animate-in fade-in duration-200">
+                            <div className="w-16 h-16 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-650 shadow-inner">
+                              <RefreshCw className="w-8 h-8 animate-spin" />
                             </div>
+                            <div className="space-y-1">
+                              <h3 className="font-display font-bold text-slate-800 text-base">Bulk Registration in Progress</h3>
+                              <p className="text-xs text-slate-500 font-semibold max-w-sm">
+                                Please keep this page open. Registering, formatting, and synchronizing directory records with the academic registry...
+                              </p>
+                            </div>
+                            
+                            {/* Progress bar */}
+                            <div className="w-full max-w-md space-y-2">
+                              <div className="w-full bg-slate-200 rounded-full h-3 overflow-hidden border border-slate-300 shadow-inner">
+                                <div 
+                                  className="bg-indigo-600 h-full rounded-full transition-all duration-300"
+                                  style={{ width: `${(importProgress.current / importProgress.total) * 100}%` }}
+                                />
+                              </div>
+                              <div className="flex justify-between items-center text-[10px] text-slate-400 font-bold uppercase tracking-wider px-1">
+                                <span>Processing...</span>
+                                <span className="font-mono">{Math.round((importProgress.current / importProgress.total) * 100)}%</span>
+                              </div>
+                            </div>
+                            
+                            <span className="text-xs font-mono font-black text-indigo-700 bg-indigo-50 border border-indigo-100 px-4 py-1.5 rounded-full shadow-2xs">
+                              {importProgress.current} / {importProgress.total} Records Processed
+                            </span>
                           </div>
-                        )}
+                        ) : (
+                          <>
+                            {/* Status Message */}
+                            {importStatus.type !== 'idle' && (
+                              <div className={`p-4 rounded-xl border flex items-start gap-2.5 font-semibold text-sm ${
+                                importStatus.type === 'success' 
+                                  ? 'bg-emerald-50 text-emerald-800 border-emerald-100' 
+                                  : 'bg-red-50 text-red-700 border-red-100'
+                              }`}>
+                                {importStatus.type === 'success' ? (
+                                  <Check className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+                                ) : (
+                                  <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+                                )}
+                                <div className="space-y-1">
+                                  <span>{importStatus.message}</span>
+                                  {importStatus.type === 'success' && (
+                                    <button
+                                      onClick={() => setActiveTab('directory')}
+                                      className="block text-xs text-emerald-700 hover:text-emerald-950 underline transition-colors cursor-pointer mt-1"
+                                    >
+                                      Go to Student Directory &rarr;
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            )}
 
-                        {/* Dropzone Area */}
-                        <div className="border-2 border-dashed border-slate-200 hover:border-indigo-500 rounded-[20px] bg-slate-50/50 hover:bg-indigo-50/10 p-8 transition-all relative group flex flex-col items-center justify-center text-center">
-                          <input
-                            type="file"
-                            accept=".xlsx, .xls, .csv"
-                            onChange={handleFileUpload}
-                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                          />
-                          <div className="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center mb-3 group-hover:scale-105 transition-transform duration-200">
-                            <Upload className="w-6 h-6" />
-                          </div>
-                          <p className="text-sm font-bold text-slate-700 mb-1">
-                            {importFile ? importFile.name : 'Drag and drop your spreadsheet here'}
-                          </p>
-                          <p className="text-xs text-slate-400 font-medium">
-                            {importFile ? `${(importFile.size / 1024).toFixed(1)} KB` : 'Supports Microsoft Excel (.xlsx, .xls) or comma-separated CSV'}
-                          </p>
-                        </div>
-
-                        {/* Guidelines & Formats */}
-                        <div className="p-6 bg-slate-50 border border-slate-200/60 rounded-2xl">
-                          <h3 className="font-display font-bold text-slate-800 text-xs uppercase tracking-wider mb-3">
-                            Spreadsheet Column Mapping & Guide
-                          </h3>
-                          <p className="text-xs text-slate-500 mb-4 leading-relaxed font-semibold">
-                            Only provide the columns below. The system will automatically detect the <strong>Admission Batch</strong> and active <strong>Semester</strong> based on the Registration Number.
-                          </p>
-
-                          <div className="overflow-x-auto">
-                            <table className="min-w-full divide-y divide-slate-200 text-left border border-slate-100 rounded-lg overflow-hidden bg-white">
-                              <thead className="bg-slate-100">
-                                <tr>
-                                  <th className="px-4 py-2.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Column Name</th>
-                                  <th className="px-4 py-2.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Example Value</th>
-                                  <th className="px-4 py-2.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Acceptable Parameters / IDs</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-600">
-                                <tr>
-                                  <td className="px-4 py-3 font-bold text-indigo-600 font-mono">Registration Number</td>
-                                  <td className="px-4 py-3 font-mono">052-sp23-22055</td>
-                                  <td className="px-4 py-3">Format must be exactly 052-sp23-22055. Must be unique.</td>
-                                </tr>
-                                <tr>
-                                  <td className="px-4 py-3 font-bold text-indigo-600 font-mono">Student Name</td>
-                                  <td className="px-4 py-3">Wajahat Bine Saif</td>
-                                  <td className="px-4 py-3">Letters, spaces, periods.</td>
-                                </tr>
-                                <tr>
-                                  <td className="px-4 py-3 font-bold text-indigo-600 font-mono">Department ID</td>
-                                  <td className="px-4 py-3 font-mono">computing</td>
-                                  <td className="px-4 py-3">
-                                    <div className="flex flex-wrap gap-1">
-                                      {departments.map(d => (
-                                        <span key={d.id} className="px-1.5 py-0.5 bg-slate-100 text-[9px] font-bold font-mono rounded text-slate-700 uppercase">{d.id}</span>
+                            {/* Detailed Skipped / Failed Rows Report */}
+                            {skippedRows.length > 0 && (
+                              <div className="p-5 bg-amber-50 border border-amber-200 rounded-2xl space-y-3.5 shadow-3xs animate-in slide-in-from-top-4 duration-200">
+                                <div className="flex items-center gap-2.5 text-amber-800 font-bold text-xs uppercase tracking-wider">
+                                  <AlertTriangle className="w-4.5 h-4.5 text-amber-600 shrink-0" />
+                                  <span>Import Skipped / Failed Record Report ({skippedRows.length})</span>
+                                </div>
+                                <p className="text-xs text-slate-500 font-semibold leading-normal">
+                                  The following rows were not imported due to syntax errors, invalid program/department references, or pre-existing duplicate registration numbers:
+                                </p>
+                                <div className="max-h-[220px] overflow-y-auto border border-amber-100 rounded-xl bg-white shadow-2xs overflow-hidden">
+                                  <table className="min-w-full divide-y divide-slate-150 text-[11px] text-slate-700 font-medium">
+                                    <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-[9px] tracking-wider sticky top-0 border-b border-slate-200">
+                                      <tr>
+                                        <th className="px-4 py-2.5 text-left w-16">Row #</th>
+                                        <th className="px-4 py-2.5 text-left w-36">Reg No</th>
+                                        <th className="px-4 py-2.5 text-left w-48">Student Name</th>
+                                        <th className="px-4 py-2.5 text-left">Failure Reason</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                      {skippedRows.map((r, i) => (
+                                        <tr key={i} className="hover:bg-amber-50/10 font-semibold">
+                                          <td className="px-4 py-2.5 font-mono text-slate-400 text-center">{r.rowNum}</td>
+                                          <td className="px-4 py-2.5 font-mono font-bold text-slate-900">{r.regNo}</td>
+                                          <td className="px-4 py-2.5 text-slate-800">{r.name}</td>
+                                          <td className="px-4 py-2.5">
+                                            <span className="text-rose-600 font-bold bg-rose-50 border border-rose-100 px-2 py-0.5 rounded-md text-[10px]">
+                                              {r.reason}
+                                            </span>
+                                          </td>
+                                        </tr>
                                       ))}
-                                    </div>
-                                  </td>
-                                </tr>
-                                <tr>
-                                  <td className="px-4 py-3 font-bold text-indigo-600 font-mono">Program ID</td>
-                                  <td className="px-4 py-3 font-mono">bscs</td>
-                                  <td className="px-4 py-3">
-                                    <div className="flex flex-wrap gap-1 max-w-sm">
-                                      {programs.map(p => (
-                                        <span key={p.id} className="px-1.5 py-0.5 bg-slate-100 text-[9px] font-bold font-mono rounded text-slate-700 uppercase" title={p.name}>{p.id}</span>
-                                      ))}
-                                    </div>
-                                  </td>
-                                </tr>
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Dropzone Area */}
+                            <div className="border-2 border-dashed border-slate-200 hover:border-indigo-500 rounded-[20px] bg-slate-50/50 hover:bg-indigo-50/10 p-8 transition-all relative group flex flex-col items-center justify-center text-center">
+                              <input
+                                type="file"
+                                accept=".xlsx, .xls, .csv"
+                                onChange={handleFileUpload}
+                                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                              />
+                              <div className="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center mb-3 group-hover:scale-105 transition-transform duration-200">
+                                <Upload className="w-6 h-6" />
+                              </div>
+                              <p className="text-sm font-bold text-slate-700 mb-1">
+                                {importFile ? importFile.name : 'Drag and drop your spreadsheet here'}
+                              </p>
+                              <p className="text-xs text-slate-400 font-medium">
+                                {importFile ? `${(importFile.size / 1024).toFixed(1)} KB` : 'Supports Microsoft Excel (.xlsx, .xls) or comma-separated CSV'}
+                              </p>
+                            </div>
+
+
 
                         {/* Import Preview Area */}
                         {previewData.length > 0 && (
@@ -1456,15 +1519,17 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
                               <button
                                 onClick={handleImportSubmit}
                                 className="px-5 py-2.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-all shadow-md cursor-pointer flex items-center gap-1.5"
-                                disabled={previewData.filter(r => r.isValid).length === 0}
+                                disabled={previewData.length === 0}
                               >
                                 <Check className="w-4 h-4" />
-                                <span>Register {previewData.filter(r => r.isValid).length} Valid Students</span>
+                                <span>Register All {previewData.length} Students</span>
                               </button>
                             </div>
                           </div>
                         )}
-                      </div>
+                      </>
+                    )}
+                  </div>
                     </div>
                   </div>
                 </motion.div>

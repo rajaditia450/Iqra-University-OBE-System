@@ -639,7 +639,7 @@ export const apiService = {
         fetchWithTimeout(`${BASE_URL}/departments/`, { headers: getHeaders() }).then(res => res.json()),
         fetchWithTimeout(`${BASE_URL}/programs/`, { headers: getHeaders() }).then(res => res.json()),
         fetchWithTimeout(`${BASE_URL}/gas/`, { headers: getHeaders() }).then(res => res.json()),
-        fetchWithTimeout(`${BASE_URL}/courses/`, { headers: getHeaders() }).then(res => res.json()).catch(() => [])
+        fetchWithTimeout(`${BASE_URL}/courses/`, { headers: getHeaders() }).then(res => res.json()).catch(() => null)
       ]);
 
       // If backend replies with malformed details or empty arrays, let's gracefully fall back to local storage
@@ -648,7 +648,7 @@ export const apiService = {
       }
 
       const fallbackCourses = getLocalStorageData().courses;
-      const mergedCourses = Array.isArray(courses) && courses.length > 0 ? courses : fallbackCourses;
+      const mergedCourses = Array.isArray(courses) ? courses : fallbackCourses;
 
       return {
         departments: depts || [],
