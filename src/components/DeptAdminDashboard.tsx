@@ -30,7 +30,8 @@ import {
   ChevronUp,
   Clock,
   CheckCircle2,
-  ArrowRight
+  ArrowRight,
+  Edit
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import FacultyDirectoryTab from './admin/FacultyDirectoryTab';
@@ -284,6 +285,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
   const [courseGAs, setCourseGAs] = useState<string[]>([]);
   const [courseSearch, setCourseSearch] = useState('');
   const [importStatus, setImportStatus] = useState<{ type: 'idle' | 'success' | 'error', message: string }>({ type: 'idle', message: '' });
+  const [editingCourse, setEditingCourse] = useState<Course | null>(null);
 
   // Tab 3: Teacher Creation State
   const [teacherName, setTeacherName] = useState('');
@@ -649,7 +651,8 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
 
     const updatedInstructorCourses: InstructorCourse[] = currentAssignments.map(assignment => {
       const teacher = currentTeachers.find(t => matchTeacher(t, assignment.teacherId));
-      const course = currentCourses.find(c => c.code === assignment.courseCode);
+      const assignmentProgClean = assignment.programId ? String(assignment.programId).trim().toLowerCase() : '';
+      const course = currentCourses.find(c => c.code === assignment.courseCode && (!assignmentProgClean || String(c.programId).trim().toLowerCase() === assignmentProgClean)) || currentCourses.find(c => c.code === assignment.courseCode);
       const matchedDept = departments.find(d => d.id === (course?.departmentId || 'computing'));
       
       const defaultDeptProgram = programs.find(p => p.departmentId === managedDeptId)?.id || 'bscs';
@@ -827,8 +830,14 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
     }
 
     const uppercaseCode = courseCode.trim().toUpperCase();
+    const cleanProg = String(courseProg).trim().toLowerCase();
+    if (courses.some(c => c.code === uppercaseCode && String(c.programId).trim().toLowerCase() === cleanProg)) {
+      triggerNotification(`Course with code ${uppercaseCode} for program ${courseProg} already exists`, true);
+      return;
+    }
+
     if (courses.some(c => c.code === uppercaseCode)) {
-      triggerNotification(`Course with code ${uppercaseCode} already exists`, true);
+      triggerNotification(`Course with code ${uppercaseCode} already exists in the catalog. You can add it directly to your semester plans!`, true);
       return;
     }
 
@@ -845,8 +854,8 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
     };
 
     try {
-      await apiService.createCourse(newCourse);
-      const updatedCourses = [...courses, newCourse];
+      const created = await apiService.createCourse(newCourse);
+      const updatedCourses = [...courses, created];
       setCourses(updatedCourses);
 
       // Clean inputs
@@ -856,7 +865,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
       setCourseCreditHours(3);
       setCourseSubtype('Theory');
 
-      triggerNotification(`Course ${uppercaseCode} - ${newCourse.title} created successfully!`);
+      triggerNotification(`Course ${uppercaseCode} - ${created.title} created successfully!`);
     } catch (err) {
       triggerNotification("Failed to save the new course.", true);
     }
@@ -867,12 +876,66 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
       return;
     }
     try {
-      const idToDelete = course.id || course.code;
+      let idToDelete = course.id || course.code;
+      // Fallback in case ID is a client-side generated string and we are using a backend
+      if (idToDelete.startsWith('course-')) {
+        const matchingRealCourse = courses.find(
+          c => c.code === course.code && 
+               String(c.programId).trim().toLowerCase() === String(course.programId).trim().toLowerCase() && 
+               c.id && 
+               !c.id.startsWith('course-')
+        );
+        if (matchingRealCourse) {
+          idToDelete = matchingRealCourse.id;
+        } else {
+          idToDelete = course.code;
+        }
+      }
+
       await apiService.deleteCourse(idToDelete);
       setCourses(prev => prev.filter(c => (c.id !== course.id && c.code !== course.code)));
       triggerNotification(`Course ${course.code} deleted successfully.`);
     } catch (err: any) {
-      triggerNotification(err.message || "Failed to delete the course.", true);
+      // If deleting failed, let's check for reference/foreign key constraint warning
+      const hasAssignments = teacherAssignments.some(a => a.courseCode === course.code);
+      const hasBindings = studentBindings.some(b => b.courseCode === course.code);
+      if (hasAssignments || hasBindings) {
+        triggerNotification(`Cannot delete course ${course.code} because it has active teacher assignments or student enrollments. Please remove those first.`, true);
+      } else {
+        triggerNotification(err.message || "Failed to delete the course.", true);
+      }
+    }
+  };
+
+  const handleUpdateCourse = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingCourse) return;
+
+    if (!editingCourse.code.trim() || !editingCourse.title.trim()) {
+      triggerNotification("Please fill in course code and title", true);
+      return;
+    }
+
+    const uppercaseCode = editingCourse.code.trim().toUpperCase();
+    const cleanProg = String(editingCourse.programId).trim().toLowerCase();
+    if (courses.some(c => c.id !== editingCourse.id && c.code === uppercaseCode && String(c.programId).trim().toLowerCase() === cleanProg)) {
+      triggerNotification(`Another course with code ${uppercaseCode} for program ${editingCourse.programId} already exists`, true);
+      return;
+    }
+
+    try {
+      const updatedCourseData: Course = {
+        ...editingCourse,
+        code: uppercaseCode,
+        title: editingCourse.title.trim(),
+      };
+
+      const updated = await apiService.updateCourse(editingCourse.id, updatedCourseData);
+      setCourses(prev => prev.map(c => c.id === editingCourse.id ? { ...c, ...updated } : c));
+      setEditingCourse(null);
+      triggerNotification(`Course ${uppercaseCode} updated successfully!`);
+    } catch (err: any) {
+      triggerNotification(err.message || "Failed to update course.", true);
     }
   };
 
@@ -899,8 +962,11 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
 
         let importedCount = 0;
         let skippedCount = 0;
-        const currentLocalData = apiService.getLocalStorageData();
-        const updatedCourseList = [...currentLocalData.courses];
+
+        // Use the current active courses state (which reflects actual registered courses)
+        // instead of the fallback local storage mock data.
+        const updatedCourseList = [...courses];
+        const coursesToCreate: Course[] = [];
 
         data.forEach((row, idx) => {
           const rawCode = row['Course Code'] || row['code'] || row['CourseCode'];
@@ -908,34 +974,86 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
           const rawType = row['Type'] || row['type'] || 'core';
           const rawDept = row['Department ID'] || row['departmentId'] || 'computing';
           const rawProg = row['Program ID'] || row['programId'] || 'bscs';
-          const rawGAs = row['Mapped GAs'] || row['mappedGAs'] || '';
+          
+          const rawCredits = row['Credit Hours'] || row['creditHours'] || row['Credits'] || row['credit_hours'];
+          const rawSubtype = row['Course Subtype'] || row['courseSubtype'] || row['Subtype'] || row['courseType'] || 'Theory';
 
           if (rawCode && rawTitle) {
             const codeClean = String(rawCode).trim().toUpperCase();
-            // Check duplicates
-            if (updatedCourseList.some(c => c.code === codeClean)) {
+            const progClean = String(rawProg).trim().toLowerCase();
+            // Check duplicates against current registered list by both course code and program ID!
+            if (updatedCourseList.some(c => c.code === codeClean && String(c.programId).trim().toLowerCase() === progClean)) {
               skippedCount++;
             } else {
-              const gaList = String(rawGAs).split(',').map(s => s.trim());
+              // Parse Credit Hours properly (defaults to 3)
+              let creditHours = 3;
+              if (rawCredits !== undefined && rawCredits !== null && String(rawCredits).trim() !== '') {
+                const parsed = parseInt(String(rawCredits).trim(), 10);
+                if (!isNaN(parsed)) {
+                  creditHours = parsed;
+                }
+              }
+
+              // Parse Course Subtype (Theory or Lab)
+              let courseType: 'Theory' | 'Lab' = 'Theory';
+              if (rawSubtype && String(rawSubtype).trim().toLowerCase() === 'lab') {
+                courseType = 'Lab';
+              }
+
               const newC: Course = {
                 id: `course-imported-${Date.now()}-${idx}`,
                 code: codeClean,
                 title: String(rawTitle).trim(),
                 type: String(rawType).toLowerCase().includes('elective') ? 'elective' : 'core',
                 departmentId: String(rawDept).trim().toLowerCase(),
-                programId: String(rawProg).trim().toLowerCase(),
-                mappedGAs: gaList
+                programId: progClean,
+                mappedGAs: [], // Initially not mapped to any GA (QA adds manually)
+                creditHours: creditHours,
+                courseType: courseType
               };
               updatedCourseList.push(newC);
+
+              // CRITICAL: Check if this course code already exists in the backend database.
+              // If it does, we do NOT need to recreate it on the backend (preventing Django UNIQUE constraint failure),
+              // but we STILL consider it imported in memory for this program.
+              const existsInDatabase = courses.some(c => c.code === codeClean);
+              if (!existsInDatabase) {
+                coursesToCreate.push(newC);
+              }
               importedCount++;
             }
           }
         });
 
         if (importedCount > 0) {
-          const updatedDB = { ...currentLocalData, courses: updatedCourseList };
-          apiService.saveLocalStorageData(updatedDB);
-          setCourses(updatedCourseList);
+          const isBackend = !!localStorage.getItem('access');
+          let finalCourseList = updatedCourseList;
+          if (isBackend) {
+            setImportStatus({ type: 'idle', message: `Syncing ${importedCount} courses with backend server...` });
+            try {
+              // Create each course in the backend database concurrently and get the real database-registered records
+              const createdCourses = await Promise.all(coursesToCreate.map(async (c) => {
+                return await apiService.createCourse(c);
+              }));
+              const otherCourses = courses.filter(c => !coursesToCreate.some(tc => tc.code === c.code && String(tc.programId).trim().toLowerCase() === String(c.programId).trim().toLowerCase()));
+              finalCourseList = [...otherCourses, ...createdCourses];
+            } catch (backendErr: any) {
+              console.error("Backend bulk sync failed:", backendErr);
+              setImportStatus({
+                type: 'error',
+                message: `Failed to register imported courses on backend database. Error: ${backendErr.message || backendErr}`
+              });
+              triggerNotification("Failed to sync imported courses to backend", true);
+              return;
+            }
+          } else {
+            // Offline fallback / local storage only
+            const currentLocalData = apiService.getLocalStorageData();
+            const updatedDB = { ...currentLocalData, courses: [...currentLocalData.courses, ...coursesToCreate] };
+            apiService.saveLocalStorageData(updatedDB);
+          }
+
+          setCourses(finalCourseList);
           setImportStatus({ 
             type: 'success', 
             message: `Successfully imported ${importedCount} courses! (Skipped ${skippedCount} duplicate codes)` 
@@ -957,10 +1075,11 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
 
   const downloadExcelTemplate = () => {
     const headers = [
-      ["Course Code", "Course Title", "Type", "Department ID", "Program ID", "Mapped GAs"],
-      ["CS-312", "Web Engineering", "core", "computing", "bscs", "GA-1, GA-2, GA-4"],
-      ["SE-422", "Software Architecture", "core", "computing", "bscs", "GA-3, GA-4"],
-      ["MKT-101", "Principles of Marketing", "core", "business", "bba", "GA-B1, GA-B3"]
+      ["Course Code", "Course Title", "Type", "Credit Hours", "Course Subtype", "Department ID", "Program ID"],
+      ["CS-312", "Web Engineering", "core", 3, "Theory", "computing", "bscs"],
+      ["CS-312L", "Web Engineering Lab", "core", 1, "Lab", "computing", "bscs"],
+      ["SE-422", "Software Architecture", "core", 3, "Theory", "computing", "bscs"],
+      ["MKT-101", "Principles of Marketing", "core", 3, "Theory", "business", "bba"]
     ];
     const ws = XLSX.utils.aoa_to_sheet(headers);
     const wb = XLSX.utils.book_new();
@@ -1157,7 +1276,8 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
     const t = teachers.find(x => matchTeacher(x, teacherId));
     const employeeId = t?.employeeId || teacherId;
     const assignmentProgId = assignment?.programId || programId;
-    const finalProgId = assignmentProgId || courses.find(c => c.code === courseCode)?.programId || programs.find(p => p.departmentId === managedDeptId)?.id || 'bscs';
+    const cleanCourseProg = assignmentProgId ? String(assignmentProgId).trim().toLowerCase() : '';
+    const finalProgId = assignmentProgId || courses.find(c => c.code === courseCode && (!cleanCourseProg || String(c.programId).trim().toLowerCase() === cleanCourseProg))?.programId || courses.find(c => c.code === courseCode)?.programId || programs.find(p => p.departmentId === managedDeptId)?.id || 'bscs';
     
     let acadYear = assignment?.academicYear || 'Fall-2024';
     acadYear = acadYear.replace(/ /g, '-');
@@ -1200,7 +1320,8 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
 
   const handleFinalizeCourse = async (assignment: TeacherCourseAssignment) => {
     const teacher = teachers.find(t => matchTeacher(t, assignment.teacherId));
-    const course = courses.find(c => c.code === assignment.courseCode);
+    const assignmentProgClean = assignment.programId ? String(assignment.programId).trim().toLowerCase() : '';
+    const course = courses.find(c => c.code === assignment.courseCode && (!assignmentProgClean || String(c.programId).trim().toLowerCase() === assignmentProgClean)) || courses.find(c => c.code === assignment.courseCode);
     const defaultDeptProgram = programs.find(p => p.departmentId === managedDeptId)?.id || 'bscs';
     const fallbackProgramId = course?.programId || programs.find(p => p.departmentId === course?.departmentId)?.id || defaultDeptProgram;
     const finalProgramId = assignment.programId || fallbackProgramId;
@@ -1472,7 +1593,8 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
     localStorage.setItem('IQRA_OBE_STUDENT_COURSE_STATUSES', JSON.stringify(updatedStatuses));
 
     const studentObj = students.find(s => s.regNo === studentRegNo);
-    const courseObj = courses.find(c => c.code === courseCode);
+    const studentProgClean = studentObj?.programId ? String(studentObj.programId).trim().toLowerCase() : '';
+    const courseObj = courses.find(c => c.code === courseCode && (!studentProgClean || String(c.programId).trim().toLowerCase() === studentProgClean)) || courses.find(c => c.code === courseCode);
     
     // Custom notifications depending on transition
     let msg = `Updated ${courseCode} status for ${studentObj?.name}`;
@@ -1537,7 +1659,8 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
   const filteredAssignments = useMemo(() => {
     return teacherAssignments.filter(a => {
       const teacher = teachers.find(t => matchTeacher(t, a.teacherId));
-      const course = courses.find(c => c.code === a.courseCode);
+      const assignmentProgClean = a.programId ? String(a.programId).trim().toLowerCase() : '';
+      const course = courses.find(c => c.code === a.courseCode && (!assignmentProgClean || String(c.programId).trim().toLowerCase() === assignmentProgClean)) || courses.find(c => c.code === a.courseCode);
       if (!course || course.departmentId !== managedDeptId) {
         return false;
       }
@@ -1563,9 +1686,11 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
   // Selected student's current bindings
   const selectedStudentCurrentCourses = useMemo(() => {
     if (!selectedStudentRegNo) return [];
+    const student = students.find(s => s.regNo === selectedStudentRegNo);
+    const studentProgClean = student?.programId ? String(student.programId).trim().toLowerCase() : '';
     return studentBindings
       .filter(b => b.studentRegNo === selectedStudentRegNo)
-      .map(b => courses.find(c => c.code === b.courseCode))
+      .map(b => courses.find(c => c.code === b.courseCode && (!studentProgClean || String(c.programId).trim().toLowerCase() === studentProgClean)) || courses.find(c => c.code === b.courseCode))
       .filter((c): c is Course => !!c);
   }, [selectedStudentRegNo, studentBindings, courses]);
 
@@ -1785,7 +1910,8 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
                       {activeSemesterPlanCourses.map(code => {
-                        const matchC = courses.find(c => c.code === code);
+                        const planProgClean = selectedPlanProg ? String(selectedPlanProg).trim().toLowerCase() : '';
+                        const matchC = courses.find(c => c.code === code && (!planProgClean || String(c.programId).trim().toLowerCase() === planProgClean)) || courses.find(c => c.code === code);
                         return (
                           <div 
                             key={code} 
@@ -2086,14 +2212,24 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                             </td>
                             <td className="px-5 py-3.5 text-slate-500">{matchedProg?.name || 'Computing Global'}</td>
                             <td className="px-5 py-3.5 text-right">
-                              <button
-                                onClick={() => handleDeleteCourse(c)}
-                                className="text-red-500 hover:text-red-700 font-bold hover:bg-red-50 px-2.5 py-1.5 rounded-xl border border-transparent hover:border-red-100 transition-all inline-flex items-center gap-1.5 cursor-pointer"
-                                title="Delete Course"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                                <span>Delete</span>
-                              </button>
+                              <div className="flex items-center justify-end gap-2">
+                                <button
+                                  onClick={() => setEditingCourse(c)}
+                                  className="text-indigo-600 hover:text-indigo-800 font-bold hover:bg-indigo-50 px-2.5 py-1.5 rounded-xl border border-transparent hover:border-indigo-100 transition-all inline-flex items-center gap-1.5 cursor-pointer"
+                                  title="Edit Course"
+                                >
+                                  <Edit className="w-3.5 h-3.5" />
+                                  <span>Edit</span>
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteCourse(c)}
+                                  className="text-red-500 hover:text-red-700 font-bold hover:bg-red-50 px-2.5 py-1.5 rounded-xl border border-transparent hover:border-red-100 transition-all inline-flex items-center gap-1.5 cursor-pointer"
+                                  title="Delete Course"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                  <span>Delete</span>
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         );
@@ -2250,7 +2386,8 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                     <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-600 bg-white">
                       {filteredAssignments.map((a, idx) => {
                         const teacher = teachers.find(t => matchTeacher(t, a.teacherId));
-                        const course = courses.find(c => c.code === a.courseCode);
+                        const assignmentProgClean = a.programId ? String(a.programId).trim().toLowerCase() : '';
+                        const course = courses.find(c => c.code === a.courseCode && (!assignmentProgClean || String(c.programId).trim().toLowerCase() === assignmentProgClean)) || courses.find(c => c.code === a.courseCode);
                         const prog = programs.find(p => p.id === a.programId);
                         const isClosed = a.status === 'closed';
 
@@ -2762,7 +2899,8 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                                     {isExpanded && (
                                       <div className="p-4 space-y-3.5 divide-y divide-slate-100 bg-white">
                                         {plan.courseCodes.map((code, idx) => {
-                                          const cObj = courses.find(c => c.code === code);
+                                          const planProgClean = plan.programId ? String(plan.programId).trim().toLowerCase() : '';
+                                          const cObj = courses.find(c => c.code === code && (!planProgClean || String(c.programId).trim().toLowerCase() === planProgClean)) || courses.find(c => c.code === code);
                                           const status = getCourseStatus(s.regNo, code);
                                           if (!cObj) return null;
 
@@ -3756,6 +3894,136 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
 
         </section>
       </main>
+
+      {/* EDIT COURSE MODAL */}
+      {editingCourse && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-md w-full p-6 space-y-4 relative animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
+                <Edit className="h-4.5 w-4.5 text-indigo-600" />
+                <span>Edit Course: {editingCourse.code}</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setEditingCourse(null)}
+                className="text-slate-400 hover:text-slate-600 font-bold p-1 hover:bg-slate-50 rounded-lg cursor-pointer text-xs"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateCourse} className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                  Course Code <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editingCourse.code}
+                  onChange={(e) => setEditingCourse({ ...editingCourse, code: e.target.value.toUpperCase() })}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-indigo-600/10 focus:border-indigo-600 text-xs font-semibold"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                  Course Title <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editingCourse.title}
+                  onChange={(e) => setEditingCourse({ ...editingCourse, title: e.target.value })}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-indigo-600/10 focus:border-indigo-600 text-xs font-semibold"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                    Course Type
+                  </label>
+                  <select
+                    value={editingCourse.type}
+                    onChange={(e) => setEditingCourse({ ...editingCourse, type: e.target.value as 'core' | 'elective' })}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-indigo-600/10 focus:border-indigo-600 text-xs font-semibold"
+                  >
+                    <option value="core">Core</option>
+                    <option value="elective">Elective</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                    Course Subtype
+                  </label>
+                  <select
+                    value={editingCourse.courseType || 'Theory'}
+                    onChange={(e) => setEditingCourse({ ...editingCourse, courseType: e.target.value as 'Theory' | 'Lab' })}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-indigo-600/10 focus:border-indigo-600 text-xs font-semibold"
+                  >
+                    <option value="Theory">Theory</option>
+                    <option value="Lab">Lab</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                    Credit Hours
+                  </label>
+                  <select
+                    value={editingCourse.creditHours !== undefined ? editingCourse.creditHours : 3}
+                    onChange={(e) => setEditingCourse({ ...editingCourse, creditHours: parseInt(e.target.value, 10) })}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-indigo-600/10 focus:border-indigo-600 text-xs font-semibold"
+                  >
+                    <option value={1}>1 Credit Hour</option>
+                    <option value={2}>2 Credit Hours</option>
+                    <option value={3}>3 Credit Hours</option>
+                    <option value={4}>4 Credit Hours</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                    Curriculum Program
+                  </label>
+                  <select
+                    value={editingCourse.programId || ''}
+                    onChange={(e) => setEditingCourse({ ...editingCourse, programId: e.target.value })}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-indigo-600/10 focus:border-indigo-600 text-xs font-semibold"
+                  >
+                    {programs.map(p => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                    <option value="">None (Global)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setEditingCourse(null)}
+                  className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

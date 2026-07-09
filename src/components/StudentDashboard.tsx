@@ -571,26 +571,22 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
     return programGAs.map(ga => {
       // Find courses that are mapped to this GA
       const contributingCourses = enrolledCoursesWithGrades.filter(c => 
-        c.mappedGAs.includes(ga.id) || 
-        // Fallback matching logic for empty GA mappings to keep interface alive
-        (c.mappedGAs.length === 0 && ga.id.endsWith('1') && c.type === 'core')
+        c.mappedGAs.includes(ga.id)
       );
 
       let sumPercentage = 0;
       let count = 0;
 
       contributingCourses.forEach(c => {
-        sumPercentage += c.results.aggregate;
-        count++;
+        if (c.results && c.results.aggregate !== undefined && c.results.aggregate > 0) {
+          sumPercentage += c.results.aggregate;
+          count++;
+        }
       });
 
-      // Fallback base stable score for demo visual if no courses map yet
       let finalScore = 0;
       if (count > 0) {
         finalScore = sumPercentage / count;
-      } else {
-        const hash = (activeRegNo + ga.id).split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-        finalScore = 65 + (hash % 26); // realistic demo baseline
       }
 
       return {

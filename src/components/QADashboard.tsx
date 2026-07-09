@@ -99,6 +99,7 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
   // Form states for creating custom program
   const [newProgramName, setNewProgramName] = useState('');
   const [newProgramCode, setNewProgramCode] = useState('');
+  const [seedGAsChecked, setSeedGAsChecked] = useState(false);
 
   // Form states for adding course
   const [newCourseCode, setNewCourseCode] = useState('');
@@ -280,14 +281,12 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
     gaId: string,
     allCourses: Course[],
     instCourses: any[]
-  ): number => {
+  ): number | null => {
     // Find courses that map to this GA
     const contributingCourses = allCourses.filter(c => c.mappedGAs && c.mappedGAs.includes(gaId));
     
     if (contributingCourses.length === 0) {
-      // Stable pseudo-random score if no courses map to this GA
-      const hash = (student.regNo + gaId).split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-      return 55 + (hash % 35); // 55% to 89%
+      return null; // No mapped courses for this GA
     }
 
     let totalAggregate = 0;
@@ -342,17 +341,13 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
         }
       }
 
-      if (!hasAnyMarks) {
-        // Stable pseudo-random generation based on registration number & course code
-        const hash = (student.regNo + c.code).split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-        aggregate = 61 + (hash % 34); // 61% to 94%
+      if (hasAnyMarks) {
+        totalAggregate += aggregate;
+        coursesWithMarksCount++;
       }
-
-      totalAggregate += aggregate;
-      coursesWithMarksCount++;
     });
 
-    return coursesWithMarksCount > 0 ? totalAggregate / coursesWithMarksCount : 0;
+    return coursesWithMarksCount > 0 ? totalAggregate / coursesWithMarksCount : null;
   };
 
   // Compile report metrics based on current filters
@@ -396,9 +391,14 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
     const gaMetrics = activeGAs.map(ga => {
       let passedCount = 0;
       let failedCount = 0;
+      let assessedCount = 0;
 
       filteredStudents.forEach(s => {
         const score = calculateStudentGAScore(s, ga.id, data.courses, instructorCourses);
+        if (score === null) {
+          return; // Skip this student as they are not assessed for this GA
+        }
+        assessedCount++;
         if (score >= 50) {
           passedCount++;
         } else {
@@ -406,11 +406,13 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
         }
       });
 
-      const totalCount = filteredStudents.length;
+      const totalCount = assessedCount;
       const percentage = totalCount > 0 ? Math.round((passedCount / totalCount) * 100) : 0;
 
-      overallPassTotal += passedCount;
-      overallAssessmentsCount += totalCount;
+      if (totalCount > 0) {
+        overallPassTotal += passedCount;
+        overallAssessmentsCount += totalCount;
+      }
 
       return {
         id: ga.id,
@@ -427,14 +429,15 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
       ? Math.round((overallPassTotal / overallAssessmentsCount) * 100) 
       : 0;
 
-    // Sort to find top and bottom GAs
+    // Sort to find top and bottom GAs, only considering GAs with actual assessments (totalCount > 0)
     let topGA = 'N/A';
     let bottomGA = 'N/A';
 
-    if (gaMetrics.length > 0) {
-      const sortedByPass = [...gaMetrics].sort((a, b) => b.percentage - a.percentage);
-      topGA = sortedByPass[0].percentage > 0 ? `${sortedByPass[0].id} (${sortedByPass[0].percentage}%)` : 'N/A';
-      bottomGA = sortedByPass[sortedByPass.length - 1].percentage > 0 ? `${sortedByPass[sortedByPass.length - 1].id} (${sortedByPass[sortedByPass.length - 1].percentage}%)` : 'N/A';
+    const assessedMetrics = gaMetrics.filter(m => m.totalCount > 0);
+    if (assessedMetrics.length > 0) {
+      const sortedByPass = [...assessedMetrics].sort((a, b) => b.percentage - a.percentage);
+      topGA = `${sortedByPass[0].id} (${sortedByPass[0].percentage}%)`;
+      bottomGA = `${sortedByPass[sortedByPass.length - 1].id} (${sortedByPass[sortedByPass.length - 1].percentage}%)`;
     }
 
     return {
@@ -617,42 +620,44 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
     const codeUpper = newProgramCode.trim().toUpperCase();
     const seededGAs: GA[] = [];
 
-    if (codeUpper === 'SE' || codeUpper.includes('SOFTWARE')) {
-      seededGAs.push(
-        { id: `GA-${codeUpper}-1`, name: 'SE-Philosophy & Principles', description: 'Deep comprehension of engineering principles, lifecycle models, and system metrics.', departmentId: activeDeptId, programId: newId },
-        { id: `GA-${codeUpper}-2`, name: 'Software Requirements Analysis', description: 'Skill to solicit, organize, validate, and trace stakeholder and technical system specifications.', departmentId: activeDeptId, programId: newId },
-        { id: `GA-${codeUpper}-3`, name: 'Software Design & Architecture', description: 'Creating modular, maintainable, secure software systems utilizing architecture blueprints and patterns.', departmentId: activeDeptId, programId: newId },
-        { id: `GA-${codeUpper}-4`, name: 'Software Coding & Verification', description: 'Write secure, clean code, applying testing paradigms, coverage metrics, and clean integration strategies.', departmentId: activeDeptId, programId: newId },
-        { id: `GA-${codeUpper}-5`, name: 'Modern CAD/CASE Tool Usage', description: 'Select and master version control systems (Git), CI/CD pipelines, container fabrics, and testing runners.', departmentId: activeDeptId, programId: newId },
-        { id: `GA-${codeUpper}-6`, name: 'Agile Team Coordination', description: 'Function as an active member inside Scrum/Kanban teams, leading project milestones with clear transparency.', departmentId: activeDeptId, programId: newId },
-        { id: `GA-${codeUpper}-7`, name: 'Technical System Communication', description: 'Prepare professional Software Requirement Specifications (SRS), technical proposals, and presentations.', departmentId: activeDeptId, programId: newId },
-        { id: `GA-${codeUpper}-8`, name: 'Societal & Safety Security Compliance', description: 'Assessing the impacts on health, legal, cybersecurity, and societal norms during software deployment.', departmentId: activeDeptId, programId: newId },
-        { id: `GA-${codeUpper}-9`, name: 'Professional Ethics in Computing', description: 'Uphold intellectual property, security compliance frameworks, and professional computing ethics.', departmentId: activeDeptId, programId: newId },
-        { id: `GA-${codeUpper}-10`, name: 'Agile Continuous Self-Learning', description: 'Ability to independent search, master, and adopt new technologies, framework languages, or engineering stacks.', departmentId: activeDeptId, programId: newId }
-      );
-    } else if (codeUpper === 'AI' || codeUpper.includes('ARTIFICIAL') || codeUpper.includes('INTEL')) {
-      seededGAs.push(
-        { id: `GA-${codeUpper}-1`, name: 'Mathematical Modeling & Statistics', description: 'Formulate probabilistic models, linear algebra matrices, and optimization cost functions.', departmentId: activeDeptId, programId: newId },
-        { id: `GA-${codeUpper}-2`, name: 'Knowledge Representation', description: 'Design knowledge graphs, rule-based systems, and symbolic inference engines to represent logic.', departmentId: activeDeptId, programId: newId },
-        { id: `GA-${codeUpper}-3`, name: 'Supervised & Unsupervised ML', description: 'Build and tune classical machine learning classifiers, regression curves, and clustering models.', departmentId: activeDeptId, programId: newId },
-        { id: `GA-${codeUpper}-4`, name: 'Neural Networks & Deep Learning', description: 'Configure deep multilayer perceptrons, convolutional units (CNNs), and attention transformers.', departmentId: activeDeptId, programId: newId },
-        { id: `GA-${codeUpper}-5`, name: 'Perception (NLP & Vision)', description: 'Synthesize algorithms for natural language understandability, language translation, and high-fidelity video processing.', departmentId: activeDeptId, programId: newId },
-        { id: `GA-${codeUpper}-6`, name: 'Trustworthy AI & Anti-bias Ethics', description: 'Diagnose discrimination bias, protect training dataset privacy, and engineer transparent, explainable AI.', departmentId: activeDeptId, programId: newId },
-        { id: `GA-${codeUpper}-7`, name: 'AI Engineering & HPC Pipelines', description: 'Leverage hyperparameter systems, high-performance GPUs, vector and feature databases.', departmentId: activeDeptId, programId: newId },
-        { id: `GA-${codeUpper}-8`, name: 'Experimental Rigor & Validation', description: 'Develop hypothesis tests, cross-validation scoring splits, and analytical error budgets.', departmentId: activeDeptId, programId: newId },
-        { id: `GA-${codeUpper}-9`, name: 'Autonomous Cooperation Systems', description: 'Deploy multi-agent reinforcement learning architectures and collaborative robotic structures.', departmentId: activeDeptId, programId: newId },
-        { id: `GA-${codeUpper}-10`, name: 'Ethical Aligns & AI Alignment', description: 'Assess long-term safety, human-in-the-loop validation, and sustainable power-efficient computing limits.', departmentId: activeDeptId, programId: newId }
-      );
-    } else {
-      // General program GAs
-      for (let index = 1; index <= 10; index++) {
-        seededGAs.push({
-          id: `GA-${codeUpper}-${index}`,
-          name: `${codeUpper} Core Attribute ${index}`,
-          description: `Acquire and demonstrate profound competency and continuous professional leadership in domain requirement #${index} specifically tailored for the ${newProgramName.trim()} program.`,
-          departmentId: activeDeptId,
-          programId: newId
-        });
+    if (seedGAsChecked) {
+      if (codeUpper === 'SE' || codeUpper.includes('SOFTWARE')) {
+        seededGAs.push(
+          { id: `GA-${codeUpper}-1`, name: 'SE-Philosophy & Principles', description: 'Deep comprehension of engineering principles, lifecycle models, and system metrics.', departmentId: activeDeptId, programId: newId },
+          { id: `GA-${codeUpper}-2`, name: 'Software Requirements Analysis', description: 'Skill to solicit, organize, validate, and trace stakeholder and technical system specifications.', departmentId: activeDeptId, programId: newId },
+          { id: `GA-${codeUpper}-3`, name: 'Software Design & Architecture', description: 'Creating modular, maintainable, secure software systems utilizing architecture blueprints and patterns.', departmentId: activeDeptId, programId: newId },
+          { id: `GA-${codeUpper}-4`, name: 'Software Coding & Verification', description: 'Write secure, clean code, applying testing paradigms, coverage metrics, and clean integration strategies.', departmentId: activeDeptId, programId: newId },
+          { id: `GA-${codeUpper}-5`, name: 'Modern CAD/CASE Tool Usage', description: 'Select and master version control systems (Git), CI/CD pipelines, container fabrics, and testing runners.', departmentId: activeDeptId, programId: newId },
+          { id: `GA-${codeUpper}-6`, name: 'Agile Team Coordination', description: 'Function as an active member inside Scrum/Kanban teams, leading project milestones with clear transparency.', departmentId: activeDeptId, programId: newId },
+          { id: `GA-${codeUpper}-7`, name: 'Technical System Communication', description: 'Prepare professional Software Requirement Specifications (SRS), technical proposals, and presentations.', departmentId: activeDeptId, programId: newId },
+          { id: `GA-${codeUpper}-8`, name: 'Societal & Safety Security Compliance', description: 'Assessing the impacts on health, legal, cybersecurity, and societal norms during software deployment.', departmentId: activeDeptId, programId: newId },
+          { id: `GA-${codeUpper}-9`, name: 'Professional Ethics in Computing', description: 'Uphold intellectual property, security compliance frameworks, and professional computing ethics.', departmentId: activeDeptId, programId: newId },
+          { id: `GA-${codeUpper}-10`, name: 'Agile Continuous Self-Learning', description: 'Ability to independent search, master, and adopt new technologies, framework languages, or engineering stacks.', departmentId: activeDeptId, programId: newId }
+        );
+      } else if (codeUpper === 'AI' || codeUpper.includes('ARTIFICIAL') || codeUpper.includes('INTEL')) {
+        seededGAs.push(
+          { id: `GA-${codeUpper}-1`, name: 'Mathematical Modeling & Statistics', description: 'Formulate probabilistic models, linear algebra matrices, and optimization cost functions.', departmentId: activeDeptId, programId: newId },
+          { id: `GA-${codeUpper}-2`, name: 'Knowledge Representation', description: 'Design knowledge graphs, rule-based systems, and symbolic inference engines to represent logic.', departmentId: activeDeptId, programId: newId },
+          { id: `GA-${codeUpper}-3`, name: 'Supervised & Unsupervised ML', description: 'Build and tune classical machine learning classifiers, regression curves, and clustering models.', departmentId: activeDeptId, programId: newId },
+          { id: `GA-${codeUpper}-4`, name: 'Neural Networks & Deep Learning', description: 'Configure deep multilayer perceptrons, convolutional units (CNNs), and attention transformers.', departmentId: activeDeptId, programId: newId },
+          { id: `GA-${codeUpper}-5`, name: 'Perception (NLP & Vision)', description: 'Synthesize algorithms for natural language understandability, language translation, and high-fidelity video processing.', departmentId: activeDeptId, programId: newId },
+          { id: `GA-${codeUpper}-6`, name: 'Trustworthy AI & Anti-bias Ethics', description: 'Diagnose discrimination bias, protect training dataset privacy, and engineer transparent, explainable AI.', departmentId: activeDeptId, programId: newId },
+          { id: `GA-${codeUpper}-7`, name: 'AI Engineering & HPC Pipelines', description: 'Leverage hyperparameter systems, high-performance GPUs, vector and feature databases.', departmentId: activeDeptId, programId: newId },
+          { id: `GA-${codeUpper}-8`, name: 'Experimental Rigor & Validation', description: 'Develop hypothesis tests, cross-validation scoring splits, and analytical error budgets.', departmentId: activeDeptId, programId: newId },
+          { id: `GA-${codeUpper}-9`, name: 'Autonomous Cooperation Systems', description: 'Deploy multi-agent reinforcement learning architectures and collaborative robotic structures.', departmentId: activeDeptId, programId: newId },
+          { id: `GA-${codeUpper}-10`, name: 'Ethical Aligns & AI Alignment', description: 'Assess long-term safety, human-in-the-loop validation, and sustainable power-efficient computing limits.', departmentId: activeDeptId, programId: newId }
+        );
+      } else {
+        // General program GAs
+        for (let index = 1; index <= 10; index++) {
+          seededGAs.push({
+            id: `GA-${codeUpper}-${index}`,
+            name: `${codeUpper} Core Attribute ${index}`,
+            description: `Acquire and demonstrate profound competency and continuous professional leadership in domain requirement #${index} specifically tailored for the ${newProgramName.trim()} program.`,
+            departmentId: activeDeptId,
+            programId: newId
+          });
+        }
       }
     }
 
@@ -689,8 +694,13 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
       // Reset fields
       setNewProgramName('');
       setNewProgramCode('');
+      setSeedGAsChecked(false);
       setActiveModal(null);
-      showNotification(`Program ${newProg.code} successfully registered! Separate Graduate Attributes (GA-${codeUpper}-1 to GA-${codeUpper}-10) have been generated uniquely for this program.`, "success");
+      if (seededGAs.length > 0) {
+        showNotification(`Program ${newProg.code} successfully registered! Standard Graduate Attributes (GA-${codeUpper}-1 to GA-${codeUpper}-10) have been generated uniquely for this program.`, "success");
+      } else {
+        showNotification(`Program ${newProg.code} successfully registered without any pre-defined Graduate Attributes.`, "success");
+      }
     } catch (e) {
       showNotification("Error saving new program.", "error");
     } finally {
@@ -2025,7 +2035,8 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                   /* ----------------- COURSE LEVEL ASSESSMENT REPORT SHEET (image.png layout) ----------------- */
                   (() => {
                     const activeCourseCode = selectedReportCourseCode;
-                    const courseObj = data?.courses.find(c => c.code === activeCourseCode);
+                    const reportProgClean = selectedReportProgramId && selectedReportProgramId !== 'all' ? String(selectedReportProgramId).trim().toLowerCase() : '';
+                    const courseObj = data?.courses.find(c => c.code === activeCourseCode && (!reportProgClean || String(c.programId).trim().toLowerCase() === reportProgClean)) || data?.courses.find(c => c.code === activeCourseCode);
                     const instCourse = (() => {
                       const existing = instructorCourses.find(ic => ic.code === activeCourseCode);
                       if (existing) return existing;
@@ -2383,33 +2394,40 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                           {/* Render actual bars */}
                           {reportMetrics.gaMetrics.map(metric => {
                             const passedPct = metric.percentage;
+                            const isAssessed = metric.totalCount > 0;
                             return (
                               <div key={metric.id} className="flex-1 flex flex-col items-center group relative z-10">
                                 {/* Tooltip */}
                                 <div className="absolute bottom-full mb-2 opacity-0 group-hover:opacity-100 transition-opacity bg-slate-900 text-white text-[10px] p-3 rounded-lg shadow-xl pointer-events-none w-48 font-sans z-40 text-center leading-normal">
                                   <p className="font-bold text-indigo-300 uppercase font-mono text-[9px] mb-1">{metric.id}</p>
-                                  <p className="font-black text-white text-xs mb-1">{passedPct}% Pass Rate</p>
+                                  {isAssessed ? (
+                                    <p className="font-black text-white text-xs mb-1">{passedPct}% Pass Rate</p>
+                                  ) : (
+                                    <p className="font-black text-slate-300 text-xs mb-1">No Graded Data</p>
+                                  )}
                                   <div className="border-t border-slate-700 my-1 pt-1 text-slate-400 flex justify-between font-mono">
-                                    <span>Passed: {metric.passedCount}</span>
-                                    <span>Failed: {metric.failedCount}</span>
+                                    <span>Passed: {isAssessed ? metric.passedCount : '—'}</span>
+                                    <span>Failed: {isAssessed ? metric.failedCount : '—'}</span>
                                   </div>
                                   <p className="text-[9px] text-slate-400 mt-1 line-clamp-2">{metric.name}</p>
                                 </div>
 
                                 {/* Bar background and fill */}
                                 <div className="w-full bg-slate-200 rounded-t-lg h-48 flex items-end overflow-hidden border border-slate-300 shadow-xs hover:border-indigo-400 transition-colors">
-                                  <div 
-                                    className={`w-full rounded-t-sm transition-all duration-500 hover:brightness-105 cursor-pointer ${
-                                      passedPct >= 80 
-                                        ? 'bg-emerald-500' 
-                                        : passedPct >= 65 
-                                        ? 'bg-teal-500' 
-                                        : passedPct >= 50 
-                                        ? 'bg-amber-500' 
-                                        : 'bg-rose-500'
-                                    }`}
-                                    style={{ height: `${passedPct}%` }}
-                                  />
+                                  {isAssessed && (
+                                    <div 
+                                      className={`w-full rounded-t-sm transition-all duration-500 hover:brightness-105 cursor-pointer ${
+                                        passedPct >= 80 
+                                          ? 'bg-emerald-500' 
+                                          : passedPct >= 65 
+                                          ? 'bg-teal-500' 
+                                          : passedPct >= 50 
+                                          ? 'bg-amber-500' 
+                                          : 'bg-rose-500'
+                                      }`}
+                                      style={{ height: `${passedPct}%` }}
+                                    />
+                                  )}
                                 </div>
 
                                 {/* Label badge */}
@@ -2443,42 +2461,47 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-150">
-                            {reportMetrics.gaMetrics.map(metric => (
-                              <tr key={metric.id} className="hover:bg-slate-50/50 transition-colors font-semibold">
-                                <td className="px-6 py-3.5 font-mono font-black text-indigo-700 text-xs">
-                                  {metric.id}
-                                </td>
-                                <td className="px-6 py-3.5">
-                                  <div className="font-bold text-slate-900">{metric.name}</div>
-                                  <div className="text-[10px] text-slate-400 font-normal mt-0.5">{metric.description || 'Washington Accord attribute compliance measure.'}</div>
-                                </td>
-                                <td className="px-6 py-3.5 text-center font-mono text-slate-600">
-                                  {metric.totalCount} Students
-                                </td>
-                                <td className="px-6 py-3.5 text-center font-mono text-emerald-600 font-bold">
-                                  {metric.passedCount}
-                                </td>
-                                <td className="px-6 py-3.5 text-center font-mono text-rose-500">
-                                  {metric.failedCount}
-                                </td>
-                                <td className="px-6 py-3.5 text-right font-mono font-black text-slate-900 text-sm">
-                                  {metric.percentage}%
-                                </td>
-                                <td className="px-6 py-3.5 text-center">
-                                  <span className={`inline-block px-3 py-1 rounded-full text-[10px] font-black border uppercase tracking-wider ${
-                                    metric.percentage >= 80
-                                      ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
-                                      : metric.percentage >= 65
-                                      ? 'bg-teal-50 text-teal-700 border-teal-100'
-                                      : metric.percentage >= 50
-                                      ? 'bg-amber-50 text-amber-700 border-amber-100'
-                                      : 'bg-rose-50 text-rose-700 border-rose-100'
-                                  }`}>
-                                    {metric.percentage >= 80 ? 'Excellent' : metric.percentage >= 65 ? 'Good' : metric.percentage >= 50 ? 'Satisfactory' : 'Needs Support'}
-                                  </span>
-                                </td>
-                              </tr>
-                            ))}
+                            {reportMetrics.gaMetrics.map(metric => {
+                              const isAssessed = metric.totalCount > 0;
+                              return (
+                                <tr key={metric.id} className="hover:bg-slate-50/50 transition-colors font-semibold">
+                                  <td className="px-6 py-3.5 font-mono font-black text-indigo-700 text-xs">
+                                    {metric.id}
+                                  </td>
+                                  <td className="px-6 py-3.5">
+                                    <div className="font-bold text-slate-900">{metric.name}</div>
+                                    <div className="text-[10px] text-slate-400 font-normal mt-0.5">{metric.description || 'Washington Accord attribute compliance measure.'}</div>
+                                  </td>
+                                  <td className="px-6 py-3.5 text-center font-mono text-slate-600">
+                                    {metric.totalCount} Students
+                                  </td>
+                                  <td className="px-6 py-3.5 text-center font-mono text-emerald-600 font-bold">
+                                    {isAssessed ? metric.passedCount : '—'}
+                                  </td>
+                                  <td className="px-6 py-3.5 text-center font-mono text-rose-500">
+                                    {isAssessed ? metric.failedCount : '—'}
+                                  </td>
+                                  <td className="px-6 py-3.5 text-right font-mono font-black text-slate-900 text-sm">
+                                    {isAssessed ? `${metric.percentage}%` : '—'}
+                                  </td>
+                                  <td className="px-6 py-3.5 text-center">
+                                    <span className={`inline-block px-3 py-1 rounded-full text-[10px] font-black border uppercase tracking-wider ${
+                                      !isAssessed
+                                        ? 'bg-slate-50 text-slate-400 border-slate-200'
+                                        : metric.percentage >= 80
+                                        ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
+                                        : metric.percentage >= 65
+                                        ? 'bg-teal-50 text-teal-700 border-teal-100'
+                                        : metric.percentage >= 50
+                                        ? 'bg-amber-50 text-amber-700 border-amber-100'
+                                        : 'bg-rose-50 text-rose-700 border-rose-100'
+                                    }`}>
+                                      {!isAssessed ? 'No Data' : metric.percentage >= 80 ? 'Excellent' : metric.percentage >= 65 ? 'Good' : metric.percentage >= 50 ? 'Satisfactory' : 'Needs Support'}
+                                    </span>
+                                  </td>
+                                </tr>
+                              );
+                            })}
                           </tbody>
                         </table>
                       </div>
@@ -2863,6 +2886,23 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                         placeholder="e.g. Software Engineering, Artificial Intelligence"
                         className="w-full p-3 font-medium bg-white border border-slate-300 rounded-lg outline-none focus:border-indigo-500 text-xs text-slate-800"
                       />
+                    </div>
+                    
+                    <div className="pt-1">
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
+                        <input 
+                          type="checkbox"
+                          checked={seedGAsChecked}
+                          onChange={(e) => setSeedGAsChecked(e.target.checked)}
+                          className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5 cursor-pointer"
+                        />
+                        <span className="text-[11px] font-bold text-slate-700">
+                          Pre-seed standard Graduate Attributes (GAs)
+                        </span>
+                      </label>
+                      <p className="text-[10px] text-slate-400 ml-5.5 mt-0.5 leading-normal">
+                        Automatically populates 10 standard Washington Accord Graduate Attributes for this program. Leave unchecked if you prefer to register GAs manually in your database.
+                      </p>
                     </div>
                   </div>
 

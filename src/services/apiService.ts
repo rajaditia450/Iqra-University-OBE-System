@@ -619,6 +619,42 @@ const isBackendUser = (): boolean => {
   return !!localStorage.getItem('access');
 };
 
+const normalizeCourse = (c: any): Course => {
+  if (!c) return {} as any;
+  return {
+    id: c.id ? String(c.id) : '',
+    code: c.code ? String(c.code).toUpperCase().trim() : '',
+    title: c.title ? String(c.title).trim() : '',
+    type: c.type === 'elective' ? 'elective' : 'core',
+    mappedGAs: Array.isArray(c.mappedGAs) ? c.mappedGAs : (Array.isArray(c.mapped_gas) ? c.mapped_gas : []),
+    departmentId: c.departmentId || c.department_id || c.department || '',
+    programId: c.programId || c.program_id || c.program || '',
+    creditHours: c.creditHours !== undefined ? Number(c.creditHours) : (c.credit_hours !== undefined ? Number(c.credit_hours) : 3),
+    courseType: c.courseType || c.course_type || 'Theory'
+  };
+};
+
+const mapCourseToBackend = (c: Course): any => {
+  return {
+    id: c.id,
+    code: c.code,
+    title: c.title,
+    type: c.type,
+    mapped_gas: c.mappedGAs || [],
+    mappedGAs: c.mappedGAs || [],
+    department_id: c.departmentId,
+    departmentId: c.departmentId,
+    department: c.departmentId,
+    program_id: c.programId || null,
+    programId: c.programId || null,
+    program: c.programId || null,
+    credit_hours: c.creditHours !== undefined ? Number(c.creditHours) : 3,
+    creditHours: c.creditHours !== undefined ? Number(c.creditHours) : 3,
+    course_type: c.courseType || 'Theory',
+    courseType: c.courseType || 'Theory'
+  };
+};
+
 export const apiService = {
   async checkHealth(): Promise<boolean> {
     try {
@@ -653,14 +689,14 @@ export const apiService = {
         }
       }
 
-      const fallbackCourses = isBackend ? [] : getLocalStorageData().courses;
-      const mergedCourses = Array.isArray(courses) ? courses : fallbackCourses;
+      const rawCourses = Array.isArray(courses) ? courses : (isBackend ? [] : getLocalStorageData().courses);
+      const normalizedCourses = rawCourses.map(normalizeCourse);
 
       return {
         departments: Array.isArray(depts) ? depts : (isBackend ? [] : getLocalStorageData().departments),
         programs: Array.isArray(programs) ? programs : (isBackend ? [] : getLocalStorageData().programs),
         gas: Array.isArray(gas) ? gas : (isBackend ? [] : getLocalStorageData().gas),
-        courses: mergedCourses || [],
+        courses: normalizedCourses,
       };
     } catch (err) {
       console.warn("Backend servers offline or unreachable. Propagating error to UI loader.", err);
@@ -731,24 +767,34 @@ export const apiService = {
   // Save Course Mapping (allows updating course to GA tick marks in local storage / server mock fallback!)
   async updateCourse(id: string, data: Partial<Course>): Promise<Course> {
     try {
+      const isBackend = isBackendUser();
+      const mappedData = mapCourseToBackend({ ...data, id } as Course);
       const response = await fetchWithTimeout(`${BASE_URL}/courses/${id}/`, {
         method: 'PATCH',
         headers: getHeaders(),
-        body: JSON.stringify(data),
+        body: JSON.stringify(mappedData),
       }, 8000);
-      if (response.ok) return response.json();
+      if (response.ok) {
+        const responseData = await response.json();
+        const normalized = normalizeCourse(responseData);
+        if (!isBackend) {
+          const localData = getLocalStorageData();
+          const updatedCourses = localData.courses.map(c => c.id === id ? normalized : c);
+          saveLocalStorageData({ ...localData, courses: updatedCourses });
+        }
+        return normalized;
+      }
       const errData = await response.json().catch(() => ({}));
       throw new Error(errData.detail || errData.error || errData.message || 'Failed to update course on server');
     } catch (err) {
       if (isBackendUser()) {
         throw err;
       }
-      // Squelch fetch error and update locally
     }
     const localData = getLocalStorageData();
     const updatedCourses = localData.courses.map(c => {
       if (c.id === id) {
-        return { ...c, ...data };
+        return normalizeCourse({ ...c, ...data });
       }
       return c;
     });
@@ -759,14 +805,17 @@ export const apiService = {
 
   async deleteCourse(id: string): Promise<boolean> {
     try {
+      const isBackend = isBackendUser();
       const response = await fetchWithTimeout(`${BASE_URL}/courses/${id}/`, {
         method: 'DELETE',
         headers: getHeaders(),
       }, 8000);
       if (response.ok) {
-        const localData = getLocalStorageData();
-        const updatedCourses = localData.courses.filter(c => c.id !== id);
-        saveLocalStorageData({ ...localData, courses: updatedCourses });
+        if (!isBackend) {
+          const localData = getLocalStorageData();
+          const updatedCourses = localData.courses.filter(c => c.id !== id);
+          saveLocalStorageData({ ...localData, courses: updatedCourses });
+        }
         return true;
       } else {
         const errData = await response.json().catch(() => ({}));
@@ -776,7 +825,6 @@ export const apiService = {
       if (isBackendUser()) {
         throw err;
       }
-      console.warn("Backend API for course delete offline. Fallback to local storage.");
     }
     const localData = getLocalStorageData();
     const updatedCourses = localData.courses.filter(c => c.id !== id);
@@ -828,22 +876,26 @@ export const apiService = {
 
   async createCourse(data: Course): Promise<Course> {
     try {
+      const isBackend = isBackendUser();
       const response = await fetchWithTimeout(`${BASE_URL}/courses/`, {
         method: 'POST',
         headers: getHeaders(),
-        body: JSON.stringify(data),
+        body: JSON.stringify(mapCourseToBackend(data)),
       }, 8000);
       if (!response.ok) {
         const errData = await response.json().catch(() => ({}));
         throw new Error(errData.detail || errData.error || errData.message || 'Failed to create course on server');
       }
       const responseData = await response.json();
+      const normalized = normalizeCourse(responseData);
 
-      const localData = getLocalStorageData();
-      const updatedCourses = [...localData.courses, responseData];
-      saveLocalStorageData({ ...localData, courses: updatedCourses });
+      if (!isBackend) {
+        const localData = getLocalStorageData();
+        const updatedCourses = [...localData.courses, normalized];
+        saveLocalStorageData({ ...localData, courses: updatedCourses });
+      }
 
-      return responseData;
+      return normalized;
     } catch (err) {
       throw err;
     }
