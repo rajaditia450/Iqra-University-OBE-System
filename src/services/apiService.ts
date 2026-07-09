@@ -514,10 +514,6 @@ const refreshAccessToken = async (): Promise<string | null> => {
 };
 
 const fetchWithTimeout = async (url: string, options: RequestInit = {}, timeoutMs = 15000): Promise<Response> => {
-  // If previously marked offline, try with a short timeout to probe and potentially recover
-  const wasOffline = localStorage.getItem('backend_offline') === 'true';
-  const effectiveTimeout = wasOffline ? 2500 : timeoutMs;
-
   // Security Interceptor: Block authenticated requests if the user must change their default password
   const savedUserStr = localStorage.getItem('IQRA_OBE_LOGGED_IN_USER');
   if (savedUserStr) {
@@ -532,7 +528,7 @@ const fetchWithTimeout = async (url: string, options: RequestInit = {}, timeoutM
 
   const makeRequest = async (tokenOverride?: string) => {
     const controller = new AbortController();
-    const id = setTimeout(() => controller.abort(), effectiveTimeout);
+    const id = setTimeout(() => controller.abort(), timeoutMs);
     try {
       let reqOptions = { ...options };
       if (tokenOverride) {
@@ -553,24 +549,9 @@ const fetchWithTimeout = async (url: string, options: RequestInit = {}, timeoutM
       });
       clearTimeout(id);
 
-      // On success, recover online status
-      if (response.ok) {
-        if (localStorage.getItem('backend_offline') === 'true') {
-          localStorage.setItem('backend_offline', 'false');
-          window.dispatchEvent(new CustomEvent('backend-online-detected'));
-        }
-      }
-
       return response;
     } catch (error) {
       clearTimeout(id);
-
-      // On network failure or timeout, ensure offline status is flagged
-      if (localStorage.getItem('backend_offline') !== 'true') {
-        localStorage.setItem('backend_offline', 'true');
-        window.dispatchEvent(new CustomEvent('backend-offline-detected'));
-      }
-
       throw error;
     }
   };
@@ -835,15 +816,7 @@ export const apiService = {
 
       return responseData;
     } catch (err) {
-      if (isBackendUser()) {
-        throw err;
-      }
-      console.warn("Creating program on backend failed or timed out. Falling back to local storage.", err);
-      const localData = getLocalStorageData();
-      const updatedPrograms = [...localData.programs, data];
-      const updatedGAs = associatedGAs ? [...localData.gas, ...associatedGAs] : localData.gas;
-      saveLocalStorageData({ ...localData, programs: updatedPrograms, gas: updatedGAs });
-      return data;
+      throw err;
     }
   },
 
@@ -866,14 +839,7 @@ export const apiService = {
 
       return responseData;
     } catch (err) {
-      if (isBackendUser()) {
-        throw err;
-      }
-      console.warn("Creating course on backend failed or timed out. Falling back to local storage.", err);
-      const localData = getLocalStorageData();
-      const updatedCourses = [...localData.courses, data];
-      saveLocalStorageData({ ...localData, courses: updatedCourses });
-      return data;
+      throw err;
     }
   },
 
@@ -953,12 +919,8 @@ export const apiService = {
       if (Array.isArray(data)) return data;
       return data.courses || courses;
     } catch (err) {
-      if (isBackendUser()) {
-        throw err;
-      }
-      console.warn("Saving instructor courses to backend failed, synchronized offline instead.", err);
+      throw err;
     }
-    return courses;
   },
 
   async getStudents(): Promise<Student[]> {
@@ -1067,15 +1029,8 @@ export const apiService = {
         throw new Error(errData.detail || errData.error || errData.message || 'Failed to create student on server');
       }
     } catch (err) {
-      if (isBackendUser()) {
-        throw err;
-      }
-      console.warn("Backend API for students offline. Adding student to local storage.");
+      throw err;
     }
-    const current = await this.getStudents();
-    const updated = [...current.filter(s => s.regNo !== student.regNo), student];
-    localStorage.setItem('IQRA_OBE_STUDENTS', JSON.stringify(updated));
-    return student;
   },
 
   async updateStudent(regNo: string, studentData: Partial<Student>): Promise<Student> {

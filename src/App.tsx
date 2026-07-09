@@ -19,23 +19,6 @@ export default function App() {
     setCurrentUser({ type, name });
   };
 
-  const [isOfflineMode, setIsOfflineMode] = useState(() => localStorage.getItem('backend_offline') === 'true');
-
-  useEffect(() => {
-    const handleOfflineDetected = () => {
-      setIsOfflineMode(true);
-    };
-    const handleOnlineDetected = () => {
-      setIsOfflineMode(false);
-    };
-    window.addEventListener('backend-offline-detected', handleOfflineDetected);
-    window.addEventListener('backend-online-detected', handleOnlineDetected);
-    return () => {
-      window.removeEventListener('backend-offline-detected', handleOfflineDetected);
-      window.removeEventListener('backend-online-detected', handleOnlineDetected);
-    };
-  }, []);
-
   // Periodic and on-demand health check probe to GET /api/health/
   useEffect(() => {
     let timerId: any = null;
@@ -43,22 +26,9 @@ export default function App() {
     const runProbe = async () => {
       if (timerId) clearTimeout(timerId);
       const isHealthy = await apiService.checkHealth();
-      const wasOffline = localStorage.getItem('backend_offline') === 'true';
 
-      if (isHealthy) {
-        if (wasOffline) {
-          localStorage.setItem('backend_offline', 'false');
-          setIsOfflineMode(false);
-        }
-      } else {
-        if (!wasOffline) {
-          localStorage.setItem('backend_offline', 'true');
-          setIsOfflineMode(true);
-        }
-      }
-
-      // 5s when offline (fast retry), 20s when online (low overhead)
-      const delay = isHealthy ? 20000 : 5000;
+      // 20s delay
+      const delay = 20000;
       timerId = setTimeout(runProbe, delay);
     };
 
@@ -77,11 +47,9 @@ export default function App() {
   const handleLogout = () => {
     localStorage.removeItem('access');
     localStorage.removeItem('refresh');
-    localStorage.removeItem('backend_offline');
     localStorage.removeItem('IQRA_OBE_LOGGED_IN_USER');
     localStorage.removeItem('IQRA_OBE_USER_DEPT_ID');
     localStorage.removeItem('IQRA_OBE_USER_DEPT_NAME');
-    setIsOfflineMode(false);
     setCurrentUser(null);
   };
 
@@ -120,12 +88,6 @@ export default function App() {
 
   return (
     <div className="min-h-screen font-sans text-gray-900 bg-white selection:bg-gray-900 selection:text-white">
-      {currentUser && isOfflineMode && (
-        <div className="bg-amber-600 text-white text-center text-[11px] sm:text-xs py-2 px-4 flex items-center justify-center gap-2 font-sans font-semibold sticky top-0 z-50 shadow-md">
-          <span className="animate-pulse">⚠️</span>
-          <span>Offline Sandbox Mode: Connection to backend server is currently unavailable. Edits are being saved locally in browser storage and will not sync to the central database.</span>
-        </div>
-      )}
       <AnimatePresence mode="wait">
         {!currentUser ? (
           <motion.div

@@ -58,7 +58,6 @@ export default function Login({ onLogin }: LoginProps) {
       // For production hardening, transition to using secure, httpOnly cookies set by the backend.
       localStorage.setItem('access',  data.access);
       localStorage.setItem('refresh', data.refresh);
-      localStorage.setItem('backend_offline', 'false');
 
       if (data.user) {
         localStorage.setItem('IQRA_OBE_LOGGED_IN_USER', JSON.stringify(data.user));
@@ -111,18 +110,6 @@ export default function Login({ onLogin }: LoginProps) {
     setChangePasswordLoading(true);
 
     try {
-      const isOffline = localStorage.getItem('backend_offline') === 'true';
-      if (isOffline) {
-        // Mock success in offline fallback
-        setMustChangePassword(false);
-        if (tempCredentials) {
-          onLogin(tempCredentials.userType, tempCredentials.identifier);
-        } else {
-          setError('Password updated successfully (offline sandbox). Please sign in now with your new password.');
-        }
-        return;
-      }
-
       const token = localStorage.getItem('access');
       const res = await fetch(`${BASE_URL}/auth/change-password/`, {
         method: 'POST',

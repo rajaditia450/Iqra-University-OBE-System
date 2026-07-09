@@ -364,197 +364,24 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
     const fetchNewReports = async () => {
       setLoadingReport(true);
       try {
-        const isOffline = localStorage.getItem('backend_offline') === 'true';
-
         if (subReportTab === 'co-summary' && selectedReportProg) {
-          if (!isOffline) {
-            const data = await apiService.getCOAttainmentSummary(selectedReportProg, coSummarySemester, coSummaryYear);
-            setCoSummaryReport(data);
-          } else {
-            setCoSummaryReport({
-              programId: selectedReportProg,
-              programName: adminPrograms.find(p => p.id === selectedReportProg)?.name || selectedReportProg.toUpperCase(),
-              semester: coSummarySemester,
-              allCloCodes: ["CLO-1", "CLO-2", "CLO-3", "CLO-4"],
-              courses: [
-                {
-                  courseCode: "SE-311",
-                  courseTitle: "Software Engineering",
-                  classSize: 35,
-                  courseAverage: 78.4,
-                  courseTier: "High",
-                  cloAttainments: {
-                    "CLO-1": { average: 82.5, attainmentRate: 85.0, tier: "High", passedCount: 30, totalCount: 35 },
-                    "CLO-2": { average: 74.0, attainmentRate: 78.0, tier: "High", passedCount: 27, totalCount: 35 },
-                    "CLO-3": { average: 65.2, attainmentRate: 60.0, tier: "Medium", passedCount: 21, totalCount: 35 },
-                    "CLO-4": { average: 48.0, attainmentRate: 45.0, tier: "Low", passedCount: 15, totalCount: 35 }
-                  }
-                },
-                {
-                  courseCode: "AI-381",
-                  courseTitle: "Artificial Intelligence",
-                  classSize: 32,
-                  courseAverage: 71.2,
-                  courseTier: "High",
-                  cloAttainments: {
-                    "CLO-1": { average: 75.0, attainmentRate: 80.0, tier: "High", passedCount: 25, totalCount: 32 },
-                    "CLO-2": { average: 68.5, attainmentRate: 65.0, tier: "Medium", passedCount: 21, totalCount: 32 },
-                    "CLO-3": { average: 58.0, attainmentRate: 55.0, tier: "Medium", passedCount: 18, totalCount: 32 }
-                  }
-                }
-              ]
-            });
-          }
+          const data = await apiService.getCOAttainmentSummary(selectedReportProg, coSummarySemester, coSummaryYear);
+          setCoSummaryReport(data);
         } else if (subReportTab === 'po-attainment' && selectedReportProg) {
-          if (!isOffline) {
-            const data = await apiService.getPOAttainment(selectedReportProg);
-            setPoAttainmentReport(data);
-          } else {
-            setPoAttainmentReport({
-              programId: selectedReportProg,
-              programName: adminPrograms.find(p => p.id === selectedReportProg)?.name || selectedReportProg.toUpperCase(),
-              overallAttainment: 74.8,
-              overallTier: "High",
-              pos: [
-                { poId: "PO-1", text: "Engineering Knowledge", attainment: 82.4, tier: "High", hecStatus: "Compliant", mappedGAs: ["GA-1", "GA-2"] },
-                { poId: "PO-2", text: "Problem Analysis", attainment: 71.5, tier: "High", hecStatus: "Compliant", mappedGAs: ["GA-3"] },
-                { poId: "PO-3", text: "Design/Development of Solutions", attainment: 68.0, tier: "Medium", hecStatus: "Compliant", mappedGAs: ["GA-4"] },
-                { poId: "PO-4", text: "Investigation", attainment: 55.2, tier: "Medium", hecStatus: "Review Required", mappedGAs: ["GA-5"] },
-                { poId: "PO-5", text: "Modern Tool Usage", attainment: 45.8, tier: "Low", hecStatus: "Action Required", mappedGAs: ["GA-6"] }
-              ],
-              radarData: [
-                { po: "PO-1", attainment: 82.4, fullMark: 100 },
-                { po: "PO-2", attainment: 71.5, fullMark: 100 },
-                { po: "PO-3", attainment: 68.0, fullMark: 100 },
-                { po: "PO-4", attainment: 55.2, fullMark: 100 },
-                { po: "PO-5", attainment: 45.8, fullMark: 100 }
-              ]
-            });
-          }
+          const data = await apiService.getPOAttainment(selectedReportProg);
+          setPoAttainmentReport(data);
         } else if (subReportTab === 'gap-analysis' && selectedReportProg) {
-          if (!isOffline) {
-            const data = await apiService.getGapAnalysis(selectedReportProg);
-            setGapAnalysisReport(data);
-          } else {
-            setGapAnalysisReport({
-              programId: selectedReportProg,
-              programName: adminPrograms.find(p => p.id === selectedReportProg)?.name || selectedReportProg.toUpperCase(),
-              summary: { total: 12, critical: 2, moderate: 3, healthy: 7 },
-              criticalGaps: ["GA-5 (Modern Tool Usage)", "GA-6 (Individual and Team Work)"],
-              gaps: [
-                { gaId: "GA-1", name: "Academic Education", mappedCoursesCount: 6, averageAttainment: 82.4, tier: "High", gapStatus: "Healthy" },
-                { gaId: "GA-2", name: "Problem Analysis", mappedCoursesCount: 5, averageAttainment: 71.5, tier: "High", gapStatus: "Healthy" },
-                { gaId: "GA-3", name: "Design/Development", mappedCoursesCount: 4, averageAttainment: 68.0, tier: "Medium", gapStatus: "Moderate" },
-                { gaId: "GA-4", name: "Investigation", mappedCoursesCount: 3, averageAttainment: 55.2, tier: "Medium", gapStatus: "Moderate" },
-                { gaId: "GA-5", name: "Modern Tool Usage", mappedCoursesCount: 2, averageAttainment: 45.8, tier: "Low", gapStatus: "Critical" },
-                { gaId: "GA-6", name: "Individual and Team Work", mappedCoursesCount: 2, averageAttainment: 41.2, tier: "Low", gapStatus: "Critical" }
-              ]
-            });
-          }
+          const data = await apiService.getGapAnalysis(selectedReportProg);
+          setGapAnalysisReport(data);
         } else if (subReportTab === 'at-risk' && selectedReportProg) {
-          if (!isOffline) {
-            const data = await apiService.getAtRiskStudents(selectedReportProg, atRiskSemester);
-            setAtRiskReport(data);
-          } else {
-            setAtRiskReport({
-              programId: selectedReportProg,
-              atRiskCount: 2,
-              students: [
-                {
-                  regNo: "089-fa22-22089",
-                  name: "Zayan Ahmed Khan",
-                  semester: atRiskSemester,
-                  batch: "2022",
-                  failedCloCount: 3,
-                  riskLevel: "High",
-                  failures: [
-                    { courseCode: "SE-311", courseTitle: "Software Engineering", clo: "CLO-4", score: 45.0 },
-                    { courseCode: "SE-311", courseTitle: "Software Engineering", clo: "CLO-3", score: 48.0 },
-                    { courseCode: "AI-381", courseTitle: "Artificial Intelligence", clo: "CLO-3", score: 42.0 }
-                  ]
-                },
-                {
-                  regNo: "104-fa22-22104",
-                  name: "Misha Farooq",
-                  semester: atRiskSemester,
-                  batch: "2022",
-                  failedCloCount: 1,
-                  riskLevel: "Medium",
-                  failures: [
-                    { courseCode: "AI-381", courseTitle: "Artificial Intelligence", clo: "CLO-3", score: 49.0 }
-                  ]
-                }
-              ]
-            });
-          }
+          const data = await apiService.getAtRiskStudents(selectedReportProg, atRiskSemester);
+          setAtRiskReport(data);
         } else if (subReportTab === 'instructor-performance') {
-          if (!isOffline) {
-            const data = await apiService.getInstructorPerformance(managedDeptId);
-            setInstructorPerformanceReport(data);
-          } else {
-            setInstructorPerformanceReport({
-              departmentId: managedDeptId,
-              instructors: [
-                {
-                  employeeId: "INS-CS-001",
-                  name: "Prof. Dr. Jameel Ahmed",
-                  designation: "Professor",
-                  overallAverage: 81.2,
-                  courses: [
-                    {
-                      courseCode: "SE-311",
-                      courseTitle: "Software Engineering",
-                      courseAverage: 78.4,
-                      courseTier: "High",
-                      clos: [
-                        { clo: "CLO-1", average: 82.5, tier: "High" },
-                        { clo: "CLO-2", average: 74.0, tier: "High" },
-                        { clo: "CLO-3", average: 65.2, tier: "Medium" }
-                      ]
-                    }
-                  ]
-                },
-                {
-                  employeeId: "INS-CS-002",
-                  name: "Dr. Asim Imdad",
-                  designation: "Associate Professor",
-                  overallAverage: 72.8,
-                  courses: [
-                    {
-                      courseCode: "AI-381",
-                      courseTitle: "Artificial Intelligence",
-                      courseAverage: 71.2,
-                      courseTier: "High",
-                      clos: [
-                        { clo: "CLO-1", average: 75.0, tier: "High" },
-                        { clo: "CLO-2", average: 68.5, tier: "Medium" }
-                      ]
-                    }
-                  ]
-                }
-              ]
-            });
-          }
+          const data = await apiService.getInstructorPerformance(managedDeptId);
+          setInstructorPerformanceReport(data);
         } else if (subReportTab === 'cohort-comparison' && selectedReportProg) {
-          if (!isOffline) {
-            const data = await apiService.getCohortComparison(selectedReportProg, cohortGaId);
-            setCohortComparisonReport(data);
-          } else {
-            setCohortComparisonReport({
-              programId: selectedReportProg,
-              gaFilter: cohortGaId,
-              trends: [
-                { term: "Fall 2024", academicYear: "2024", overallAverage: 72.5, overallTier: "High" },
-                { term: "Spring 2025", academicYear: "2025", overallAverage: 73.8, overallTier: "High" },
-                { term: "Fall 2025", academicYear: "2025", overallAverage: 75.2, overallTier: "High" }
-              ],
-              chartData: [
-                { term: "Fall 2024", overall: 72.5, "GA-1": 70.2, "GA-2": 74.5, "GA-3": 68.0, "GA-4": 71.0, "GA-5": 52.0 },
-                { term: "Spring 2025", overall: 73.8, "GA-1": 72.0, "GA-2": 75.8, "GA-3": 69.5, "GA-4": 72.5, "GA-5": 55.0 },
-                { term: "Fall 2025", overall: 75.2, "GA-1": 74.5, "GA-2": 78.0, "GA-3": 71.2, "GA-4": 74.0, "GA-5": 58.2 }
-              ]
-            });
-          }
+          const data = await apiService.getCohortComparison(selectedReportProg, cohortGaId);
+          setCohortComparisonReport(data);
         }
       } catch (err) {
         console.warn("Failed to fetch sub report:", err);
@@ -1164,16 +991,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
         departmentId: teacherDept
       };
 
-      let createdTeacher;
-      if (localStorage.getItem('backend_offline') !== 'true') {
-        createdTeacher = await apiService.createTeacher(payload);
-      } else {
-        createdTeacher = {
-          ...payload,
-          id: empId,
-          departmentName: departments.find(d => d.id === teacherDept)?.name || 'Department of Computing and Technology'
-        };
-      }
+      const createdTeacher = await apiService.createTeacher(payload);
 
       const newTeacher: Teacher = {
         id: createdTeacher.employeeId || empId,
@@ -1208,9 +1026,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
     if (window.confirm(`Are you sure you want to remove teacher ${t.name}?`)) {
       try {
         const empId = getTeacherId(t);
-        if (localStorage.getItem('backend_offline') !== 'true') {
-          await apiService.deleteTeacher(empId);
-        }
+        await apiService.deleteTeacher(empId);
 
         const updatedTeachers = teachers.filter(x => !matchTeacher(x, empId));
         const updatedAssignments = teacherAssignments.filter(x => x.teacherId !== t.id && x.teacherId !== empId);
@@ -2305,27 +2121,14 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                 }
 
                 try {
-                  let newT: Teacher;
-                  if (localStorage.getItem('backend_offline') !== 'true') {
-                    newT = await apiService.createTeacher({
-                      name,
-                      email: lowercaseEmail,
-                      employeeId: empId,
-                      designation,
-                      departmentId: managedDeptId,
-                      password: DEFAULT_TEMP_PASSWORD
-                    } as any);
-                  } else {
-                    newT = {
-                      id: `temp-teacher-${Date.now()}`,
-                      name,
-                      email: lowercaseEmail,
-                      employeeId: empId,
-                      designation,
-                      departmentId: managedDeptId,
-                      departmentName: currentDeptObj?.name || 'General Dept'
-                    };
-                  }
+                  const newT: Teacher = await apiService.createTeacher({
+                    name,
+                    email: lowercaseEmail,
+                    employeeId: empId,
+                    designation,
+                    departmentId: managedDeptId,
+                    password: DEFAULT_TEMP_PASSWORD
+                  } as any);
 
                   const updatedTeachers = [...teachers, newT];
                   setTeachers(updatedTeachers);
