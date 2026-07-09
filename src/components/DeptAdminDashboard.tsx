@@ -35,6 +35,8 @@ import {
 import * as XLSX from 'xlsx';
 import FacultyDirectoryTab from './admin/FacultyDirectoryTab';
 import { matchTeacher, getTeacherId } from '../utils/teacherUtils';
+import { AnimatePresence } from 'motion/react';
+import Toast from './Toast';
 
 const getAutomaticAcademicYear = (): string => {
   const currentDate = new Date();
@@ -1889,20 +1891,22 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
       </header>
 
       {/* DYNAMIC NOTIFICATIONS */}
-      <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[9999] flex flex-col gap-2 w-full max-w-md px-4 pointer-events-none">
+      <AnimatePresence>
         {successMsg && (
-          <div className="pointer-events-auto bg-emerald-600 border border-emerald-500 text-white font-sans font-bold text-xs sm:text-sm px-5 py-3.5 rounded-2xl shadow-2xl flex items-center gap-3 animate-slideDown">
-            <Check className="h-4 w-4 shrink-0" />
-            <span>{successMsg}</span>
-          </div>
+          <Toast
+            message={successMsg}
+            type="success"
+            onClose={() => setSuccessMsg(null)}
+          />
         )}
         {errorMsg && (
-          <div className="pointer-events-auto bg-rose-600 border border-rose-500 text-white font-sans font-bold text-xs sm:text-sm px-5 py-3.5 rounded-2xl shadow-2xl flex items-center gap-3 animate-slideDown">
-            <AlertCircle className="h-4 w-4 shrink-0" />
-            <span>{errorMsg}</span>
-          </div>
+          <Toast
+            message={errorMsg}
+            type="error"
+            onClose={() => setErrorMsg(null)}
+          />
         )}
-      </div>
+      </AnimatePresence>
 
       {/* DASHBOARD CONTENT WRAPPER */}
       <main className="max-w-7xl mx-auto w-full px-6 py-8 flex-1 flex flex-col gap-8">
