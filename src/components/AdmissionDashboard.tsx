@@ -634,8 +634,8 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
         <div className="flex items-center gap-2">
           <h1 className="text-base font-bold font-display tracking-tight flex items-center gap-2">
             <span>Iqra University OBE</span>
-            <span className="bg-indigo-500/20 text-indigo-300 text-xs font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full border border-indigo-500/30">
-              Admission Control
+            <span className="bg-indigo-500/20 text-indigo-300 text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full border border-indigo-500/30">
+              ADMISSION CONTROL
             </span>
           </h1>
         </div>
@@ -644,11 +644,11 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
           <button
             id="btn-logout"
             onClick={onLogout}
-            className="p-1.5 bg-indigo-950 hover:bg-red-950/60 text-indigo-200 hover:text-white rounded-lg transition-all border border-indigo-900/50 hover:border-red-900/40 flex items-center gap-1.5 cursor-pointer"
+            className="px-3.5 py-1.5 bg-transparent hover:bg-white/10 text-white hover:text-white rounded-lg transition-all border border-white/20 hover:border-white/40 flex items-center gap-1.5 cursor-pointer text-xs font-semibold"
             title="Sign out of Admission Module"
           >
-            <LogOut className="w-3.5 h-3.5" />
-            <span className="text-xs font-semibold">Logout</span>
+            <LogOut className="w-3.5 h-3.5 text-white/95" />
+            <span>Logout</span>
           </button>
         </div>
       </header>

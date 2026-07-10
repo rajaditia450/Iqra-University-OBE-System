@@ -146,7 +146,7 @@ export default function Login({ onLogin }: LoginProps) {
   };
 
   const userTypes: { type: UserType; label: string; icon: any }[] = [
-    { type: 'qa',         label: 'QA / Quality Assurance', icon: ShieldCheck   },
+    { type: 'qa',         label: 'Quality Assurance', icon: ShieldCheck   },
     { type: 'instructor', label: 'Instructor',             icon: BookOpen      },
     { type: 'student',    label: 'Student',               icon: GraduationCap },
   ];
@@ -267,9 +267,9 @@ export default function Login({ onLogin }: LoginProps) {
                     required
                   >
                     <option value="" disabled className="bg-slate-50 text-slate-400">Select User Type...</option>
-                    <option value="admission" className="bg-slate-50 text-slate-900">Admission</option>
+                    <option value="admission" className="bg-slate-50 text-slate-900">Admission / IT</option>
                     <option value="dept_admin" className="bg-slate-50 text-slate-900">Department Administration</option>
-                    <option value="qa" className="bg-slate-50 text-slate-900">QA / Quality Assurance</option>
+                    <option value="qa" className="bg-slate-50 text-slate-900">Quality Assurance</option>
                     <option value="instructor" className="bg-slate-50 text-slate-900">Instructor</option>
                     <option value="student" className="bg-slate-50 text-slate-900">Student</option>
                   </select>

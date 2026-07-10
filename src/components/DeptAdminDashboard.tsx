@@ -242,7 +242,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
   }, [departments, managedDeptId]);
 
   // Navigation State
-  const [activeTab, setActiveTab] = useState<'semester-plans' | 'courses' | 'teachers' | 'teacher-assignments' | 'student-enrollment' | 'attainment-reports'>('semester-plans');
+  const [activeTab, setActiveTab] = useState<'semester-plans' | 'courses' | 'teachers' | 'teacher-assignments' | 'student-enrollment'>('semester-plans');
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -1657,28 +1657,8 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
       // Filter by department of current plan
       const deptMatch = c.departmentId === (programs.find(p => p.id === selectedPlanProg)?.departmentId || 'computing');
       
-      // A course is considered common if:
-      // 1. It has no program assigned, or is explicitly "common"/"global"
-      // 2. OR its code has a prefix representing a shared/general core course:
-      //    - Computing department: CMC (Computing Core), GER (General Education), MTE (Math & Eng), ESC (Supporting)
-      //    - Business department: BUS, MKT (Management & Marketing)
-      const isCommon = !c.programId || 
-        String(c.programId).trim() === '' || 
-        String(c.programId).trim().toLowerCase() === 'common' ||
-        String(c.programId).trim().toLowerCase() === 'global' ||
-        (c.departmentId === 'computing' && (
-          c.code.toUpperCase().startsWith('CMC') || 
-          c.code.toUpperCase().startsWith('GER') || 
-          c.code.toUpperCase().startsWith('MTE') || 
-          c.code.toUpperCase().startsWith('ESC')
-        )) ||
-        (c.departmentId === 'business' && (
-          c.code.toUpperCase().startsWith('BUS') || 
-          c.code.toUpperCase().startsWith('MKT')
-        ));
-
-      const isCurrentProg = String(c.programId).trim().toLowerCase() === String(selectedPlanProg).trim().toLowerCase();
-      const programMatch = isCurrentProg || isCommon;
+      const programMatch = !c.programId || 
+        String(c.programId).trim().toLowerCase() === String(selectedPlanProg).trim().toLowerCase();
 
       const isAlreadyInAnyPlan = semesterPlans
         .filter(p => p.programId === selectedPlanProg)
@@ -1787,111 +1767,93 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
   return (
     <div className="min-h-screen bg-slate-50/50 flex flex-col font-sans">
       {/* HEADER SECTION */}
-      <header className="bg-white border-b border-slate-200/80 sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-6 h-18 flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <img 
-              src="/iqralogo.png" 
-              alt="Iqra University Logo" 
-              className="h-12 w-auto object-contain"
-              referrerPolicy="no-referrer"
-            />
-            <div className="h-6 w-px bg-slate-200"></div>
-            <div>
-              <h1 className="text-lg font-bold text-slate-900 tracking-tight">OBE Department Administration</h1>
-              <p className="text-xs font-semibold text-indigo-600/80 uppercase tracking-widest">
-                {currentDeptObj ? `${currentDeptObj.name} Portal` : `${adminName}`}
-              </p>
-            </div>
-          </div>
-          <button 
+      <header id="dept-admin-header" className="bg-[#1e1b4b] text-white border-b border-indigo-950 px-6 py-2.5 shrink-0 flex items-center justify-between shadow-sm">
+        <div className="flex items-center gap-2">
+          <h1 className="text-base font-bold font-display tracking-tight flex items-center gap-2">
+            <span>Iqra University OBE</span>
+            <span className="bg-indigo-500/20 text-indigo-300 text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full border border-indigo-500/30">
+              DEPARTMENT CONTROL
+            </span>
+          </h1>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            id="btn-logout"
             onClick={onLogout}
-            className="flex items-center space-x-2 px-3.5 py-1.5 bg-slate-50 hover:bg-red-50 text-slate-600 hover:text-red-600 border border-slate-200 hover:border-red-200 rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer"
+            className="px-3.5 py-1.5 bg-transparent hover:bg-white/10 text-white hover:text-white rounded-lg transition-all border border-white/20 hover:border-white/40 flex items-center gap-1.5 cursor-pointer text-xs font-semibold"
+            title="Sign out of Department Module"
           >
-            <LogOut className="h-3.5 w-3.5" />
-            <span>Sign Out</span>
+            <LogOut className="w-3.5 h-3.5 text-white/95" />
+            <span>Logout</span>
           </button>
         </div>
-
-        {/* HORIZONTAL NAVBAR TABS */}
-        <div className="border-t border-slate-100 bg-slate-50/40">
-          <div className="max-w-7xl mx-auto px-6">
-            <nav className="flex space-x-6 overflow-x-auto scrollbar-none">
-              <button
-                onClick={() => setActiveTab('semester-plans')}
-                className={`flex items-center space-x-2 py-3.5 border-b-2 font-bold text-xs transition-all whitespace-nowrap cursor-pointer ${
-                  activeTab === 'semester-plans' 
-                    ? 'border-indigo-600 text-indigo-600' 
-                    : 'border-transparent text-slate-500 hover:text-slate-950 hover:border-slate-300'
-                }`}
-              >
-                <Layers className="h-4 w-4" />
-                <span>Semester Plans (Fixed)</span>
-              </button>
-
-              <button
-                onClick={() => setActiveTab('courses')}
-                className={`flex items-center space-x-2 py-3.5 border-b-2 font-bold text-xs transition-all whitespace-nowrap cursor-pointer ${
-                  activeTab === 'courses' 
-                    ? 'border-indigo-600 text-indigo-600' 
-                    : 'border-transparent text-slate-500 hover:text-slate-950 hover:border-slate-300'
-                }`}
-              >
-                <BookOpen className="h-4 w-4" />
-                <span>Course Catalog</span>
-              </button>
-
-              <button
-                onClick={() => setActiveTab('teachers')}
-                className={`flex items-center space-x-2 py-3.5 border-b-2 font-bold text-xs transition-all whitespace-nowrap cursor-pointer ${
-                  activeTab === 'teachers' 
-                    ? 'border-indigo-600 text-indigo-600' 
-                    : 'border-transparent text-slate-500 hover:text-slate-950 hover:border-slate-300'
-                }`}
-              >
-                <Users className="h-4 w-4" />
-                <span>Faculty Directory</span>
-              </button>
-
-              <button
-                onClick={() => setActiveTab('teacher-assignments')}
-                className={`flex items-center space-x-2 py-3.5 border-b-2 font-bold text-xs transition-all whitespace-nowrap cursor-pointer ${
-                  activeTab === 'teacher-assignments' 
-                    ? 'border-indigo-600 text-indigo-600' 
-                    : 'border-transparent text-slate-500 hover:text-slate-950 hover:border-slate-300'
-                }`}
-              >
-                <GraduationCap className="h-4 w-4" />
-                <span>Teacher Assignments</span>
-              </button>
-
-              <button
-                onClick={() => setActiveTab('student-enrollment')}
-                className={`flex items-center space-x-2 py-3.5 border-b-2 font-bold text-xs transition-all whitespace-nowrap cursor-pointer ${
-                  activeTab === 'student-enrollment' 
-                    ? 'border-indigo-600 text-indigo-600' 
-                    : 'border-transparent text-slate-500 hover:text-slate-950 hover:border-slate-300'
-                }`}
-              >
-                <UserPlus className="h-4 w-4" />
-                <span>Student Enrollments</span>
-              </button>
-
-              <button
-                onClick={() => setActiveTab('attainment-reports')}
-                className={`flex items-center space-x-2 py-3.5 border-b-2 font-bold text-xs transition-all whitespace-nowrap cursor-pointer ${
-                  activeTab === 'attainment-reports' 
-                    ? 'border-indigo-600 text-indigo-600' 
-                    : 'border-transparent text-slate-500 hover:text-slate-950 hover:border-slate-300'
-                }`}
-              >
-                <BarChart3 className="h-4 w-4" />
-                <span>OBE Attainment Reports</span>
-              </button>
-            </nav>
-          </div>
-        </div>
       </header>
+
+      {/* Sub-Navbar Navigation */}
+      <div id="sub-navbar" className="bg-white border-b border-slate-200 px-6 py-2 shrink-0 flex items-center gap-4 shadow-xs">
+        <div className="flex flex-wrap items-center gap-1">
+          <button
+            onClick={() => setActiveTab('semester-plans')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+              activeTab === 'semester-plans'
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+            }`}
+          >
+            <Layers className="w-4 h-4" />
+            <span>Semester Plans</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('courses')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+              activeTab === 'courses'
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+            }`}
+          >
+            <BookOpen className="w-4 h-4" />
+            <span>Course Catalog</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('teachers')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+              activeTab === 'teachers'
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+            }`}
+          >
+            <Users className="w-4 h-4" />
+            <span>Faculty Directory</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('teacher-assignments')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+              activeTab === 'teacher-assignments'
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+            }`}
+          >
+            <GraduationCap className="w-4 h-4" />
+            <span>Teacher Assignments</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('student-enrollment')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+              activeTab === 'student-enrollment'
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+            }`}
+          >
+            <UserPlus className="w-4 h-4" />
+            <span>Student Enrollments</span>
+          </button>
+        </div>
+      </div>
 
       {/* DYNAMIC NOTIFICATIONS */}
       <AnimatePresence>
@@ -2674,17 +2636,6 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                         );
                       })()}
 
-                      {/* Pathway Advising policy tip */}
-                      <div className="bg-indigo-50/60 border border-indigo-100 rounded-2xl p-4 flex gap-3 text-xs text-indigo-950 leading-relaxed">
-                        <Info className="h-5 w-5 text-indigo-600 shrink-0 mt-0.5" />
-                        <div className="space-y-1">
-                          <p className="font-bold">Student Pathway Advising Note</p>
-                          <p className="text-[11px] text-slate-600 leading-relaxed">
-                            To register a student for a previous <strong>Failed / Backlog</strong> course, simply click <strong>Enroll Now</strong>. To keep their course load balanced (e.g. at 5 courses), you may drop a current semester course by marking it as <strong>Deferred / Remaining</strong>.
-                          </p>
-                        </div>
-                      </div>
-
                       {/* Add Custom Elective or Outside Course */}
                       <div className="bg-slate-50/40 border border-slate-200 p-4 rounded-xl space-y-2.5">
                         <h4 className="text-[11px] font-black uppercase tracking-wider text-slate-500">Enroll in Outside / Department Elective Course</h4>
@@ -3105,846 +3056,6 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                   )}
                 </div>
               </div>
-            </div>
-          )}
-
-          {/* TAB 6: OBE ATTAINMENT REPORTS */}
-          {activeTab === 'attainment-reports' && (
-            <div className="space-y-8 animate-fadeIn">
-              
-              {/* Program selection and info header */}
-              <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-5">
-                  <div className="space-y-1">
-                    <h2 className="text-lg font-bold text-slate-900">Department OBE Attainment Analytics</h2>
-                    <p className="text-xs text-slate-500 leading-relaxed max-w-xl">
-                      Monitor student competencies, Washington Accord Graduate Attribute (GA) compliance, and Course Learning Outcome (CLO) attainment percentages across your department programs.
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs font-bold text-slate-600">Active Program:</span>
-                    <select
-                      value={selectedReportProg}
-                      onChange={(e) => setSelectedReportProg(e.target.value)}
-                      className="bg-slate-50 text-xs font-bold text-slate-700 px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-600/10 focus:border-indigo-600"
-                    >
-                      {adminPrograms.map(p => (
-                        <option key={p.id} value={p.id}>{p.name} ({p.code.toUpperCase()})</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              {/* Sub-Reports Switcher */}
-              <div className="flex flex-wrap gap-2 bg-slate-100/60 p-1.5 rounded-2xl border border-slate-200/40">
-                <button
-                  onClick={() => setSubReportTab('legacy')}
-                  className={`px-4 py-2.5 text-xs font-bold rounded-xl transition-all flex items-center gap-2 ${
-                    subReportTab === 'legacy' ? 'bg-white text-indigo-600 shadow-sm border border-slate-200/50' : 'text-slate-600 hover:text-slate-900 hover:bg-white/40'
-                  }`}
-                >
-                  <BarChart3 className="h-3.5 w-3.5" />
-                  <span>GA & Course Profile</span>
-                </button>
-                <button
-                  onClick={() => setSubReportTab('co-summary')}
-                  className={`px-4 py-2.5 text-xs font-bold rounded-xl transition-all flex items-center gap-2 ${
-                    subReportTab === 'co-summary' ? 'bg-white text-indigo-600 shadow-sm border border-slate-200/50' : 'text-slate-600 hover:text-slate-900 hover:bg-white/40'
-                  }`}
-                >
-                  <BookOpen className="h-3.5 w-3.5" />
-                  <span>CO Attainment Summary</span>
-                </button>
-                <button
-                  onClick={() => setSubReportTab('po-attainment')}
-                  className={`px-4 py-2.5 text-xs font-bold rounded-xl transition-all flex items-center gap-2 ${
-                    subReportTab === 'po-attainment' ? 'bg-white text-indigo-600 shadow-sm border border-slate-200/50' : 'text-slate-600 hover:text-slate-900 hover:bg-white/40'
-                  }`}
-                >
-                  <Layers className="h-3.5 w-3.5" />
-                  <span>PO Attainment Profile</span>
-                </button>
-                <button
-                  onClick={() => setSubReportTab('gap-analysis')}
-                  className={`px-4 py-2.5 text-xs font-bold rounded-xl transition-all flex items-center gap-2 ${
-                    subReportTab === 'gap-analysis' ? 'bg-white text-indigo-600 shadow-sm border border-slate-200/50' : 'text-slate-600 hover:text-slate-900 hover:bg-white/40'
-                  }`}
-                >
-                  <Sliders className="h-3.5 w-3.5" />
-                  <span>Gap Analysis Ledger</span>
-                </button>
-                <button
-                  onClick={() => setSubReportTab('at-risk')}
-                  className={`px-4 py-2.5 text-xs font-bold rounded-xl transition-all flex items-center gap-2 ${
-                    subReportTab === 'at-risk' ? 'bg-white text-indigo-600 shadow-sm border border-slate-200/50' : 'text-slate-600 hover:text-slate-900 hover:bg-white/40'
-                  }`}
-                >
-                  <AlertCircle className="h-3.5 w-3.5" />
-                  <span>At-Risk Students</span>
-                </button>
-                <button
-                  onClick={() => setSubReportTab('instructor-performance')}
-                  className={`px-4 py-2.5 text-xs font-bold rounded-xl transition-all flex items-center gap-2 ${
-                    subReportTab === 'instructor-performance' ? 'bg-white text-indigo-600 shadow-sm border border-slate-200/50' : 'text-slate-600 hover:text-slate-900 hover:bg-white/40'
-                  }`}
-                >
-                  <Users className="h-3.5 w-3.5" />
-                  <span>Instructor Performance</span>
-                </button>
-                <button
-                  onClick={() => setSubReportTab('cohort-comparison')}
-                  className={`px-4 py-2.5 text-xs font-bold rounded-xl transition-all flex items-center gap-2 ${
-                    subReportTab === 'cohort-comparison' ? 'bg-white text-indigo-600 shadow-sm border border-slate-200/50' : 'text-slate-600 hover:text-slate-900 hover:bg-white/40'
-                  }`}
-                >
-                  <RefreshCw className="h-3.5 w-3.5" />
-                  <span>Cohort Comparison</span>
-                </button>
-              </div>
-
-              {loadingReport ? (
-                <div className="bg-white border border-slate-200/80 rounded-2xl p-20 flex flex-col items-center justify-center text-slate-400 gap-3 shadow-sm">
-                  <RefreshCw className="h-8 w-8 animate-spin text-indigo-600" />
-                  <span className="text-xs font-semibold">Loading real-time reporting analytics...</span>
-                </div>
-              ) : (
-                <>
-                  {/* VIEW 1: LEGACY GA & COURSE PROFILE */}
-                  {subReportTab === 'legacy' && (
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                      {/* PANEL 1: PROGRAM-WIDE GA ATTAINMENT */}
-                      <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm space-y-6">
-                        <div>
-                          <h3 className="text-sm font-extrabold text-slate-900 uppercase tracking-tight flex items-center gap-2">
-                            <BarChart3 className="h-4.5 w-4.5 text-indigo-600" />
-                            Graduate Attribute (GA) Attainment Profile
-                          </h3>
-                          <p className="text-xs text-slate-400 mt-1">
-                            Aggregated student score metrics across all contributing courses mapping to program attributes.
-                          </p>
-                        </div>
-
-                        {programGAReport && programGAReport.attributes && programGAReport.attributes.length > 0 ? (
-                          <div className="space-y-4 max-h-[500px] overflow-y-auto pr-2">
-                            <div className="bg-slate-50 p-3.5 border border-slate-200/50 rounded-xl flex items-center justify-between text-xs text-slate-500 font-bold">
-                              <span>Attainment Threshold:</span>
-                              <span className="font-mono text-indigo-950 font-black">{programGAReport.attainmentThreshold || 50}%</span>
-                            </div>
-                            
-                            {programGAReport.attributes.map((attr: any) => {
-                              const score = attr.averageAttainment || attr.score || 0;
-                              const scorePct = Math.min(100, Math.max(0, score));
-                              const isPassed = score >= (programGAReport.attainmentThreshold || 50);
-
-                              return (
-                                <div 
-                                  key={attr.id}
-                                  className="bg-slate-50/40 border border-slate-200/60 p-4.5 rounded-xl hover:bg-white transition-all space-y-3"
-                                >
-                                  <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                      <span className="font-mono text-[10px] font-bold text-indigo-600 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded uppercase">
-                                        {attr.id}
-                                      </span>
-                                      <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${
-                                        isPassed 
-                                          ? 'bg-emerald-50 text-emerald-700 border-emerald-100' 
-                                          : 'bg-amber-50 text-amber-700 border-amber-100'
-                                      }`}>
-                                        {isPassed ? 'Passed' : 'Needs Review'}
-                                      </span>
-                                    </div>
-                                    <span className="font-mono text-xs text-slate-400 font-bold">
-                                      {attr.contributingCoursesCount || attr.contributingCourses?.length || 0} Courses mapped
-                                    </span>
-                                  </div>
-                                  
-                                  <div>
-                                    <h4 className="text-xs font-bold text-slate-800">{attr.title}</h4>
-                                    <p className="text-[10px] text-slate-400 mt-0.5">{attr.description || 'Washington Accord compliance attribute measure.'}</p>
-                                  </div>
-
-                                  <div className="space-y-1 pt-1">
-                                    <div className="flex items-center justify-between text-[11px] text-slate-500 font-bold">
-                                      <span>Average Attainment score:</span>
-                                      <span className="font-mono text-indigo-950 font-black">{score.toFixed(1)}%</span>
-                                    </div>
-                                    <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
-                                      <div 
-                                        className={`h-full rounded-full transition-all duration-500 ${isPassed ? 'bg-emerald-500' : 'bg-amber-500'}`}
-                                        style={{ width: `${scorePct}%` }}
-                                      />
-                                    </div>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        ) : (
-                          <div className="text-center py-16 text-slate-400 text-xs font-semibold">
-                            No attributes found. Assign GAs inside your Course Catalog.
-                          </div>
-                        )}
-                      </div>
-
-                      {/* PANEL 2: COURSE ATTAINMENT */}
-                      <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm space-y-6">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                          <div>
-                            <h3 className="text-sm font-extrabold text-slate-900 uppercase tracking-tight flex items-center gap-2">
-                              <GraduationCap className="h-4.5 w-4.5 text-indigo-600" />
-                              Course Attainment Ledger
-                            </h3>
-                            <p className="text-xs text-slate-400 mt-1">
-                              Select a course within the department to inspect target outcome attainment.
-                            </p>
-                          </div>
-                          <div>
-                            <select
-                              value={selectedReportCourseCode}
-                              onChange={(e) => setSelectedReportCourseCode(e.target.value)}
-                              className="bg-slate-50 text-xs font-bold text-slate-700 px-3 py-2 rounded-xl border border-slate-200 outline-none w-full sm:w-44 focus:ring-2 focus:ring-indigo-600/10 focus:border-indigo-600"
-                            >
-                              <option value="">Select Course...</option>
-                              {reportCourses.map(c => (
-                                <option key={c.code} value={c.code}>{c.code} - {c.title}</option>
-                              ))}
-                            </select>
-                          </div>
-                        </div>
-
-                        {!selectedReportCourseCode ? (
-                          <div className="flex flex-col items-center justify-center py-24 text-slate-400 text-center">
-                            <GraduationCap className="h-12 w-auto text-slate-300 mb-3" />
-                            <h4 className="text-xs font-bold text-slate-700">No Course Selected</h4>
-                            <p className="text-[11px] text-slate-400 max-w-xs mt-1">Choose a course from the dropdown above to view its real-time CLO-to-GA attainment metrics.</p>
-                          </div>
-                        ) : courseAttainmentReport ? (
-                          <div className="space-y-6">
-                            
-                            {/* Metric widgets */}
-                            <div className="grid grid-cols-2 gap-4">
-                              <div className="bg-slate-50 border border-slate-200/60 p-4 rounded-xl text-center space-y-1">
-                                <p className="text-[9px] uppercase font-bold text-slate-400 tracking-wider">Average Marks</p>
-                                <p className="text-xl font-mono font-black text-indigo-950">
-                                  {courseAttainmentReport.averageMarks?.toFixed(1) || '0.0'}
-                                  <span className="text-[11px] text-slate-400 font-bold ml-1">/ {courseAttainmentReport.maxMarks || 100}</span>
-                                </p>
-                              </div>
-                              <div className="bg-slate-50 border border-slate-200/60 p-4 rounded-xl text-center space-y-1">
-                                <p className="text-[9px] uppercase font-bold text-slate-400 tracking-wider">Pass Rate</p>
-                                <p className="text-xl font-mono font-black text-emerald-700">
-                                  {courseAttainmentReport.passedCount || 0}
-                                  <span className="text-[11px] text-slate-400 font-bold font-sans ml-1">of {courseAttainmentReport.totalCount || 0} students</span>
-                                </p>
-                              </div>
-                            </div>
-
-                            {/* Course Attainment Gauge */}
-                            <div className="bg-indigo-50/30 border border-indigo-100/50 p-5 rounded-2xl space-y-4">
-                              <div className="flex justify-between items-center">
-                                <span className="text-xs font-bold text-indigo-950">Overall Attainment Percentage</span>
-                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                                  courseAttainmentReport.attainmentStatus === 'Passed' 
-                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-100' 
-                                    : 'bg-amber-50 text-amber-700 border-amber-100'
-                                }`}>
-                                  {courseAttainmentReport.attainmentStatus || 'Passed'}
-                                </span>
-                              </div>
-
-                              <div className="space-y-1.5">
-                                <div className="flex justify-between items-center text-xs text-slate-500 font-bold">
-                                  <span>Index score:</span>
-                                  <span className="font-mono text-indigo-950 font-black">{courseAttainmentReport.attainmentPercentage?.toFixed(1)}%</span>
-                                </div>
-                                <div className="w-full bg-slate-200/60 h-3 rounded-full overflow-hidden">
-                                  <div 
-                                    className={`h-full rounded-full transition-all duration-500 ${
-                                      courseAttainmentReport.attainmentStatus === 'Passed' ? 'bg-emerald-500' : 'bg-amber-500'
-                                    }`}
-                                    style={{ width: `${courseAttainmentReport.attainmentPercentage || 0}%` }}
-                                  />
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Mapped GAs List */}
-                            {courseAttainmentReport.mappedGA && courseAttainmentReport.mappedGA.length > 0 && (
-                              <div className="space-y-2">
-                                <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Target Attributes Mapping</h4>
-                                <div className="flex flex-wrap gap-2">
-                                  {courseAttainmentReport.mappedGA.map((gaCode: string, idx: number) => (
-                                    <span key={idx} className="bg-indigo-50 border border-indigo-150 text-indigo-700 font-mono text-xs font-bold px-2.5 py-1 rounded-lg">
-                                      {gaCode}
-                                    </span>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-
-                          </div>
-                        ) : (
-                          <div className="text-center py-16 text-slate-400 text-xs font-semibold">
-                            No OBE marks or target mapping data found for this course.
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* VIEW 2: CO ATTAINMENT SUMMARY */}
-                  {subReportTab === 'co-summary' && coSummaryReport && (
-                    <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm space-y-6">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
-                        <div>
-                          <h3 className="text-sm font-extrabold text-slate-900 uppercase tracking-tight flex items-center gap-2">
-                            <BookOpen className="h-4.5 w-4.5 text-indigo-600" />
-                            Course-Level Learning Outcome (CLO) Summary
-                          </h3>
-                          <p className="text-xs text-slate-400 mt-0.5">
-                            Real-time outcome attainment matrices across department courses.
-                          </p>
-                        </div>
-
-                        <div className="flex flex-wrap items-center gap-3">
-                          <select
-                            value={coSummarySemester}
-                            onChange={(e) => setCoSummarySemester(e.target.value)}
-                            className="bg-slate-50 text-xs font-bold text-slate-700 px-3 py-2 rounded-xl border border-slate-200 outline-none"
-                          >
-                            <option value="Fall 2025">Fall 2025</option>
-                            <option value="Spring 2025">Spring 2025</option>
-                            <option value="Fall 2024">Fall 2024</option>
-                          </select>
-                          <select
-                            value={coSummaryYear}
-                            onChange={(e) => setCoSummaryYear(e.target.value)}
-                            className="bg-slate-50 text-xs font-bold text-slate-700 px-3 py-2 rounded-xl border border-slate-200 outline-none"
-                          >
-                            <option value="2025">Academic Year 2025</option>
-                            <option value="2024">Academic Year 2024</option>
-                          </select>
-                        </div>
-                      </div>
-
-                      <div className="space-y-6">
-                        {coSummaryReport.courses && coSummaryReport.courses.map((c: any, i: number) => (
-                          <div key={i} className="border border-slate-200/80 rounded-2xl p-5 hover:bg-slate-50/30 transition-all space-y-4">
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                              <div>
-                                <div className="flex items-center gap-2 mb-1">
-                                  <span className="font-mono text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded">{c.courseCode}</span>
-                                  <span className="text-[10px] text-slate-400 font-mono">Class Size: {c.classSize} students</span>
-                                </div>
-                                <h4 className="text-xs font-bold text-slate-800">{c.courseTitle}</h4>
-                              </div>
-                              <div className="flex items-center gap-3 self-start sm:self-center">
-                                <div className="text-right">
-                                  <p className="text-[10px] font-bold text-slate-400 uppercase">Course Average</p>
-                                  <p className="text-sm font-mono font-black text-indigo-950">{c.courseAverage}%</p>
-                                </div>
-                                <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${
-                                  c.courseTier === 'High' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
-                                  c.courseTier === 'Medium' ? 'bg-amber-50 text-amber-700 border border-amber-200' :
-                                  'bg-rose-50 text-rose-700 border border-rose-200'
-                                }`}>
-                                  {c.courseTier} Tier
-                                </span>
-                              </div>
-                            </div>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-2">
-                              {Object.entries(c.cloAttainments).map(([cloCode, attainment]: [string, any]) => (
-                                <div key={cloCode} className="bg-slate-50 border border-slate-200/60 p-3.5 rounded-xl space-y-3">
-                                  <div className="flex items-center justify-between">
-                                    <span className="font-mono text-[10px] font-extrabold text-indigo-700 uppercase">{cloCode}</span>
-                                    <span className={`text-[9px] font-bold px-1.5 rounded-full ${
-                                      attainment.tier === 'High' ? 'bg-emerald-100 text-emerald-800' :
-                                      attainment.tier === 'Medium' ? 'bg-amber-100 text-amber-800' :
-                                      'bg-rose-100 text-rose-800'
-                                    }`}>
-                                      {attainment.tier}
-                                    </span>
-                                  </div>
-                                  <div className="space-y-1">
-                                    <div className="flex items-center justify-between text-[11px] font-bold text-slate-500">
-                                      <span>Attainment:</span>
-                                      <span className="font-mono text-indigo-950">{attainment.attainmentRate}%</span>
-                                    </div>
-                                    <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
-                                      <div 
-                                        className={`h-full rounded-full ${
-                                          attainment.tier === 'High' ? 'bg-emerald-500' :
-                                          attainment.tier === 'Medium' ? 'bg-amber-500' :
-                                          'bg-rose-500'
-                                        }`}
-                                        style={{ width: `${attainment.attainmentRate}%` }}
-                                      />
-                                    </div>
-                                    <p className="text-[9px] text-slate-400 font-mono text-right mt-1">
-                                      Passed: {attainment.passedCount}/{attainment.totalCount}
-                                    </p>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* VIEW 3: PO ATTAINMENT PROFILE */}
-                  {subReportTab === 'po-attainment' && poAttainmentReport && (
-                    <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm space-y-6">
-                      <div className="border-b border-slate-100 pb-4">
-                        <h3 className="text-sm font-extrabold text-slate-900 uppercase tracking-tight flex items-center gap-2">
-                          <Layers className="h-4.5 w-4.5 text-indigo-600" />
-                          Program Learning Outcome (PLO) Attainment Dashboard
-                        </h3>
-                        <p className="text-xs text-slate-400 mt-0.5">
-                          Washington Accord engineering capability parameters audit.
-                        </p>
-                      </div>
-
-                      {/* Header overview metrics */}
-                      <div className="bg-indigo-50/40 border border-indigo-100/50 p-6 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-6">
-                        <div className="space-y-1">
-                          <span className="text-[10px] font-bold uppercase text-indigo-600 tracking-wider">Overall Program Attainment</span>
-                          <h4 className="text-lg font-bold text-indigo-950">{poAttainmentReport.programName}</h4>
-                        </div>
-                        <div className="flex items-center gap-4">
-                          <div className="text-right">
-                            <p className="text-[10px] font-bold text-slate-400 uppercase">Attainment Rate</p>
-                            <p className="text-2xl font-mono font-black text-indigo-950">{poAttainmentReport.overallAttainment}%</p>
-                          </div>
-                          <span className={`text-xs font-bold px-3 py-1 rounded-full border ${
-                            poAttainmentReport.overallTier === 'High' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'
-                          }`}>
-                            {poAttainmentReport.overallTier} Tier
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Custom SVG Bar Profile to act as Radar replacement */}
-                      <div className="border border-slate-100 rounded-2xl p-5 bg-slate-50/20 space-y-4">
-                        <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">PLO Attainment Matrix Visualizer</h4>
-                        <div className="space-y-3">
-                          {poAttainmentReport.radarData && poAttainmentReport.radarData.map((d: any, idx: number) => (
-                            <div key={idx} className="flex items-center gap-4">
-                              <span className="font-mono text-[10px] font-black text-indigo-950 w-10 shrink-0">{d.po}</span>
-                              <div className="flex-1 bg-slate-100 h-4 rounded overflow-hidden relative">
-                                <div 
-                                  className="h-full bg-indigo-600 transition-all duration-1000"
-                                  style={{ width: `${d.attainment}%` }}
-                                />
-                                <span className="absolute inset-y-0 left-2.5 flex items-center text-[9px] font-black text-white font-mono drop-shadow">
-                                  {d.attainment}%
-                                </span>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* PO detailed cards */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {poAttainmentReport.pos && poAttainmentReport.pos.map((p: any, i: number) => (
-                          <div key={i} className="border border-slate-200 bg-white p-5 rounded-2xl hover:border-slate-300 transition-all space-y-4">
-                            <div className="flex items-start justify-between gap-4">
-                              <div className="flex items-center gap-2">
-                                <span className="font-mono text-[11px] font-black text-indigo-600 bg-indigo-50 border border-indigo-100 px-2.5 py-0.5 rounded uppercase">{p.poId}</span>
-                                <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
-                                  p.hecStatus === 'Compliant' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' :
-                                  p.hecStatus === 'Review Required' ? 'bg-amber-50 text-amber-700 border-amber-100' :
-                                  'bg-rose-50 text-rose-700 border-rose-100'
-                                }`}>
-                                  {p.hecStatus}
-                                </span>
-                              </div>
-                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
-                                p.tier === 'High' ? 'bg-emerald-100 text-emerald-800' :
-                                p.tier === 'Medium' ? 'bg-amber-100 text-amber-800' :
-                                'bg-rose-100 text-rose-800'
-                              }`}>
-                                {p.tier}
-                              </span>
-                            </div>
-
-                            <div className="space-y-1">
-                              <h5 className="text-xs font-bold text-slate-800">{p.text}</h5>
-                              <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 pt-1">
-                                <span>Index Attainment:</span>
-                                <span className="font-mono text-indigo-950 font-black">{p.attainment}%</span>
-                              </div>
-                              <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                                <div 
-                                  className={`h-full rounded-full ${
-                                    p.tier === 'High' ? 'bg-emerald-500' :
-                                    p.tier === 'Medium' ? 'bg-amber-500' :
-                                    'bg-rose-500'
-                                  }`}
-                                  style={{ width: `${p.attainment}%` }}
-                                />
-                              </div>
-                            </div>
-
-                            <div className="border-t border-slate-100 pt-3 flex flex-wrap gap-1.5 items-center">
-                              <span className="text-[9px] font-bold text-slate-400 uppercase">Mapped Washington Accord GAs:</span>
-                              {p.mappedGAs && p.mappedGAs.map((ga: string, j: number) => (
-                                <span key={j} className="bg-slate-100 text-slate-600 font-mono text-[9px] font-bold px-1.5 py-0.5 rounded">{ga}</span>
-                              ))}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* VIEW 4: GAP ANALYSIS LEDGER */}
-                  {subReportTab === 'gap-analysis' && gapAnalysisReport && (
-                    <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm space-y-6">
-                      <div className="border-b border-slate-100 pb-4">
-                        <h3 className="text-sm font-extrabold text-slate-900 uppercase tracking-tight flex items-center gap-2">
-                          <Sliders className="h-4.5 w-4.5 text-indigo-600" />
-                          Washington Accord Graduate Attribute (GA) Gap Analysis
-                        </h3>
-                        <p className="text-xs text-slate-400 mt-0.5">
-                          Assess deficient program competencies and map academic improvement targets.
-                        </p>
-                      </div>
-
-                      {/* Summary blocks */}
-                      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                        <div className="bg-slate-50 border border-slate-200/60 p-4 rounded-xl text-center">
-                          <p className="text-[9px] font-bold uppercase text-slate-400">Total Attributes</p>
-                          <p className="text-xl font-mono font-black text-slate-800">{gapAnalysisReport.summary.total}</p>
-                        </div>
-                        <div className="bg-rose-50 border border-rose-200/60 p-4 rounded-xl text-center">
-                          <p className="text-[9px] font-bold uppercase text-rose-500">Critical Gaps</p>
-                          <p className="text-xl font-mono font-black text-rose-700">{gapAnalysisReport.summary.critical}</p>
-                        </div>
-                        <div className="bg-amber-50 border border-amber-200/60 p-4 rounded-xl text-center">
-                          <p className="text-[9px] font-bold uppercase text-amber-500">Moderate Gaps</p>
-                          <p className="text-xl font-mono font-black text-amber-700">{gapAnalysisReport.summary.moderate}</p>
-                        </div>
-                        <div className="bg-emerald-50 border border-emerald-200/60 p-4 rounded-xl text-center">
-                          <p className="text-[9px] font-bold uppercase text-emerald-500">Healthy GAs</p>
-                          <p className="text-xl font-mono font-black text-emerald-700">{gapAnalysisReport.summary.healthy}</p>
-                        </div>
-                      </div>
-
-                      {/* Warning box if any critical gap */}
-                      {gapAnalysisReport.summary.critical > 0 && (
-                        <div className="bg-rose-50 border border-rose-100 rounded-2xl p-4.5 flex gap-3.5">
-                          <AlertCircle className="h-5 w-5 text-rose-600 shrink-0 mt-0.5" />
-                          <div className="space-y-1">
-                            <h5 className="text-xs font-bold text-rose-950">Action Required: Critical Outcomes Gap Identified</h5>
-                            <p className="text-[11px] text-rose-700 leading-relaxed">
-                              The following Washington Accord attributes fell below the desired 50% benchmark and require urgent syllabus review or course mapping updates:
-                            </p>
-                            <div className="flex flex-wrap gap-1.5 mt-2">
-                              {gapAnalysisReport.criticalGaps && gapAnalysisReport.criticalGaps.map((cg: string, idx: number) => (
-                                <span key={idx} className="bg-rose-100 text-rose-800 font-bold text-[10px] px-2 py-0.5 rounded-md">{cg}</span>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Gap ledger list */}
-                      <div className="overflow-x-auto border border-slate-100 rounded-xl">
-                        <table className="min-w-full divide-y divide-slate-100">
-                          <thead className="bg-slate-50 text-[10px] uppercase font-bold tracking-wider text-slate-400">
-                            <tr>
-                              <th className="px-5 py-3 text-left">Attribute ID</th>
-                              <th className="px-5 py-3 text-left">Graduate Attribute Name</th>
-                              <th className="px-5 py-3 text-center">Mapped Courses</th>
-                              <th className="px-5 py-3 text-left">Average Attainment</th>
-                              <th className="px-5 py-3 text-center">Status Badge</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-600 bg-white">
-                            {gapAnalysisReport.gaps && gapAnalysisReport.gaps.map((g: any, idx: number) => (
-                              <tr key={idx} className="hover:bg-slate-50/40 transition-all">
-                                <td className="px-5 py-3.5 font-mono font-bold text-indigo-600">{g.gaId}</td>
-                                <td className="px-5 py-3.5 text-slate-800 font-bold">{g.name}</td>
-                                <td className="px-5 py-3.5 text-center font-mono font-bold">{g.mappedCoursesCount} courses</td>
-                                <td className="px-5 py-3.5">
-                                  <div className="flex items-center gap-3">
-                                    <span className="font-mono text-indigo-950 font-black w-10 shrink-0">{g.averageAttainment}%</span>
-                                    <div className="w-24 bg-slate-100 h-2 rounded-full overflow-hidden">
-                                      <div 
-                                        className={`h-full ${
-                                          g.gapStatus === 'Healthy' ? 'bg-emerald-500' :
-                                          g.gapStatus === 'Moderate' ? 'bg-amber-500' :
-                                          'bg-rose-500'
-                                        }`}
-                                        style={{ width: `${g.averageAttainment}%` }}
-                                      />
-                                    </div>
-                                  </div>
-                                </td>
-                                <td className="px-5 py-3.5 text-center">
-                                  <span className={`px-2.5 py-1 text-[10px] font-bold rounded-full ${
-                                    g.gapStatus === 'Healthy' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
-                                    g.gapStatus === 'Moderate' ? 'bg-amber-50 text-amber-700 border border-amber-200' :
-                                    'bg-rose-50 text-rose-700 border border-rose-200'
-                                  }`}>
-                                    {g.gapStatus}
-                                  </span>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* VIEW 5: AT-RISK STUDENTS */}
-                  {subReportTab === 'at-risk' && atRiskReport && (
-                    <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm space-y-6">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
-                        <div>
-                          <h3 className="text-sm font-extrabold text-slate-900 uppercase tracking-tight flex items-center gap-2">
-                            <AlertCircle className="h-4.5 w-4.5 text-rose-600" />
-                            Academic At-Risk & Deficient Cohort Identifier
-                          </h3>
-                          <p className="text-xs text-slate-400 mt-0.5">
-                            Early-alert intervention radar flagging students with multiple deficient learning outcomes.
-                          </p>
-                        </div>
-
-                        <div>
-                          <select
-                            value={atRiskSemester}
-                            onChange={(e) => setAtRiskSemester(e.target.value)}
-                            className="bg-slate-50 text-xs font-bold text-slate-700 px-3 py-2 rounded-xl border border-slate-200 outline-none"
-                          >
-                            <option value="Fall 2025">Fall 2025</option>
-                            <option value="Spring 2025">Spring 2025</option>
-                            <option value="Fall 2024">Fall 2024</option>
-                          </select>
-                        </div>
-                      </div>
-
-                      {/* Overview banner */}
-                      <div className="bg-rose-50 border border-rose-100 p-5 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                        <div className="space-y-0.5">
-                          <span className="text-[10px] font-bold uppercase text-rose-600 tracking-wider">Alert Summary</span>
-                          <h4 className="text-sm font-bold text-rose-950">Early alerts identify {atRiskReport.atRiskCount} deficient students requiring academic counseling.</h4>
-                        </div>
-                        <span className="bg-rose-600 text-white font-mono text-xs font-black px-4 py-1.5 rounded-full self-start sm:self-center">
-                          {atRiskReport.atRiskCount} Students Flagged
-                        </span>
-                      </div>
-
-                      {/* At-risk student card directory */}
-                      <div className="space-y-4">
-                        {atRiskReport.students && atRiskReport.students.map((st: any, i: number) => (
-                          <div key={i} className="border border-slate-200 rounded-2xl p-5 hover:border-rose-200 hover:bg-rose-50/10 transition-all space-y-4">
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                              <div className="space-y-0.5">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <h4 className="text-xs font-bold text-slate-800">{st.name}</h4>
-                                  <span className="text-[10px] text-slate-400 font-mono font-normal">({st.regNo})</span>
-                                  <span className="bg-slate-100 text-slate-600 text-[9px] font-bold px-1.5 rounded">Batch {st.batch}</span>
-                                </div>
-                                <p className="text-[10px] text-slate-400 font-mono">Enrolled: {st.semester}</p>
-                              </div>
-                              <div className="flex items-center gap-3">
-                                <span className="text-xs text-slate-500 font-bold">Deficient: <b className="text-rose-600 font-mono">{st.failedCloCount} outcomes</b></span>
-                                <span className={`text-[10px] font-bold px-3 py-1 rounded-full border uppercase ${
-                                  st.riskLevel === 'High' ? 'bg-rose-100 text-rose-700 border-rose-200' : 'bg-amber-100 text-amber-700 border-amber-200'
-                                }`}>
-                                  {st.riskLevel} Risk
-                                </span>
-                              </div>
-                            </div>
-
-                            <div className="border-t border-slate-100 pt-3.5 space-y-2">
-                              <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Failed CLO Audit Trail</p>
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                {st.failures && st.failures.map((f: any, j: number) => (
-                                  <div key={j} className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex items-center justify-between">
-                                    <div className="space-y-0.5">
-                                      <div className="flex items-center gap-2">
-                                        <span className="font-mono text-[9px] font-bold text-indigo-600 bg-indigo-50 px-1.5 rounded">{f.courseCode}</span>
-                                        <span className="text-[10px] font-bold text-slate-700">{f.courseTitle}</span>
-                                      </div>
-                                      <p className="text-[9px] font-mono text-slate-400 uppercase">Deficient CLO: {f.clo}</p>
-                                    </div>
-                                    <span className="font-mono text-[11px] font-black text-rose-600 bg-rose-50 px-2 py-0.5 rounded">
-                                      {f.score}%
-                                    </span>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* VIEW 6: INSTRUCTOR PERFORMANCE */}
-                  {subReportTab === 'instructor-performance' && instructorPerformanceReport && (
-                    <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm space-y-6">
-                      <div className="border-b border-slate-100 pb-4">
-                        <h3 className="text-sm font-extrabold text-slate-900 uppercase tracking-tight flex items-center gap-2">
-                          <Users className="h-4.5 w-4.5 text-indigo-600" />
-                          Faculty Instruction Performance Profile
-                        </h3>
-                        <p className="text-xs text-slate-400 mt-0.5">
-                          Inspect instructor syllabus execution compliance and target CLO success metrics.
-                        </p>
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        {instructorPerformanceReport.instructors && instructorPerformanceReport.instructors.map((ins: any, i: number) => (
-                          <div key={i} className="border border-slate-200 rounded-2xl p-5 hover:border-slate-300 bg-white transition-all space-y-4">
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
-                              <div>
-                                <h4 className="text-xs font-bold text-slate-800">{ins.name}</h4>
-                                <p className="text-[10px] text-indigo-600 font-bold font-mono">{ins.designation} • {ins.employeeId}</p>
-                              </div>
-                              <div className="text-right">
-                                <span className="text-[9px] font-bold text-slate-400 uppercase block">Overall Avg</span>
-                                <span className="font-mono text-sm font-black text-indigo-950">{ins.overallAverage}%</span>
-                              </div>
-                            </div>
-
-                            <div className="space-y-4">
-                              {ins.courses && ins.courses.map((co: any, j: number) => (
-                                <div key={j} className="bg-slate-50/50 border border-slate-200/60 p-3.5 rounded-xl space-y-3">
-                                  <div className="flex items-center justify-between">
-                                    <div>
-                                      <span className="font-mono text-[10px] font-bold text-indigo-600 uppercase block">{co.courseCode}</span>
-                                      <span className="text-xs font-bold text-slate-700">{co.courseTitle}</span>
-                                    </div>
-                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                                      co.courseTier === 'High' ? 'bg-emerald-50 text-emerald-700 border-emerald-150' : 'bg-amber-50 text-amber-700 border-amber-150'
-                                    }`}>
-                                      {co.courseTier}
-                                    </span>
-                                  </div>
-
-                                  <div className="space-y-2">
-                                    <p className="text-[9px] font-bold uppercase text-slate-400 tracking-wider">CLO Performance Tiers</p>
-                                    <div className="grid grid-cols-3 gap-2">
-                                      {co.clos && co.clos.map((cl: any, k: number) => (
-                                        <div key={k} className="bg-white border border-slate-100 rounded-lg p-2 text-center space-y-0.5">
-                                          <span className="font-mono text-[9px] font-bold text-slate-500 uppercase">{cl.clo}</span>
-                                          <p className="text-xs font-mono font-black text-slate-800">{cl.average}%</p>
-                                          <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-full inline-block ${
-                                            cl.tier === 'High' ? 'bg-emerald-50 text-emerald-600' :
-                                            cl.tier === 'Medium' ? 'bg-amber-50 text-amber-600' :
-                                            'bg-rose-50 text-rose-600'
-                                          }`}>
-                                            {cl.tier}
-                                          </span>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* VIEW 7: COHORT COMPARISON */}
-                  {subReportTab === 'cohort-comparison' && cohortComparisonReport && (
-                    <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm space-y-6">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
-                        <div>
-                          <h3 className="text-sm font-extrabold text-slate-900 uppercase tracking-tight flex items-center gap-2">
-                            <RefreshCw className="h-4.5 w-4.5 text-indigo-600" />
-                            Academic Term Cohort Comparison Trends
-                          </h3>
-                          <p className="text-xs text-slate-400 mt-0.5">
-                            Track and compare OBE performance metrics and attribute compliance across multiple academic terms.
-                          </p>
-                        </div>
-
-                        <div className="flex items-center gap-3">
-                          <span className="text-xs font-bold text-slate-600">Select GA Attribute:</span>
-                          <select
-                            value={cohortGaId}
-                            onChange={(e) => setCohortGaId(e.target.value)}
-                            className="bg-slate-50 text-xs font-bold text-slate-700 px-3 py-2 rounded-xl border border-slate-200 outline-none"
-                          >
-                            <option value="GA-1">GA-1 Academic Education</option>
-                            <option value="GA-2">GA-2 Problem Analysis</option>
-                            <option value="GA-3">GA-3 Design/Development</option>
-                            <option value="GA-4">GA-4 Investigation</option>
-                            <option value="GA-5">GA-5 Modern Tool Usage</option>
-                          </select>
-                        </div>
-                      </div>
-
-                      {/* Chart visual representation */}
-                      <div className="border border-slate-100 rounded-2xl p-5 bg-slate-50/20 space-y-4">
-                        <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Dynamic Trend Profile: Overall Avg vs. Selected Attribute ({cohortComparisonReport.gaFilter})</h4>
-                        <div className="space-y-4 pt-2">
-                          {cohortComparisonReport.chartData && cohortComparisonReport.chartData.map((cd: any, idx: number) => {
-                            const gaVal = cd[cohortComparisonReport.gaFilter] || 50;
-                            return (
-                              <div key={idx} className="space-y-1.5">
-                                <span className="font-mono text-[10px] font-bold text-slate-400 uppercase">{cd.term}</span>
-                                <div className="grid grid-cols-2 gap-4">
-                                  {/* Overall */}
-                                  <div className="space-y-0.5">
-                                    <div className="flex items-center justify-between text-[9px] text-slate-500 font-bold">
-                                      <span>Overall Program Avg:</span>
-                                      <span className="font-mono text-indigo-950">{cd.overall}%</span>
-                                    </div>
-                                    <div className="bg-slate-100 h-2 rounded-full overflow-hidden">
-                                      <div className="h-full bg-slate-400 rounded-full" style={{ width: `${cd.overall}%` }} />
-                                    </div>
-                                  </div>
-                                  {/* GA */}
-                                  <div className="space-y-0.5">
-                                    <div className="flex items-center justify-between text-[9px] text-slate-500 font-bold">
-                                      <span>{cohortComparisonReport.gaFilter} Average:</span>
-                                      <span className="font-mono text-indigo-600">{gaVal}%</span>
-                                    </div>
-                                    <div className="bg-slate-100 h-2 rounded-full overflow-hidden">
-                                      <div className="h-full bg-indigo-600 rounded-full" style={{ width: `${gaVal}%` }} />
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                      {/* Trend list metrics */}
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                        {cohortComparisonReport.trends && cohortComparisonReport.trends.map((t: any, i: number) => (
-                          <div key={i} className="bg-slate-50 border border-slate-200/60 p-4 rounded-xl text-center space-y-1">
-                            <span className="text-[10px] font-bold uppercase text-slate-400">{t.term}</span>
-                            <p className="text-lg font-mono font-black text-indigo-950">{t.overallAverage}%</p>
-                            <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full inline-block ${
-                              t.overallTier === 'High' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
-                            }`}>
-                              {t.overallTier} Tier
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-
             </div>
           )}
 

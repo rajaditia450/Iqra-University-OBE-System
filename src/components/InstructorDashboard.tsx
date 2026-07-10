@@ -2580,6 +2580,30 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
   return (
     <div className="min-h-screen flex flex-col font-sans frosted-bg text-slate-800">
       
+      {/* Premium Corporate Top Header */}
+      <header id="instructor-header" className="bg-[#1e1b4b] text-white border-b border-indigo-950 px-6 py-2.5 shrink-0 flex items-center justify-between shadow-sm select-none">
+        <div className="flex items-center gap-2">
+          <h1 className="text-base font-bold font-display tracking-tight flex items-center gap-2">
+            <span>Iqra University OBE</span>
+            <span className="bg-indigo-500/20 text-indigo-300 text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full border border-indigo-500/30">
+              INSTRUCTOR CONTROL
+            </span>
+          </h1>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            id="btn-logout"
+            onClick={onLogout}
+            className="px-3.5 py-1.5 bg-transparent hover:bg-white/10 text-white hover:text-white rounded-lg transition-all border border-white/20 hover:border-white/40 flex items-center gap-1.5 cursor-pointer text-xs font-semibold"
+            title="Sign out of Instructor Module"
+          >
+            <LogOut className="w-3.5 h-3.5 text-white/95" />
+            <span>Logout</span>
+          </button>
+        </div>
+      </header>
+
       {/* CLASSIC DESKTOP WINDOWS-STYLE MENU BAR HEADER */}
       <header 
         id="instructor-portal-header" 
@@ -2590,16 +2614,6 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
           {/* Menu items list */}
           <div className="flex flex-wrap items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
             
-            {/* BACK TO LOGIN */}
-            <button
-              onClick={onLogout}
-              className="px-3.5 py-1.5 text-xs font-sans font-bold rounded-lg cursor-pointer transition-all flex items-center gap-1.5 bg-slate-800 hover:bg-slate-900 hover:scale-[1.02] text-white border border-slate-800 shadow-xs mr-2"
-              title="Back to login selection"
-            >
-              <ArrowLeft className="w-3.5 h-3.5 text-white shrink-0" />
-              <span>Back</span>
-            </button>
-
             {/* SET WEIGHTAGE DIRECT ITEM */}
             <div className="relative font-bold">
               <button
@@ -2876,13 +2890,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
 
           {/* Right side course lock / configurations */}
           <div className="flex items-center">
-            <button
-              onClick={onLogout}
-              className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-300 text-slate-700 hover:bg-slate-100 rounded-lg text-xs font-semibold transition-colors shadow-xs hover:border-slate-400 shrink-0 font-sans"
-            >
-              <LogOut className="w-3 h-3 text-slate-500" />
-              Logout
-            </button>
+            
           </div>
 
         </div>
