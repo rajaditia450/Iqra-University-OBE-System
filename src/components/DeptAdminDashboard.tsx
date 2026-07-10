@@ -298,7 +298,6 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
   const [courseProg, setCourseProg] = useState('bscs');
   const [courseGAs, setCourseGAs] = useState<string[]>([]);
   const [courseSearch, setCourseSearch] = useState('');
-  const [courseCatalogProgFilter, setCourseCatalogProgFilter] = useState<string>('all');
   const [importStatus, setImportStatus] = useState<{ type: 'idle' | 'success' | 'error', message: string }>({ type: 'idle', message: '' });
   const [editingCourse, setEditingCourse] = useState<Course | null>(null);
 
@@ -1755,14 +1754,14 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
       const isSameDept = c.departmentId === activeDeptId;
       if (!isSameDept) return false;
 
-      const isSameProg = courseCatalogProgFilter === 'all' || 
-        String(c.programId).trim().toLowerCase() === String(courseCatalogProgFilter).trim().toLowerCase();
+      const isSameProg = !selectedPlanProg || 
+        String(c.programId).trim().toLowerCase() === String(selectedPlanProg).trim().toLowerCase();
       if (!isSameProg) return false;
 
       const q = courseSearch.toLowerCase().trim();
       return q === '' || c.code.toLowerCase().includes(q) || c.title.toLowerCase().includes(q);
     });
-  }, [courses, courseSearch, courseCatalogProgFilter, activeDeptId]);
+  }, [courses, courseSearch, selectedPlanProg, activeDeptId]);
 
   // Teacher Filter List (Tab 3)
   const filteredTeachers = useMemo(() => {
@@ -2275,21 +2274,6 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                     </p>
                   </div>
                   <div className="flex flex-col sm:flex-row sm:items-center gap-3 max-w-lg w-full justify-end">
-                    {/* Program Filter */}
-                    <div className="w-full sm:w-48">
-                      <select
-                        id="course-catalog-program-filter"
-                        value={courseCatalogProgFilter}
-                        onChange={(e) => setCourseCatalogProgFilter(e.target.value)}
-                        className="w-full px-3 py-2 bg-slate-50 hover:bg-slate-100/70 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-indigo-600/10 focus:border-indigo-600 rounded-xl outline-none text-xs font-bold transition-all cursor-pointer"
-                      >
-                        <option value="all">All Programs</option>
-                        {adminPrograms.map(p => (
-                          <option key={p.id} value={p.id}>{p.code.toUpperCase()} - {p.name}</option>
-                        ))}
-                      </select>
-                    </div>
-
                     {/* Search bar */}
                     <div className="relative w-full sm:w-64">
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
