@@ -1083,7 +1083,7 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
                     >
                       <option value="all">View All Enrolled Courses</option>
                       {enrolledCoursesWithGrades.map(c => (
-                        <option key={c.code} value={c.code}>{c.code} - {c.title}</option>
+                        <option key={c.id || c.code} value={c.code}>{c.code} - {c.title}</option>
                       ))}
                     </select>
                   </div>

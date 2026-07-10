@@ -621,14 +621,16 @@ const isBackendUser = (): boolean => {
 
 const normalizeCourse = (c: any): Course => {
   if (!c) return {} as any;
+  const code = c.code ? String(c.code).toUpperCase().trim() : '';
+  const programId = c.programId || c.program_id || c.program || '';
   return {
-    id: c.id ? String(c.id) : '',
-    code: c.code ? String(c.code).toUpperCase().trim() : '',
+    id: c.id ? String(c.id) : `course-${code}-${programId || 'common'}`,
+    code,
     title: c.title ? String(c.title).trim() : '',
     type: c.type === 'elective' ? 'elective' : 'core',
     mappedGAs: Array.isArray(c.mappedGAs) ? c.mappedGAs : (Array.isArray(c.mapped_gas) ? c.mapped_gas : []),
     departmentId: c.departmentId || c.department_id || c.department || '',
-    programId: c.programId || c.program_id || c.program || '',
+    programId,
     creditHours: c.creditHours !== undefined ? Number(c.creditHours) : (c.credit_hours !== undefined ? Number(c.credit_hours) : 3),
     courseType: c.courseType || c.course_type || 'Theory'
   };

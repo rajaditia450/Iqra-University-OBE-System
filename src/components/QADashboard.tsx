@@ -454,8 +454,7 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
     if (!data) return [];
     // Only yield GAs matching the currently active program code specifically
     return data.gas.filter(g => 
-      g.programId === activeProgramId || 
-      (!g.programId && g.departmentId === activeDeptId && activeProgramId === 'bscs')
+      String(g.programId).trim().toLowerCase() === String(activeProgramId).trim().toLowerCase()
     );
   }, [data, activeDeptId, activeProgramId]);
 
@@ -464,7 +463,7 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
     if (!data || !activeDeptId) return [];
     let list = data.courses.filter(c => 
       c.departmentId === activeDeptId && 
-      (c.programId === activeProgramId || (!c.programId && activeProgramId === 'bscs'))
+      String(c.programId).trim().toLowerCase() === String(activeProgramId).trim().toLowerCase()
     );
 
     if (selectedCourseId !== 'all') {
@@ -495,7 +494,7 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
     if (!data || !activeDeptId) return [];
     const coursesInDept = data.courses.filter(c => 
       c.departmentId === activeDeptId && 
-      (c.programId === activeProgramId || (!c.programId && activeProgramId === 'bscs'))
+      String(c.programId).trim().toLowerCase() === String(activeProgramId).trim().toLowerCase()
     );
     const total = coursesInDept.length || 1;
     return filteredGAs.map(ga => {
@@ -510,7 +509,7 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
     if (!data || !activeDeptId) return [];
     return data.courses.filter(c => 
       c.departmentId === activeDeptId && 
-      (c.programId === activeProgramId || (!c.programId && activeProgramId === 'bscs')) && 
+      String(c.programId).trim().toLowerCase() === String(activeProgramId).trim().toLowerCase() && 
       c.mappedGAs.length === 0
     );
   }, [data, activeDeptId, activeProgramId]);
@@ -1224,7 +1223,7 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                   className="bg-white border border-slate-300 rounded-lg px-2 py-1 text-xs font-bold focus:outline-none cursor-pointer max-w-[210px] shadow-xs"
                 >
                   <option value="all">Show All Courses</option>
-                  {data?.courses.filter(c => c.departmentId === activeDeptId && (c.programId === activeProgramId || (!c.programId && activeProgramId === 'bscs'))).map(c => (
+                  {data?.courses.filter(c => c.departmentId === activeDeptId && String(c.programId).trim().toLowerCase() === String(activeProgramId).trim().toLowerCase()).map(c => (
                     <option key={c.id} value={c.id}>{c.code} — {c.title}</option>
                   ))}
                 </select>
@@ -2009,7 +2008,7 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                             {data?.courses
                               .filter(c => c.departmentId === activeDeptId && c.programId === selectedReportProgramId)
                               .map(c => (
-                                <option key={c.code} value={c.code}>{c.code} — {c.title}</option>
+                                <option key={c.id} value={c.code}>{c.code} — {c.title}</option>
                               ))}
                           </select>
                         </div>
