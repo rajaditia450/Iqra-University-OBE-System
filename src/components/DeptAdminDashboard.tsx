@@ -2431,11 +2431,11 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                       required
                     >
                       <option value="">Select Course...</option>
-                      {courses.filter(c => c.departmentId === activeDeptId).map(c => {
+                      {courses.filter(c => c.departmentId === activeDeptId).map((c, idx) => {
                         const progObj = programs.find(p => String(p.id).trim().toLowerCase() === String(c.programId).trim().toLowerCase());
                         const progLabel = progObj ? progObj.code.toUpperCase() : 'Common';
                         return (
-                          <option key={c.id} value={c.code}>
+                          <option key={`${c.id}-${idx}`} value={c.code}>
                             {c.code} — {c.title} ({progLabel})
                           </option>
                         );
@@ -2836,6 +2836,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                           if (!s) return null;
 
                           const progPlans = semesterPlans.filter(p => p.programId === s.programId);
+                          const curriculumCodes = Array.from(new Set(progPlans.flatMap(p => p.courseCodes))) as string[];
                           const orderedSemestersList = ["1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th"];
                           
                           // Sort semester plans in typical ordered list
@@ -2844,10 +2845,12 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                           // If showing filtered tabs (e.g. Failed, Studying, etc.)
                           if (studentTab !== 'all') {
                             const filteredCourses = courses.filter(c => {
-                              // Filter courses matching the specific status
-                              const isSameProg = c.programId === s.programId;
-                              const isSameDept = c.departmentId === s.departmentId;
-                              if (!isSameProg && !isSameDept) return false;
+                              // The course must be in the student's program's curriculum OR explicitly enrolled/studied
+                              const inCurriculum = curriculumCodes.includes(c.code);
+                              const isEnrolled = studentBindings.some(
+                                b => b.studentRegNo === s.regNo && b.courseCode === c.code
+                              );
+                              if (!inCurriculum && !isEnrolled) return false;
                               
                               const stat = getCourseStatus(s.regNo, c.code);
                               return stat === studentTab;
@@ -2863,11 +2866,11 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
 
                             return (
                               <div className="space-y-2.5">
-                                {filteredCourses.map(c => {
+                                {filteredCourses.map((c, idx) => {
                                   const status = getCourseStatus(s.regNo, c.code);
                                   return (
                                     <div 
-                                      key={c.id}
+                                      key={`${c.id}-${idx}`}
                                       className="bg-white border border-slate-200 p-3.5 rounded-xl shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:border-slate-300 transition-all"
                                     >
                                       <div>

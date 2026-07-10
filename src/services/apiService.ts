@@ -623,16 +623,34 @@ const normalizeCourse = (c: any): Course => {
   if (!c) return {} as any;
   const code = c.code ? String(c.code).toUpperCase().trim() : '';
   const programId = c.programId || c.program_id || c.program || '';
+
+  // The backend uses course_type or courseType to hold 'core' or 'elective'
+  let frontendType: 'core' | 'elective' = 'core';
+  if (c.type === 'elective' || c.course_type === 'elective' || c.courseType === 'elective') {
+    frontendType = 'elective';
+  }
+
+  // The backend does not have a separate theory/lab subtype, or uses subtype/course_subtype
+  let frontendSubtype: 'Theory' | 'Lab' = 'Theory';
+  const rawSubtype = c.subtype || c.course_subtype || c.courseSubtype;
+  if (rawSubtype) {
+    frontendSubtype = String(rawSubtype).toLowerCase().includes('lab') ? 'Lab' : 'Theory';
+  } else if (c.course_type && (String(c.course_type).toLowerCase() === 'theory' || String(c.course_type).toLowerCase() === 'lab')) {
+    frontendSubtype = String(c.course_type).toLowerCase() === 'lab' ? 'Lab' : 'Theory';
+  } else if (c.courseType && (String(c.courseType).toLowerCase() === 'theory' || String(c.courseType).toLowerCase() === 'lab')) {
+    frontendSubtype = String(c.courseType).toLowerCase() === 'lab' ? 'Lab' : 'Theory';
+  }
+
   return {
     id: c.id ? String(c.id) : `course-${code}-${programId || 'common'}`,
     code,
     title: c.title ? String(c.title).trim() : '',
-    type: c.type === 'elective' ? 'elective' : 'core',
+    type: frontendType,
     mappedGAs: Array.isArray(c.mappedGAs) ? c.mappedGAs : (Array.isArray(c.mapped_gas) ? c.mapped_gas : []),
     departmentId: c.departmentId || c.department_id || c.department || '',
     programId,
     creditHours: c.creditHours !== undefined ? Number(c.creditHours) : (c.credit_hours !== undefined ? Number(c.credit_hours) : 3),
-    courseType: c.courseType || c.course_type || 'Theory'
+    courseType: frontendSubtype
   };
 };
 
@@ -641,7 +659,7 @@ const mapCourseToBackend = (c: Course): any => {
     id: c.id,
     code: c.code,
     title: c.title,
-    type: c.type,
+    type: c.type === 'elective' ? 'elective' : 'core',
     mapped_gas: c.mappedGAs || [],
     mappedGAs: c.mappedGAs || [],
     department_id: c.departmentId,
@@ -652,8 +670,13 @@ const mapCourseToBackend = (c: Course): any => {
     program: c.programId || null,
     credit_hours: c.creditHours !== undefined ? Number(c.creditHours) : 3,
     creditHours: c.creditHours !== undefined ? Number(c.creditHours) : 3,
-    course_type: c.courseType || 'Theory',
-    courseType: c.courseType || 'Theory'
+    // Align with backend schema where course_type column represents core vs elective
+    course_type: c.type === 'elective' ? 'elective' : 'core',
+    courseType: c.type === 'elective' ? 'elective' : 'core',
+    // Fallback/forward-compatibility in case backend supports subtype
+    course_subtype: c.courseType || 'Theory',
+    courseSubtype: c.courseType || 'Theory',
+    subtype: c.courseType || 'Theory'
   };
 };
 

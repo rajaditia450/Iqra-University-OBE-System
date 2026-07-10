@@ -2824,7 +2824,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
           {/* Quick status display */}
           <div className="flex flex-col items-end gap-0.5">
             <span className="text-[10px] text-slate-500 font-mono tracking-tight font-semibold hidden sm:inline">
-              User: <strong className="text-indigo-950 font-extrabold">{selectedCourse ? selectedCourse.departmentName : 'Department of Computing and Technology'} Instructor</strong>
+              User: <strong className="text-indigo-950 font-extrabold">{instructorName} ({selectedCourse ? selectedCourse.departmentName : 'Department of Computing and Technology'} Instructor)</strong>
             </span>
           </div>
 
