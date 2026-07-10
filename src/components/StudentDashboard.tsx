@@ -169,12 +169,9 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
       }
 
       // 4. Load student bindings
-      const savedBindings = localStorage.getItem('IQRA_OBE_STUDENT_BINDINGS');
-      if (savedBindings) {
-        setStudentBindings(JSON.parse(savedBindings));
-      } else {
-        setStudentBindings([]);
-      }
+      // We initialize this to an empty array to prevent pre-seeded dummy registrations from showing.
+      // We will only use authentic course bindings returned directly by the backend API.
+      setStudentBindings([]);
 
       // 5. Load student courses from backend with marks
       try {
@@ -367,16 +364,16 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
 
     // Fallback/Stable pseudo-random generation based on registration number & course code for other registered courses
     if (!hasAnyMarks) {
-      const hash = (stdRegNo + courseCode).split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-      // Generate realistic performance grades between 61% and 94%
-      aggregate = 61 + (hash % 34);
+      aggregate = 0;
     }
 
     // Calculate Letter Grade based on Active system or standard Iqra grading
     let letterGrade = 'B';
     const system = instCourse?.selectedGradingSystem || 'ready1';
     
-    if (system === 'ready2') {
+    if (!hasAnyMarks) {
+      letterGrade = '-';
+    } else if (system === 'ready2') {
       if (aggregate >= 90) letterGrade = 'A+';
       else if (aggregate >= 85) letterGrade = 'A';
       else if (aggregate >= 80) letterGrade = 'A-';
@@ -404,19 +401,23 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
 
     // Map GP points
     let points = 0.0;
-    switch (letterGrade) {
-      case 'A+': points = 4.0; break;
-      case 'A': points = 4.0; break;
-      case 'A-': points = 3.7; break;
-      case 'B+': points = 3.3; break;
-      case 'B': points = 3.0; break;
-      case 'B-': points = 2.7; break;
-      case 'C+': points = 2.3; break;
-      case 'C': points = 2.0; break;
-      case 'C-': points = 1.7; break;
-      case 'D+': points = 1.3; break;
-      case 'D': points = 1.0; break;
-      default: points = 0.0;
+    if (letterGrade === '-') {
+      points = 0.0;
+    } else {
+      switch (letterGrade) {
+        case 'A+': points = 4.0; break;
+        case 'A': points = 4.0; break;
+        case 'A-': points = 3.7; break;
+        case 'B+': points = 3.3; break;
+        case 'B': points = 3.0; break;
+        case 'B-': points = 2.7; break;
+        case 'C+': points = 2.3; break;
+        case 'C': points = 2.0; break;
+        case 'C-': points = 1.7; break;
+        case 'D+': points = 1.3; break;
+        case 'D': points = 1.0; break;
+        default: points = 0.0;
+      }
     }
 
     // CLO Performance Calculations
@@ -436,11 +437,11 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
 
       // Standard stable simulation if no OBE structures are customized yet
       if (max === 0) {
-        const hash = (stdRegNo + courseCode + clo).split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-        // Vary CLOs slightly around course average
-        const multiplier = 0.85 + (hash % 25) / 100;
-        score = Math.min(100, Math.round(aggregate * multiplier));
-        max = 100;
+        return {
+          code: clo,
+          percentage: 0,
+          status: 'Not Assessed'
+        };
       }
 
       const pct = max > 0 ? (score / max) * 100 : 0;
@@ -625,18 +626,15 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
     const std = instCourse?.students.find(s => s.regNo === activeRegNo);
     
     if (!instCourse || !std || !std.marks) {
-      // Generate simulated beautiful ledger items matching course aggregate
-      const results = computeStudentCourseResult(activeRegNo, courseCode);
-      const avg = results.aggregate;
-
+      // Do not generate dummy mock marks. Return categories with 0 scores.
       return [
-        { category: 'Assignments', scored: Math.round(avg * 0.15 * 10) / 10, max: 15, pct: avg },
-        { category: 'Quizzes', scored: Math.round(avg * 0.10 * 10) / 10, max: 10, pct: avg },
-        { category: 'Class Project', scored: Math.round(avg * 0.15 * 10) / 10, max: 15, pct: avg },
-        { category: 'Presentation', scored: Math.round(avg * 0.05 * 10) / 10, max: 5, pct: avg },
-        { category: 'Mid Term Exam', scored: Math.round(avg * 0.20 * 10) / 10, max: 20, pct: avg },
-        { category: 'Final Term Exam', scored: Math.round(avg * 0.30 * 10) / 10, max: 30, pct: avg },
-        { category: 'Class Attendance', scored: 5.0, max: 5, pct: 100 }
+        { category: 'Assignments', scored: 0, max: 15, pct: 0 },
+        { category: 'Quizzes', scored: 0, max: 10, pct: 0 },
+        { category: 'Class Project', scored: 0, max: 15, pct: 0 },
+        { category: 'Presentation', scored: 0, max: 5, pct: 0 },
+        { category: 'Mid Term Exam', scored: 0, max: 20, pct: 0 },
+        { category: 'Final Term Exam', scored: 0, max: 30, pct: 0 },
+        { category: 'Class Attendance', scored: 0, max: 5, pct: 0 }
       ];
     }
 

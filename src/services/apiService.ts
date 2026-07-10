@@ -697,36 +697,33 @@ export const apiService = {
   },
 
   async getAllData(): Promise<OBEData> {
-    try {
-      const [depts, programs, gas, courses] = await Promise.all([
-        fetchWithTimeout(`${BASE_URL}/departments/`, { headers: getHeaders() }).then(res => res.json()).catch(() => null),
-        fetchWithTimeout(`${BASE_URL}/programs/`, { headers: getHeaders() }).then(res => res.json()).catch(() => null),
-        fetchWithTimeout(`${BASE_URL}/gas/`, { headers: getHeaders() }).then(res => res.json()).catch(() => null),
-        fetchWithTimeout(`${BASE_URL}/courses/`, { headers: getHeaders() }).then(res => res.json()).catch(() => null)
-      ]);
+    const [deptsRes, programsRes, gasRes, coursesRes] = await Promise.all([
+      fetchWithTimeout(`${BASE_URL}/departments/`, { headers: getHeaders() }),
+      fetchWithTimeout(`${BASE_URL}/programs/`, { headers: getHeaders() }),
+      fetchWithTimeout(`${BASE_URL}/gas/`, { headers: getHeaders() }),
+      fetchWithTimeout(`${BASE_URL}/courses/`, { headers: getHeaders() })
+    ]);
 
-      const isBackend = isBackendUser();
+    if (!deptsRes.ok) throw new Error(`Failed to fetch departments: Status ${deptsRes.status}`);
+    if (!programsRes.ok) throw new Error(`Failed to fetch programs: Status ${programsRes.status}`);
+    if (!gasRes.ok) throw new Error(`Failed to fetch Graduate Attributes (GAs): Status ${gasRes.status}`);
+    if (!coursesRes.ok) throw new Error(`Failed to fetch courses: Status ${coursesRes.status}`);
 
-      if (!isBackend) {
-        // If not backend, enforce department fallback if down/empty
-        if (!Array.isArray(depts) || depts.length === 0) {
-          throw new Error('Malformed or empty departments returned from backend');
-        }
-      }
+    const [depts, programs, gas, courses] = await Promise.all([
+      deptsRes.json(),
+      programsRes.json(),
+      gasRes.json(),
+      coursesRes.json()
+    ]);
 
-      const rawCourses = Array.isArray(courses) ? courses : (isBackend ? [] : getLocalStorageData().courses);
-      const normalizedCourses = rawCourses.map(normalizeCourse);
+    const normalizedCourses = Array.isArray(courses) ? courses.map(normalizeCourse) : [];
 
-      return {
-        departments: Array.isArray(depts) ? depts : (isBackend ? [] : getLocalStorageData().departments),
-        programs: Array.isArray(programs) ? programs : (isBackend ? [] : getLocalStorageData().programs),
-        gas: Array.isArray(gas) ? gas : (isBackend ? [] : getLocalStorageData().gas),
-        courses: normalizedCourses,
-      };
-    } catch (err) {
-      console.warn("Backend servers offline or unreachable. Propagating error to UI loader.", err);
-      throw err;
-    }
+    return {
+      departments: Array.isArray(depts) ? depts : [],
+      programs: Array.isArray(programs) ? programs : [],
+      gas: Array.isArray(gas) ? gas : [],
+      courses: normalizedCourses,
+    };
   },
 
   async updateDepartment(id: string, data: Partial<Department>): Promise<Department> {
@@ -971,18 +968,17 @@ export const apiService = {
   },
 
   async getInstructorCourses(): Promise<InstructorCourse[]> {
-    try {
-      const response = await fetchWithTimeout(`${BASE_URL}/instructor/courses/`, {
-        headers: getHeaders(),
-      }, 4000);
-      if (!response.ok) throw new Error('Failed to fetch instructor courses');
-      const data = await response.json();
-      if (Array.isArray(data)) return data;
-      throw new Error('Malformed instructor courses data received');
-    } catch (err) {
-      console.warn("Backend API for instructor offline or failed. Propagating error to UI loader.", err);
-      throw err;
+    const response = await fetchWithTimeout(`${BASE_URL}/instructor/courses/`, {
+      headers: getHeaders(),
+    }, 5000);
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      const errMsg = errData.detail || errData.error || errData.message || `Failed to fetch instructor courses (Status ${response.status})`;
+      throw new Error(errMsg);
     }
+    const data = await response.json();
+    if (Array.isArray(data)) return data;
+    throw new Error('Malformed instructor courses data received');
   },
 
   async saveInstructorCourses(courses: InstructorCourse[]): Promise<InstructorCourse[]> {
@@ -1032,45 +1028,19 @@ export const apiService = {
       };
     };
 
-    try {
-      const response = await fetchWithTimeout(`${BASE_URL}/students/`, {
-        headers: getHeaders(),
-      }, 4000);
-      if (response.ok) {
-        const data = await response.json();
-        if (Array.isArray(data)) {
-          const normalized = data.map(normalizeStudent);
-          localStorage.setItem('IQRA_OBE_STUDENTS', JSON.stringify(normalized));
-          return normalized;
-        }
-      }
-    } catch (err) {
-      console.warn("Backend API for students offline. Using local storage instead.");
+    const response = await fetchWithTimeout(`${BASE_URL}/students/`, {
+      headers: getHeaders(),
+    }, 5000);
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      const errMsg = errData.detail || errData.error || errData.message || `Failed to fetch students (Status ${response.status})`;
+      throw new Error(errMsg);
     }
-    const saved = localStorage.getItem('IQRA_OBE_STUDENTS');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        const hasBsai = parsed.some((s: any) => (s.programId === 'bsai' || s.program_id === 'bsai'));
-        if (hasBsai) {
-          return parsed.map(normalizeStudent);
-        }
-      } catch (e) {
-        // ignore
-      }
+    const data = await response.json();
+    if (Array.isArray(data)) {
+      return data.map(normalizeStudent);
     }
-    const initialStudents: Student[] = [
-      { regNo: "012-fa22-22012", name: "Abdur Rehman Khalid", departmentId: "engineering", programId: "be_ce", batch: "Fall", semester: "6th" },
-      { regNo: "045-fa22-22045", name: "Wajahat Bine Saif", departmentId: "computing", programId: "bscs", batch: "Fall", semester: "6th" },
-      { regNo: "089-fa22-22089", name: "Zayan Ahmed Khan", departmentId: "computing", programId: "bscs", batch: "Fall", semester: "6th" },
-      { regNo: "104-fa22-22104", name: "Misha Farooq", departmentId: "computing", programId: "bscs", batch: "Fall", semester: "6th" },
-      { regNo: "001-fa23-23001", name: "Aisha Siddiqui", departmentId: "computing", programId: "bsai", batch: "Fall", semester: "4th" },
-      { regNo: "002-fa23-23002", name: "Muhammad Ali", departmentId: "computing", programId: "bsai", batch: "Fall", semester: "4th" },
-      { regNo: "003-sp24-24003", name: "Zainab Fatima", departmentId: "computing", programId: "bsai", batch: "Spring", semester: "3rd" },
-      { regNo: "004-fa24-24004", name: "Hamza Yusuf", departmentId: "computing", programId: "bsai", batch: "Fall", semester: "2nd" }
-    ];
-    localStorage.setItem('IQRA_OBE_STUDENTS', JSON.stringify(initialStudents));
-    return initialStudents;
+    throw new Error('Malformed students data received from backend');
   },
 
   async createStudent(student: Student): Promise<Student> {
@@ -1444,8 +1414,14 @@ export const apiService = {
     const res = await fetchWithTimeout(`${BASE_URL}/instructor/courses/${courseId}/clos/`, {
       headers: getHeaders()
     }, 5000);
-    if (!res.ok) throw new Error('Failed to fetch course CLOs');
-    return res.json();
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      const errMsg = errData.detail || errData.error || errData.message || `Failed to fetch course CLOs (Status ${res.status})`;
+      throw new Error(errMsg);
+    }
+    const data = await res.json();
+    if (Array.isArray(data)) return data;
+    throw new Error('Malformed course CLOs data received');
   },
 
   async createCourseCLO(courseId: string, data: { code: string; description: string; mappedGA: string | null; order: number }) {
@@ -1457,7 +1433,11 @@ export const apiService = {
       },
       body: JSON.stringify(data)
     }, 5000);
-    if (!res.ok) throw new Error('Failed to create course CLO');
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      const errMsg = errData.detail || errData.error || errData.message || `Failed to create course CLO (Status ${res.status})`;
+      throw new Error(errMsg);
+    }
     return res.json();
   },
 
@@ -1470,7 +1450,11 @@ export const apiService = {
       },
       body: JSON.stringify(data)
     }, 5000);
-    if (!res.ok) throw new Error('Failed to update course CLO');
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      const errMsg = errData.detail || errData.error || errData.message || `Failed to update course CLO (Status ${res.status})`;
+      throw new Error(errMsg);
+    }
     return res.json();
   },
 
@@ -1479,7 +1463,11 @@ export const apiService = {
       method: 'DELETE',
       headers: getHeaders()
     }, 5000);
-    if (!res.ok) throw new Error('Failed to delete course CLO');
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      const errMsg = errData.detail || errData.error || errData.message || `Failed to delete course CLO (Status ${res.status})`;
+      throw new Error(errMsg);
+    }
     return true;
   },
 
@@ -1732,17 +1720,5 @@ const DUMMY_PLAYGROUND_COURSES: InstructorCourse[] = [
 ];
 
 const getLocalInstructorCourses = (): InstructorCourse[] => {
-  const saved = localStorage.getItem('IQRA_OBE_INSTRUCTOR_COURSES');
-  if (saved) {
-    try {
-      const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed.filter(c => c.id !== 'course-1' && c.id !== 'course-2');
-      }
-    } catch (e) {
-      // ignore & use default fallback
-    }
-  }
-  localStorage.setItem('IQRA_OBE_INSTRUCTOR_COURSES', JSON.stringify(DUMMY_PLAYGROUND_COURSES));
-  return DUMMY_PLAYGROUND_COURSES;
+  return [];
 };

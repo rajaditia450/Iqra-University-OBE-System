@@ -104,16 +104,11 @@ export const getStudentMark = (
 
 // Safe and accurate Iqra letter grade lookup
 export const getLetterGrade = (marks: number): string => {
-  if (marks >= 85) return 'A';
-  if (marks >= 80) return 'A-';
-  if (marks >= 75) return 'B+';
-  if (marks >= 71) return 'B';
-  if (marks >= 68) return 'B-';
-  if (marks >= 64) return 'C+';
-  if (marks >= 61) return 'C';
-  if (marks >= 57) return 'C-';
-  if (marks >= 53) return 'D+';
-  if (marks >= 50) return 'D';
+  if (marks >= 88) return 'A';
+  if (marks >= 81) return 'B+';
+  if (marks >= 74) return 'B';
+  if (marks >= 67) return 'C+';
+  if (marks >= 60) return 'C';
   return 'F';
 };
 
@@ -361,6 +356,41 @@ const LAB_CATEGORY_NAMES = [
   'Presentation',
 ];
 
+const getShortLabel = (catName: string, unitNo: number, totalUnits: number): string => {
+  const lower = catName.toLowerCase();
+  let prefix = catName;
+  if (lower.startsWith('assignment')) {
+    prefix = 'A';
+  } else if (lower.startsWith('quiz')) {
+    prefix = 'Q';
+  } else if (lower.startsWith('presentation')) {
+    prefix = 'PR';
+  } else if (lower.includes('mid term') || lower.includes('mid-term') || lower.includes('midterm')) {
+    prefix = 'MT';
+  } else if (lower.startsWith('final')) {
+    prefix = 'FT';
+  } else if (lower.startsWith('lab report')) {
+    prefix = 'LR';
+  } else if (lower.startsWith('lab performance')) {
+    prefix = 'LP';
+  } else if (lower.startsWith('viva')) {
+    prefix = 'V';
+  } else if (lower.includes('project')) {
+    prefix = 'P';
+  } else if (lower.includes('attendance')) {
+    prefix = 'Att';
+  } else if (lower.includes('other')) {
+    prefix = 'Other';
+  } else {
+    prefix = catName.length > 5 ? catName.substring(0, 3).toUpperCase() : catName.toUpperCase();
+  }
+
+  if (prefix === 'A' || prefix === 'Q' || totalUnits > 1) {
+    return `${prefix}${unitNo}`;
+  }
+  return prefix;
+};
+
 const normalizeCourse = (course: InstructorCourse): InstructorCourse => {
   const courseType = course.courseType || 'Theory';
   const allowedNames = courseType === 'Lab' ? LAB_CATEGORY_NAMES : THEORY_CATEGORY_NAMES;
@@ -476,6 +506,33 @@ const redistributeCategoryUnits = (catUnits: number, currentList: UnitItem[]): U
   return result;
 };
 
+const getShortCategoryLabel = (catName: string): string => {
+  const lower = catName.toLowerCase();
+  if (lower.startsWith('assignment')) return 'Assg';
+  if (lower.startsWith('quiz')) return 'Quiz';
+  if (lower.includes('presentation') && lower.includes('project')) return 'Presentation & Project';
+  if (lower.startsWith('presentation')) return 'Presentation';
+  if (lower.includes('mid term') || lower.includes('mid-term') || lower.includes('midterm')) return 'Mid Term Exam';
+  if (lower.startsWith('final') || lower.includes('end term') || lower.includes('end-term')) return 'End Term Exam';
+  if (lower.startsWith('lab report')) return 'Lab Report';
+  if (lower.startsWith('lab performance')) return 'Lab Performance';
+  if (lower.includes('project')) return 'Project';
+  if (lower.includes('attendance')) return 'Attendance';
+  return catName;
+};
+
+const getDegreeDisplay = (course: InstructorCourse): string => {
+  if (course.programId) {
+    return course.programId.toUpperCase();
+  }
+  if (course.programName) {
+    const match = course.programName.match(/\(([^)]+)\)/);
+    if (match && match[1]) return match[1].toUpperCase();
+    return course.programName.split(' ')[0].toUpperCase();
+  }
+  return 'BSCS';
+};
+
 const MarksheetDocument = ({
   course,
   campus,
@@ -486,7 +543,8 @@ const MarksheetDocument = ({
   instructor,
   dated,
   printDate,
-  isPrintView
+  isPrintView,
+  reportType = 'standard'
 }: {
   course: InstructorCourse;
   campus: string;
@@ -498,22 +556,18 @@ const MarksheetDocument = ({
   dated: string;
   printDate: string;
   isPrintView: boolean;
+  reportType?: 'standard' | 'combined' | 'award';
 }) => {
   const activeSystem = course.selectedGradingSystem || 'ready1';
   let gradingList: { grade: string; min: number; label: string }[] = [];
   
   if (activeSystem === 'ready1') {
     gradingList = [
-      { grade: 'A', min: 85, label: '85.0' },
-      { grade: 'A-', min: 80, label: '80.0' },
-      { grade: 'B+', min: 75, label: '75.0' },
-      { grade: 'B', min: 71, label: '71.0' },
-      { grade: 'B-', min: 68, label: '68.0' },
-      { grade: 'C+', min: 64, label: '64.0' },
-      { grade: 'C', min: 61, label: '61.0' },
-      { grade: 'C-', min: 57, label: '57.0' },
-      { grade: 'D+', min: 53, label: '53.0' },
-      { grade: 'D', min: 50, label: '50.0' },
+      { grade: 'A', min: 88, label: '88.0' },
+      { grade: 'B+', min: 81, label: '81.0' },
+      { grade: 'B', min: 74, label: '74.0' },
+      { grade: 'C+', min: 67, label: '67.0' },
+      { grade: 'C', min: 60, label: '60.0' },
       { grade: 'F', min: 0, label: '0.0' }
     ];
   } else if (activeSystem === 'ready2') {
@@ -545,9 +599,13 @@ const MarksheetDocument = ({
     }
   }
 
+  const activeCats = course.categories.filter(c => c.percentage > 0);
+  const totalMaxWeight = activeCats.reduce((sum, cat) => sum + cat.percentage, 0);
+
   const studentTotalGrades = course.students.map(std => {
-    const activeCats = course.categories.filter(c => c.percentage > 0);
     let aggregate = 0;
+    const categoryContributions: Record<string, number> = {};
+
     activeCats.forEach(cat => {
       let catSum = 0;
       let totalWeightSum = 0;
@@ -567,6 +625,7 @@ const MarksheetDocument = ({
       }
       const divisor = totalWeightSum > 0 ? totalWeightSum : 100;
       const categoryContribution = (catSum / divisor) * cat.percentage;
+      categoryContributions[cat.name] = categoryContribution;
       aggregate += categoryContribution;
     });
     
@@ -574,7 +633,8 @@ const MarksheetDocument = ({
     return {
       student: std,
       aggregate,
-      grade: letterGrade
+      grade: letterGrade,
+      categoryContributions
     };
   });
 
@@ -595,7 +655,6 @@ const MarksheetDocument = ({
     }
   });
 
-  const activeCats = course.categories.filter(c => c.percentage > 0);
   const totalColumns: { catName: string; unitNo: number; label: string; maxMarks: number }[] = [];
   
   activeCats.forEach(cat => {
@@ -606,7 +665,7 @@ const MarksheetDocument = ({
       totalColumns.push({
         catName: cat.name,
         unitNo: u,
-        label: cat.units > 1 ? `${cat.name}-${u}` : cat.name,
+        label: getShortLabel(cat.name, u, cat.units),
         maxMarks: totalMarks
       });
     }
@@ -628,7 +687,7 @@ const MarksheetDocument = ({
           }
           th, td {
             border: 1px solid black !important;
-            padding: 4px 6px !important;
+            padding: 3px 4px !important;
           }
           th {
             background-color: #f8fafc !important;
@@ -669,53 +728,165 @@ const MarksheetDocument = ({
       </div>
 
       {/* Students Graded Marks Ledger Table */}
-      <div className="mt-4 no-print-break">
+      <div className="mt-4 no-print-break font-sans">
         <div className="overflow-x-auto">
-          <table className="w-full text-center border-collapse border border-black font-sans text-[10px]">
-            <thead>
-              <tr className="bg-slate-50 border-b border-black font-black text-[9px] text-slate-900 leading-tight">
-                <th className="border-r border-black p-1.5 w-8">S.#</th>
-                <th className="border-r border-black p-1.5 text-left w-24">Registration No</th>
-                <th className="border-r border-black p-1.5 text-left">Student Name</th>
-                {totalColumns.map((col, cIdx) => (
-                  <th key={cIdx} className="border-r border-black p-1.5 font-mono text-[9px] font-medium min-w-16">
-                    <span className="block font-bold uppercase">{col.label}</span>
-                    <span className="text-[8px] text-slate-500 font-normal">({col.maxMarks})</span>
-                  </th>
+          {reportType === 'award' ? (
+            <table className="w-full text-center border-collapse border border-black font-sans text-[10px]">
+              <thead>
+                <tr className="bg-slate-50 border-b border-black font-black text-[9px] text-slate-900 leading-tight">
+                  <th className="border-r border-black p-1 w-[4%] min-w-[28px] max-w-[35px] text-center">S.#</th>
+                  <th className="border-r border-black p-1 text-center w-[16%] min-w-[100px] max-w-[115px] whitespace-nowrap">Reg.No</th>
+                  <th className="border-r border-black p-1 text-left w-[24%] min-w-[150px] max-w-[180px]">Name of Student</th>
+                  <th className="border-r border-black p-1 w-[12%] text-center"></th>
+                  <th className="border-r border-black p-1 text-center w-[14%] min-w-[80px]">Degree</th>
+                  <th className="border-r border-black p-1 text-slate-900 font-bold w-[16%] min-w-[80px] text-center">Final Marks out of 100%</th>
+                  <th className="p-1 text-slate-900 font-bold w-[10%] min-w-[50px] text-center select-none">Grade</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-black/40 font-mono text-[10px]">
+                {studentTotalGrades.map((item, idx) => (
+                  <tr key={item.student.regNo} className="hover:bg-slate-50/20 text-slate-850">
+                    <td className="border-r border-black p-1 text-slate-400 text-[9px] font-sans text-center w-[4%] min-w-[28px] max-w-[35px]">{idx + 1}</td>
+                    <td className="border-r border-black p-1 text-center text-slate-905 font-bold text-[9.5px] uppercase font-mono tracking-tight whitespace-nowrap w-[16%] min-w-[100px] max-w-[115px]">{item.student.regNo}</td>
+                    <td className="border-r border-black p-1 text-left font-sans text-slate-900 font-bold uppercase text-[9.5px] w-[24%] min-w-[150px] max-w-[180px] break-words">{item.student.name}</td>
+                    <td className="border-r border-black p-1 w-[12%]"></td>
+                    <td className="border-r border-black p-1 text-center text-slate-800 font-semibold uppercase text-[9.5px] w-[14%] min-w-[80px] font-sans">{getDegreeDisplay(course)}</td>
+                    <td className="border-r border-black p-1 font-extrabold text-[#4f46e5] text-[10.5px] text-center w-[16%] min-w-[80px] font-sans">
+                      {Math.round(item.aggregate)}
+                    </td>
+                    <td className="p-1 font-black text-emerald-800 text-[11px] bg-emerald-50/5 text-center w-[10%] min-w-[50px] font-sans">{item.grade}</td>
+                  </tr>
                 ))}
-                <th className="border-r border-black p-1.5 text-indigo-805 font-bold w-20">Total Weightage</th>
-                <th className="p-1.5 text-emerald-850 font-bold w-12 bg-emerald-50/5 select-none">Grade</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-black/40 font-mono text-[10px]">
-              {studentTotalGrades.map((item, idx) => (
-                <tr key={item.student.regNo} className="hover:bg-slate-50/20 text-slate-850">
-                  <td className="border-r border-black p-1.5 text-slate-400 text-[9px] font-sans">{idx + 1}</td>
-                  <td className="border-r border-black p-1.5 text-left text-slate-905 font-black text-[9.5px] uppercase font-mono tracking-tight">{item.student.regNo}</td>
-                  <td className="border-r border-black p-1.5 text-left font-sans text-slate-900 font-bold uppercase text-[9.5px]">{item.student.name}</td>
-                  {totalColumns.map((col, cIdx) => {
-                    const mark = getStudentMark(item.student, col.catName, col.unitNo, col.maxMarks, course.unitsData);
-                    return (
-                      <td key={cIdx} className="border-r border-black p-1.5 text-[10px]">
-                        {mark.toFixed(1)}
-                      </td>
-                    );
-                  })}
-                  <td className="border-r border-black p-1.5 font-extrabold text-[#4f46e5] text-[10.5px]">
-                    {item.aggregate.toFixed(1)}
-                  </td>
-                  <td className="p-1.5 font-black text-emerald-800 text-[11px] bg-emerald-50/5">{item.grade}</td>
+                {/* Pad table with empty template rows just like in the reference image */}
+                {Array.from({ length: Math.max(0, 8 - course.students.length) }).map((_, emptyIdx) => {
+                  const displayIdx = course.students.length + emptyIdx + 1;
+                  return (
+                    <tr key={`empty-${emptyIdx}`} className="text-slate-850">
+                      <td className="border-r border-black p-1 text-slate-400 text-[9px] font-sans text-center w-[4%] min-w-[28px] max-w-[35px]">{displayIdx}</td>
+                      <td className="border-r border-black p-1 w-[16%] min-w-[100px] max-w-[115px]"></td>
+                      <td className="border-r border-black p-1 w-[24%] min-w-[150px] max-w-[180px]"></td>
+                      <td className="border-r border-black p-1 w-[12%]"></td>
+                      <td className="border-r border-black p-1 w-[14%] min-w-[80px]"></td>
+                      <td className="border-r border-black p-1 w-[16%] min-w-[80px]"></td>
+                      <td className="p-1 w-[10%] min-w-[50px]"></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          ) : reportType === 'combined' ? (
+            <table className="w-full text-center border-collapse border border-black font-sans text-[10px]">
+              <thead>
+                <tr className="bg-slate-50 border-b border-black font-black text-[9px] text-slate-900 leading-tight">
+                  <th className="border-r border-black p-1 w-[4%] min-w-[28px] max-w-[35px] text-center">Sr. No.</th>
+                  <th className="border-r border-black p-1 text-center w-[14%] min-w-[100px] max-w-[115px] whitespace-nowrap">Regn. No.</th>
+                  <th className="border-r border-black p-1 text-left w-[24%] min-w-[150px] max-w-[180px]">Name</th>
+                  {activeCats.map((cat, cIdx) => (
+                    <th key={cIdx} className="border-r border-black p-1 font-bold text-center">
+                      <span className="block uppercase tracking-tight">{getShortCategoryLabel(cat.name)}</span>
+                    </th>
+                  ))}
+                  <th className="border-r border-black p-1 text-slate-900 font-bold w-[10%] min-w-[70px] text-center">Total Marks</th>
+                  <th className="p-1 text-slate-900 font-bold w-[6%] min-w-[40px] text-center select-none">Grade</th>
                 </tr>
-              ))}
-              {course.students.length === 0 && (
-                <tr>
-                  <td colSpan={5 + totalColumns.length} className="py-8 text-center text-slate-500 font-sans italic text-xs">
-                    No students currently enrolled in this course specification. Enter students to build reports.
-                  </td>
+                <tr className="bg-slate-50 border-b border-black font-black text-[9px] text-slate-900 leading-tight">
+                  <th className="border-r border-black p-0.5"></th>
+                  <th className="border-r border-black p-0.5"></th>
+                  <th className="border-r border-black p-0.5"></th>
+                  {activeCats.map((cat, cIdx) => (
+                    <th key={cIdx} className="border-r border-black p-0.5 font-bold text-center text-[8.5px]">
+                      {cat.percentage}
+                    </th>
+                  ))}
+                  <th className="border-r border-black p-0.5 text-slate-900 font-bold text-center text-[8.5px]">{totalMaxWeight}</th>
+                  <th className="p-0.5 text-slate-900 font-bold text-center select-none"></th>
                 </tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-black/40 font-mono text-[10px]">
+                {studentTotalGrades.map((item, idx) => (
+                  <tr key={item.student.regNo} className="hover:bg-slate-50/20 text-slate-850">
+                    <td className="border-r border-black p-1 text-slate-400 text-[9px] font-sans text-center w-[4%] min-w-[28px] max-w-[35px]">{idx + 1}</td>
+                    <td className="border-r border-black p-1 text-center text-slate-905 font-bold text-[9.5px] uppercase font-mono tracking-tight whitespace-nowrap w-[14%] min-w-[100px] max-w-[115px]">{item.student.regNo}</td>
+                    <td className="border-r border-black p-1 text-left font-sans text-slate-900 font-bold uppercase text-[9.5px] w-[24%] min-w-[150px] max-w-[180px] break-words">{item.student.name}</td>
+                    {activeCats.map((cat, cIdx) => {
+                      const val = item.categoryContributions[cat.name] || 0;
+                      return (
+                        <td key={cIdx} className="border-r border-black p-1 text-[10px] text-center font-sans">
+                          {val.toFixed(2)}
+                        </td>
+                      );
+                    })}
+                    <td className="border-r border-black p-1 font-extrabold text-[#4f46e5] text-[10.5px] text-center w-[10%] min-w-[70px] font-sans">
+                      {item.aggregate.toFixed(2)}
+                    </td>
+                    <td className="p-1 font-black text-emerald-800 text-[11px] bg-emerald-50/5 text-center w-[6%] min-w-[40px] font-sans">{item.grade}</td>
+                  </tr>
+                ))}
+                {/* Pad table with empty template rows just like in the reference image */}
+                {Array.from({ length: Math.max(0, 8 - course.students.length) }).map((_, emptyIdx) => {
+                  const displayIdx = course.students.length + emptyIdx + 1;
+                  return (
+                    <tr key={`empty-${emptyIdx}`} className="text-slate-850">
+                      <td className="border-r border-black p-1 text-slate-400 text-[9px] font-sans text-center w-[4%] min-w-[28px] max-w-[35px]">{displayIdx}</td>
+                      <td className="border-r border-black p-1 w-[14%] min-w-[100px] max-w-[115px]"></td>
+                      <td className="border-r border-black p-1 w-[24%] min-w-[150px] max-w-[180px]"></td>
+                      {activeCats.map((_, cIdx) => (
+                        <td key={cIdx} className="border-r border-black p-1"></td>
+                      ))}
+                      <td className="border-r border-black p-1 w-[10%] min-w-[70px]"></td>
+                      <td className="p-1 w-[6%] min-w-[40px]"></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          ) : (
+            <table className="w-full text-center border-collapse border border-black font-sans text-[10px]">
+              <thead>
+                <tr className="bg-slate-50 border-b border-black font-black text-[9px] text-slate-900 leading-tight">
+                  <th className="border-r border-black p-1 w-[4%] min-w-[28px] max-w-[35px] text-center">S.#</th>
+                  <th className="border-r border-black p-1 text-left w-[14%] min-w-[100px] max-w-[115px] whitespace-nowrap">Registration No</th>
+                  <th className="border-r border-black p-1 text-left w-[24%] min-w-[150px] max-w-[180px]">Student Name</th>
+                  {totalColumns.map((col, cIdx) => (
+                    <th key={cIdx} className="border-r border-black p-1 font-mono text-[9px] font-bold min-w-[32px] text-center">
+                      <span className="block font-bold uppercase tracking-tighter">{col.label}</span>
+                      <span className="text-[7.5px] text-slate-500 font-normal block mt-0.5">({col.maxMarks})</span>
+                    </th>
+                  ))}
+                  <th className="border-r border-black p-1 text-indigo-805 font-bold w-[8%] min-w-[60px] text-center">Total Weightage</th>
+                  <th className="p-1 text-emerald-850 font-bold w-[6%] min-w-[40px] text-center bg-emerald-50/5 select-none">Grade</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-black/40 font-mono text-[10px]">
+                {studentTotalGrades.map((item, idx) => (
+                  <tr key={item.student.regNo} className="hover:bg-slate-50/20 text-slate-850">
+                    <td className="border-r border-black p-1 text-slate-400 text-[9px] font-sans text-center w-[4%] min-w-[28px] max-w-[35px]">{idx + 1}</td>
+                    <td className="border-r border-black p-1 text-left text-slate-905 font-black text-[9.5px] uppercase font-mono tracking-tight whitespace-nowrap w-[14%] min-w-[100px] max-w-[115px]">{item.student.regNo}</td>
+                    <td className="border-r border-black p-1 text-left font-sans text-slate-900 font-bold uppercase text-[9.5px] w-[24%] min-w-[150px] max-w-[180px] break-words">{item.student.name}</td>
+                    {totalColumns.map((col, cIdx) => {
+                      const mark = getStudentMark(item.student, col.catName, col.unitNo, col.maxMarks, course.unitsData);
+                      return (
+                        <td key={cIdx} className="border-r border-black p-1 text-[10px] text-center min-w-[32px]">
+                          {mark.toFixed(1)}
+                        </td>
+                      );
+                    })}
+                    <td className="border-r border-black p-1 font-extrabold text-[#4f46e5] text-[10.5px] text-center w-[8%] min-w-[60px]">
+                      {item.aggregate.toFixed(1)}
+                    </td>
+                    <td className="p-1 font-black text-emerald-800 text-[11px] bg-emerald-50/5 text-center w-[6%] min-w-[40px]">{item.grade}</td>
+                  </tr>
+                ))}
+                {course.students.length === 0 && (
+                  <tr>
+                    <td colSpan={5 + totalColumns.length} className="py-8 text-center text-slate-500 font-sans italic text-xs">
+                      No students currently enrolled in this course specification. Enter students to build reports.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
 
@@ -796,6 +967,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
   const [selectedMarksCategoryName, setSelectedMarksCategoryName] = useState<string>('');
   const [activeUnitConfigNo, setActiveUnitConfigNo] = useState<number | null>(null);
   const lastActiveCourseIdRef = useRef<string>('');
+  const isFirstLoadRef = useRef<boolean>(true);
 
   // Load from API on mount, fallback offline if server not reachable
   useEffect(() => {
@@ -839,6 +1011,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
           const filtered = data.filter(c => c.id !== 'course-1' && c.id !== 'course-2');
           const normalized = filtered.map(normalizeCourse);
           setCourses(normalized);
+          setErrorMsg(null);
           
           // Make sure an active course is selected if none currently chosen
           const savedActive = localStorage.getItem('IQRA_OBE_INSTRUCTOR_ACTIVE_ID');
@@ -848,21 +1021,11 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
             }
           }
         }
-      } catch (err) {
-        console.warn("Failed to load instructor courses from server. Falling back to offline client cache.", err);
+      } catch (err: any) {
+        console.error("Failed to load instructor courses from server:", err);
         if (active) {
-          const offlineCourses = apiService.getLocalInstructorCourses();
-          const filtered = offlineCourses.filter(c => c.id !== 'course-1' && c.id !== 'course-2');
-          const normalized = filtered.map(normalizeCourse);
-          setCourses(normalized);
-
-          // Make sure an active course is selected if none currently chosen
-          const savedActive = localStorage.getItem('IQRA_OBE_INSTRUCTOR_ACTIVE_ID');
-          if (!savedActive || savedActive === 'course-1' || savedActive === 'course-2') {
-            if (normalized.length > 0) {
-              setActiveCourseId(normalized[0].id);
-            }
-          }
+          setCourses([]);
+          setErrorMsg(err.message || "Failed to load instructor courses from backend server.");
         }
       } finally {
         if (active) {
@@ -896,6 +1059,10 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
   useEffect(() => {
     if (!loading) {
       localStorage.setItem('IQRA_OBE_INSTRUCTOR_COURSES', JSON.stringify(courses));
+      if (isFirstLoadRef.current) {
+        isFirstLoadRef.current = false;
+        return;
+      }
       apiService.saveInstructorCourses(courses).catch(err => {
         console.warn("Failed to sync instructor courses to backend", err);
       });
@@ -937,7 +1104,8 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
     if (!selectedCourse) return;
     setLoadingCLOs(true);
     try {
-      // 1. Update course cloCount locally so UI reflects it immediately
+      // 1. Update course cloCount locally in state.
+      // This automatically triggers the courses saving useEffect to persist it safely!
       setCourses(prev => prev.map(c => {
         if (c.id === selectedCourse.id) {
           return { ...c, cloCount: targetCount };
@@ -945,60 +1113,13 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
         return c;
       }));
 
-      // 2. Align the actual database CLO records
-      // First, get current database records for fresh reference
-      let currentDBCLOs: any[] = [];
-      try {
-        currentDBCLOs = await apiService.getCourseCLOs(selectedCourse.id);
-        if (!Array.isArray(currentDBCLOs)) currentDBCLOs = [];
-      } catch (err) {
-        currentDBCLOs = [];
-      }
+      // 2. Clear out any database course CLO rows so it falls back to the dynamic placeholders
+      setCourseCLOs([]);
 
-      // If we have more than targetCount in DB, prune/delete the extra ones
-      if (currentDBCLOs.length > targetCount) {
-        const toDelete = currentDBCLOs.slice(targetCount);
-        for (const clo of toDelete) {
-          await apiService.deleteCourseCLO(selectedCourse.id, clo.id);
-        }
-      }
-
-      // If we need more than we currently have in DB, add them
-      const placeholders = [
-        { code: 'CLO-1', description: 'Analyze fundamental engineering/scientific concepts and theoretical problem structures.', mappedGA: 'GA-1' },
-        { code: 'CLO-2', description: 'Evaluate and model design criteria, architecture patterns, and technical schemas.', mappedGA: 'GA-2' },
-        { code: 'CLO-3', description: 'Design and deploy modular frameworks, critical applications, and optimized systems.', mappedGA: 'GA-3' },
-        { code: 'CLO-4', description: 'Demonstrate collaborative skills, engineering responsibility, and professional ethics.', mappedGA: 'GA-8' },
-        { code: 'CLO-5', description: 'Apply advanced system architectures and integrate modern tools in computing and engineering processes.', mappedGA: 'GA-4' },
-        { code: 'CLO-6', description: 'Formulate security profiles, policy compliance metrics, and risk management strategies.', mappedGA: 'GA-5' },
-        { code: 'CLO-7', description: 'Evaluate communication standards, societal impacts, and sustainable development practices.', mappedGA: 'GA-6' },
-        { code: 'CLO-8', description: 'Conduct literature synthesis, experimental investigations, and deep research on complex problems.', mappedGA: 'GA-7' },
-        { code: 'CLO-9', description: 'Examine lifelong learning habits, contemporary issues, and global business practices.', mappedGA: 'GA-10' },
-        { code: 'CLO-10', description: 'Perform executive decision modeling and professional engineering designs.', mappedGA: 'GA-11' },
-        { code: 'CLO-11', description: 'Manage project timelines, resource allocations, and financial structures effectively.', mappedGA: 'GA-12' },
-        { code: 'CLO-12', description: 'Apply ethical governance patterns and leadership skills in diverse organizations.', mappedGA: 'GA-9' }
-      ];
-
-      for (let i = currentDBCLOs.length; i < targetCount; i++) {
-        const placeholder = placeholders[i] || {
-          code: `CLO-${i + 1}`,
-          description: `Demonstrate capability regarding competency requirements listed under course CLO-${i + 1}.`,
-          mappedGA: `GA-${Math.min(12, i + 1)}`
-        };
-        await apiService.createCourseCLO(selectedCourse.id, {
-          code: placeholder.code,
-          description: placeholder.description,
-          mappedGA: placeholder.mappedGA,
-          order: i + 1
-        });
-      }
-
-      // Refresh list from backend so it is completely in sync
-      await fetchCurrentCourseCLOs(selectedCourse.id);
-      showNotification(`Successfully configured and synchronized ${targetCount} Course Learning Outcomes (CLOs).`);
+      showNotification(`Successfully configured ${targetCount} Course Learning Outcomes (CLOs) for this course.`);
     } catch (err) {
       console.error(err);
-      showNotification("Failed to configure database CLO records. Please check connection and try again.");
+      showNotification("Failed to configure CLO count. Please try again.");
     } finally {
       setLoadingCLOs(false);
     }
@@ -1035,6 +1156,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
 
   // Marksheet Report metadata states
   const [reportCampus, setReportCampus] = useState('Iqra University Chak Shahzad Campus Islamabad');
+  const [reportType, setReportType] = useState<'standard' | 'combined'>('standard');
   const [reportSemester, setReportSemester] = useState('SPRING 2026');
   const [reportSection, setReportSection] = useState('A');
   const [reportOfferedIn, setReportOfferedIn] = useState('Morning');
@@ -2651,6 +2773,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
           dated={reportDated}
           printDate={reportPrintDate}
           isPrintView={true}
+          reportType={reportType}
         />
       </div>
     );
@@ -2845,13 +2968,36 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                 <div className="absolute left-0 mt-1 w-64 bg-white border border-slate-300 rounded-lg shadow-xl py-1 z-50">
                   <button
                     onClick={() => { 
+                      setReportType('standard');
                       setActiveModal('marksheet-report');
                       setOpenMenu(null);
                     }}
                     className="w-full text-left px-3.5 py-1.5 text-xs text-slate-700 hover:bg-emerald-50 hover:text-emerald-950 flex items-center gap-2 rounded text-left font-bold"
                   >
                     <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                    <span className="text-emerald-800">Mark Sheet Report (PDF)</span>
+                    <span className="text-emerald-800 font-bold">Standard Mark Sheet (PDF)</span>
+                  </button>
+                  <button
+                    onClick={() => { 
+                      setReportType('combined');
+                      setActiveModal('marksheet-report');
+                      setOpenMenu(null);
+                    }}
+                    className="w-full text-left px-3.5 py-1.5 text-xs text-slate-700 hover:bg-blue-50 hover:text-blue-950 flex items-center gap-2 rounded text-left font-bold"
+                  >
+                    <FileSpreadsheet className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                    <span className="text-blue-800 font-bold">Combined Mark Sheet (PDF)</span>
+                  </button>
+                  <button
+                    onClick={() => { 
+                      setReportType('award');
+                      setActiveModal('marksheet-report');
+                      setOpenMenu(null);
+                    }}
+                    className="w-full text-left px-3.5 py-1.5 text-xs text-slate-700 hover:bg-violet-50 hover:text-violet-950 flex items-center gap-2 rounded text-left font-bold"
+                  >
+                    <FileSpreadsheet className="w-3.5 h-3.5 text-violet-600 shrink-0" />
+                    <span className="text-violet-800 font-bold">Award List (PDF)</span>
                   </button>
                   <button
                     onClick={() => { 
@@ -2938,7 +3084,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
               >
                 <option value="">-- Choose Course teaches --</option>
                 {courses.map(c => (
-                  <option key={c.id} value={c.id}>{c.code} — {c.title} {c.programId ? `(${c.programId.toUpperCase()})` : ''}</option>
+                  <option key={c.id} value={c.id}>{c.code} — {c.title} {c.programId ? `(${c.programId.toUpperCase()})` : ''}{c.academicYear ? ` [${c.academicYear}]` : ''}</option>
                 ))}
               </select>
             </div>
@@ -2949,6 +3095,16 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                 <span className="text-[9px] text-sky-900 font-bold tracking-wide uppercase">PROGRAM:</span>
                 <span className="text-slate-800 text-xs font-bold font-sans">
                   {selectedCourse.programName}
+                </span>
+              </div>
+            )}
+
+            {/* Academic Year badge */}
+            {selectedCourse && selectedCourse.academicYear && (
+              <div className="flex items-center gap-2 bg-purple-50 border border-purple-200 px-3 py-1 rounded-lg animate-fade-in">
+                <span className="text-[9px] text-purple-900 font-bold tracking-wide uppercase">TERM:</span>
+                <span className="text-slate-800 text-xs font-bold font-sans font-mono text-[11px]">
+                  {selectedCourse.academicYear}
                 </span>
               </div>
             )}
@@ -3102,7 +3258,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                                   {c.title}
                                 </h4>
                                 <p className="text-[10px] text-slate-500 font-mono">
-                                  {c.creditHours} Cr. Hr • {c.courseType || 'Theory'} • {c.students.length} Students
+                                  {c.creditHours} Cr. Hr • {c.courseType || 'Theory'} • {c.students.length} Students{c.academicYear ? ` • ${c.academicYear}` : ''}
                                 </p>
                               </div>
                               
@@ -3168,127 +3324,46 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                         handleOpenUnitEditor={handleOpenUnitEditor}
                       />
                     )}
-            {/* TAB: CLO SPECIFICATION */}
-            {activeTab === 'clo' && selectedCourse && (
-              <div id="clo-setup-view" className="space-y-6 animate-fadeIn">
-                <div className="bg-[#f8fafc] border-b border-slate-200 pb-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                  <div>
-                    <span className="text-[10px] text-indigo-600 font-extrabold uppercase tracking-widest bg-indigo-50 px-2 py-0.5 rounded border border-indigo-150">Course Learning Outcomes</span>
-                    <h3 className="text-base font-extrabold text-slate-900 mt-1 flex items-center gap-1.5 font-sans">
+            {/* TAB: CLO SPECIFICATION */}            {activeTab === "clo" && selectedCourse && (
+              <div id="clo-setup-view" className="space-y-6 animate-fadeIn font-sans">
+                <div className="max-w-xl mx-auto bg-slate-50/50 border border-slate-200 rounded-xl p-5 space-y-4 font-sans">
+                  <div className="border-b border-slate-200 pb-2">
+                    <h4 className="text-sm font-bold text-slate-900 flex items-center gap-1.5 font-sans">
                       <Sliders className="w-4 h-4 text-indigo-600" />
-                      CLO Setup, Mapping & Database Synchronization
-                    </h3>
-                    <p className="text-xs text-slate-600 mt-1">
-                      Manage real database-synchronized Course Learning Outcomes (CLOs) for {selectedCourse.code}. Correctly map outcomes to Washington Accord Graduate Attributes (GAs) for real-time OB attainment reports.
-                    </p>
+                      Enter Number of CLOs
+                    </h4>
                   </div>
-                  <div className="flex items-center gap-2">
+
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-[10px] uppercase font-extrabold text-slate-500 mb-1.5">Number of CLOs</label>
+                      <select
+                        value={numCLOs}
+                        onChange={(e) => setNumCLOs(parseInt(e.target.value) || 4)}
+                        className="bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold text-slate-950 w-full outline-none focus:ring-1 focus:ring-indigo-500"
+                      >
+                        {Array.from({ length: 12 }, (_, idx) => idx + 1).map(num => (
+                          <option key={num} value={num}>{num} CLO{num > 1 ? "s" : ""}</option>
+                        ))}
+                      </select>
+                    </div>
+
                     <button
-                      onClick={() => fetchCurrentCourseCLOs(selectedCourse.id)}
-                      className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
-                      title="Force refresh database records"
+                      onClick={() => handleAssignCLOsCount(numCLOs)}
+                      disabled={loadingCLOs}
+                      className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg transition-colors shadow-xs cursor-pointer flex items-center justify-center gap-1.5"
                     >
-                      <RefreshCw className={`w-3.5 h-3.5 ${loadingCLOs ? 'animate-spin text-indigo-600' : ''}`} />
-                      Sync
+                      {loadingCLOs ? (
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Save className="w-3.5 h-3.5" />
+                      )}
+                      Apply & Assign CLOs
                     </button>
                   </div>
                 </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start font-sans">
-                  
-                  {/* LEFT: CLO Creator / Editor Panel */}
-                  <div className="lg:col-span-5 bg-slate-50/50 border border-slate-200 rounded-xl p-5 space-y-4 font-sans">
-                    <div className="border-b border-slate-200 pb-2">
-                      <h4 className="text-sm font-bold text-slate-900 flex items-center gap-1.5">
-                        <Sliders className="w-4 h-4 text-indigo-600" />
-                        Configure CLO Count
-                      </h4>
-                      <p className="text-[11px] text-slate-500 mt-1">
-                        Select the number of Course Learning Outcomes (CLOs) for {selectedCourse.code}. Standard descriptions and Graduate Attribute mappings will be generated automatically.
-                      </p>
-                    </div>
-
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-[10px] uppercase font-extrabold text-slate-500 mb-1.5">Number of CLOs</label>
-                        <select
-                          value={numCLOs}
-                          onChange={(e) => setNumCLOs(parseInt(e.target.value) || 4)}
-                          className="bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold text-slate-950 w-full outline-none focus:ring-1 focus:ring-indigo-500"
-                        >
-                          {Array.from({ length: 12 }, (_, idx) => idx + 1).map(num => (
-                            <option key={num} value={num}>{num} CLO{num > 1 ? 's' : ''}</option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <button
-                        onClick={() => handleAssignCLOsCount(numCLOs)}
-                        disabled={loadingCLOs}
-                        className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg transition-colors shadow-xs cursor-pointer flex items-center justify-center gap-1.5"
-                      >
-                        {loadingCLOs ? (
-                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                        ) : (
-                          <Save className="w-3.5 h-3.5" />
-                        )}
-                        Apply & Synchronize CLOs
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* RIGHT: Active Database CLOs Table / Ledger */}
-                  <div className="lg:col-span-7 bg-white border border-slate-200 rounded-xl p-5 space-y-4 shadow-3xs">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
-                      <div>
-                        <h4 className="text-xs font-bold text-slate-900 uppercase tracking-tight">Active Database Outcome Registry</h4>
-                        <p className="text-[10px] text-slate-400 mt-0.5">Real-time outcome metrics synced with the database.</p>
-                      </div>
-                    </div>
-
-                    {loadingCLOs ? (
-                      <div className="flex flex-col items-center justify-center py-20 text-slate-400 gap-2">
-                        <RefreshCw className="h-6 w-6 animate-spin text-indigo-600" />
-                        <span className="text-[11px] font-bold">Synchronizing ledger...</span>
-                      </div>
-                    ) : courseCLOs.length > 0 ? (
-                      <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
-                        {courseCLOs.map((clo: any) => (
-                          <div 
-                            key={clo.id}
-                            className="p-3.5 rounded-xl border border-slate-200/65 bg-slate-50/40 hover:bg-white hover:border-slate-300 transition-all space-y-2.5"
-                          >
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2">
-                                <span className="font-mono text-[10px] font-extrabold text-indigo-700 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded uppercase">
-                                  {clo.code}
-                                </span>
-                                {clo.mappedGA && (
-                                  <span className="font-mono text-[9px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded">
-                                    Mapped: {clo.mappedGA}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-
-                            <p className="text-xs text-slate-700 leading-relaxed font-sans">{clo.description}</p>
-                            <div className="text-[9px] text-slate-400 font-mono text-right">Order: {clo.order || 1}</div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-center py-16 text-slate-400">
-                        <Sliders className="h-10 w-10 mx-auto text-slate-300 mb-2" />
-                        <h5 className="text-xs font-bold text-slate-600">No outcomes defined in database yet</h5>
-                        <p className="text-[10px] text-slate-400 mt-1 max-w-xs mx-auto">Select the number of CLOs on the left and click "Apply & Synchronize CLOs" to auto-assign.</p>
-                      </div>
-                    )}
-                  </div>
-
-                </div>
               </div>
             )}
-
             {/* TAB: GRADING SYSTEM SETUP */}
             {activeTab === 'grading-system' && selectedCourse && (
               <div id="grading-system-view" className="space-y-6 animate-fadeIn">
@@ -6284,6 +6359,44 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                 <div className="w-full lg:w-80 lg:shrink-0 bg-white border-b lg:border-b-0 lg:border-r border-slate-200 p-5 overflow-y-auto space-y-4">
                   <h4 className="text-[11px] font-black uppercase text-slate-500 tracking-widest border-b border-slate-150 pb-1.5">Configure Transcripts</h4>
                   
+                  <div>
+                    <label className="block text-[10px] text-slate-650 font-bold uppercase mb-1.5 font-mono">Report Layout</label>
+                    <div className="grid grid-cols-3 gap-1 p-0.5 bg-slate-100 rounded-lg border border-slate-200">
+                      <button
+                        type="button"
+                        onClick={() => setReportType('standard')}
+                        className={`py-1.5 px-1 text-center rounded-md font-bold text-[9.5px] transition-all cursor-pointer ${
+                          reportType === 'standard'
+                            ? 'bg-white text-emerald-900 shadow-xs border border-emerald-100'
+                            : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
+                        }`}
+                      >
+                        Standard
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setReportType('combined')}
+                        className={`py-1.5 px-1 text-center rounded-md font-bold text-[9.5px] transition-all cursor-pointer ${
+                          reportType === 'combined'
+                            ? 'bg-white text-blue-900 shadow-xs border border-blue-100'
+                            : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
+                        }`}
+                      >
+                        Combined
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setReportType('award')}
+                        className={`py-1.5 px-1 text-center rounded-md font-bold text-[9.5px] transition-all cursor-pointer ${
+                          reportType === 'award'
+                            ? 'bg-white text-violet-900 shadow-xs border border-violet-100'
+                            : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
+                        }`}
+                      >
+                        Award List
+                      </button>
+                    </div>
+                  </div>
 
                   <div className="space-y-3">
                     <div>
@@ -6368,6 +6481,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                       dated={reportDated}
                       printDate={reportPrintDate}
                       isPrintView={false}
+                      reportType={reportType}
                     />
                   </div>
                 </div>
@@ -6392,6 +6506,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
             dated={reportDated}
             printDate={reportPrintDate}
             isPrintView={true}
+            reportType={reportType}
           />
         </div>,
         document.body
