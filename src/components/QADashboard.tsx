@@ -125,7 +125,7 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
   // Load backend or fallback mockups
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [activeDeptId]);
 
   // Close the desktop menu when the user clicks anywhere else
   useEffect(() => {
@@ -142,7 +142,7 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
       setLoading(true);
       const res = await apiService.getAllData();
       
-      const filteredDepts = (res.departments || []).filter((d: any) => d.id === activeDeptId);
+      const filteredDepts = (res.departments || []);
       const filteredProgs = (res.programs || []).filter((p: any) => p.departmentId === activeDeptId);
       const filteredCourses = (res.courses || []).filter((c: any) => c.departmentId === activeDeptId);
 
@@ -166,7 +166,7 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
         console.warn("Backend server offline, loading local storage sandbox database...", err);
         const localData = apiService.getLocalStorageData();
 
-        const filteredDepts = (localData.departments || []).filter((d: any) => d.id === activeDeptId);
+        const filteredDepts = (localData.departments || []);
         const filteredProgs = (localData.programs || []).filter((p: any) => p.departmentId === activeDeptId);
         const filteredCourses = (localData.courses || []).filter((c: any) => c.departmentId === activeDeptId);
 
@@ -948,7 +948,6 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
           {/* Menu triggers */}
           <div className="flex flex-wrap items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
             
-
             {/* VISION & MISSION MENU */}
             <div className="relative">
               <button
@@ -1055,28 +1054,6 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                     </span>
                     {activeModule === 'po_mapping' && <Check className="w-3.5 h-3.5 text-indigo-600 shrink-0" />}
                   </button>
-                  <button
-                    onClick={() => { setActiveModule('vision_mission'); setOpenMenu(null); }}
-                    className={`w-full text-left px-3.5 py-1.5 text-xs flex items-center justify-between rounded ${activeModule === 'vision_mission' ? 'bg-indigo-50 text-indigo-950 font-bold' : 'text-slate-700 hover:bg-indigo-50'}`}
-                  >
-                    <span className="flex items-center gap-2">
-                       <Compass className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                       Vision & Mission Master Drafts
-                     </span>
-                    {activeModule === 'vision_mission' && <Check className="w-3.5 h-3.5 text-indigo-600 shrink-0" />}
-                  </button>
-
-                  <div className="border-t border-slate-100 my-1"></div>
-                  <div className="px-3 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                     Isolate Highlight Filters
-                  </div>
-                  <button
-                    onClick={() => { setSelectedCourseId('all'); setOpenMenu(null); }}
-                    className={`w-full text-left px-3.5 py-1.5 text-xs flex items-center justify-between rounded ${selectedCourseId === 'all' ? 'bg-indigo-50 text-indigo-950 font-bold' : 'text-slate-700 hover:bg-indigo-50'}`}
-                  >
-                    <span>Show All Courses in Department</span>
-                    {selectedCourseId === 'all' && <Check className="w-3.5 h-3.5 text-indigo-600 shrink-0" />}
-                  </button>
                 </div>
               )}
             </div>
@@ -1101,29 +1078,10 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                   </button>
                   <button
                     onClick={() => { setActiveModule('po_configure'); setOpenMenu(null); }}
-                    className="w-full text-left px-3.5 py-1.5 text-xs text-slate-700 hover:bg-indigo-50 hover:text-indigo-950 flex items-center gap-2 rounded focus:outline-none"
+                    className="w-full text-left px-3.5 py-1.5 text-xs text-slate-705 hover:bg-indigo-50 hover:text-indigo-950 flex items-center gap-2 rounded focus:outline-none"
                   >
                     <Settings className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
                     <span>Program PO Objectives (PO1-PO4)</span>
-                  </button>
-                  
-                  <div className="border-t border-slate-100 my-1"></div>
-                  <div className="px-3.5 py-1 text-[9px] text-slate-400 font-bold uppercase tracking-wider font-sans">
-                    Program & Course Setup Welder
-                  </div>
-                  <button
-                    onClick={() => { setActiveModal('add_program'); setOpenMenu(null); }}
-                    className="w-full text-left px-3.5 py-1.5 text-xs text-slate-705 hover:bg-indigo-50 hover:text-indigo-950 flex items-center gap-2 rounded focus:outline-none font-medium"
-                  >
-                    <Award className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                    <span>Add New Program (SE, AI, etc.)</span>
-                  </button>
-                  <button
-                    onClick={() => { setActiveModal('edit_program_vm'); setOpenMenu(null); }}
-                    className="w-full text-left px-3.5 py-1.5 text-xs text-slate-705 hover:bg-indigo-50 hover:text-indigo-950 flex items-center gap-2 rounded focus:outline-none font-medium"
-                  >
-                    <Compass className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                    <span>Edit Program Vision & Mission</span>
                   </button>
                 </div>
               )}
@@ -1236,63 +1194,38 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
           {/* Leftside selectors: Quick action selectors & filters */}
           <div className="flex flex-wrap items-center gap-4">
             
-            {/* Quick Dept Selector (LOCKED FOR SECURITY) */}
-            <div className="flex items-center gap-2 bg-slate-100 px-3 py-1 border border-slate-200 rounded-lg shadow-xs animate-fade-in text-xs font-bold text-slate-700">
-              <span className="text-[9px] text-indigo-950 font-bold tracking-wide uppercase">DEPARTMENT:</span>
+            {/* Active Department Indicator */}
+            <div className="flex items-center gap-2 bg-indigo-50/50 px-3 py-1 border border-indigo-100 rounded-lg shadow-xs animate-fade-in text-xs font-bold text-indigo-950">
+              <span className="text-[9px] text-indigo-650 font-bold tracking-wide uppercase">ACTIVE DEPARTMENT:</span>
               <span>{activeDepartment?.name || activeDeptId.toUpperCase()}</span>
             </div>
 
-            {/* Quick Program Selector */}
-            <div className="flex items-center gap-2 bg-white px-2.5 py-1 border border-slate-300 rounded-lg shadow-xs">
-              <span className="text-[9px] text-indigo-950 font-bold tracking-wide uppercase">PROGRAM:</span>
+            {/* Active Program Selector */}
+            <div className="flex items-center gap-2 bg-indigo-50/50 px-3 py-1 border border-indigo-100 rounded-lg shadow-xs text-xs font-bold text-indigo-950 animate-fade-in">
+              <span className="text-[9px] text-indigo-650 font-bold tracking-wide uppercase shrink-0">PROGRAM:</span>
               <select
                 value={activeProgramId}
                 onChange={(e) => {
                   const val = e.target.value;
                   setActiveProgramId(val);
-                  if (val) {
-                    const matched = data?.programs.find(p => p.id === val);
-                    if (matched) {
-                      setActiveDeptId(matched.departmentId);
-                    }
-                  }
                   setSelectedCourseId('all');
-                  setActiveModule('vision_mission');
                 }}
-                className="bg-transparent border-none text-slate-800 text-xs font-bold font-sans focus:outline-none cursor-pointer"
+                className="bg-transparent border-none text-indigo-950 text-xs font-bold font-sans focus:outline-none cursor-pointer pr-1"
               >
-                <option value="">-- Choose Program --</option>
+                <option value="" className="bg-white text-slate-800 font-sans font-semibold">-- Select Program --</option>
                 {data?.programs
-                  .filter(p => !activeDeptId || p.departmentId === activeDeptId)
+                  .filter(p => p.departmentId === activeDeptId)
                   .map(p => (
-                    <option key={p.id} value={p.id}>{p.code} — {p.name}</option>
+                    <option key={p.id} value={p.id} className="bg-white text-slate-800 font-sans font-semibold">
+                      {p.code} — {p.name}
+                    </option>
                   ))}
               </select>
             </div>
 
+
             {/* Quick view switcher buttons */}
             <div className="flex items-center gap-1 bg-slate-200/50 p-1 rounded-lg border border-slate-200">
-              <button 
-                onClick={() => {
-                  setActiveProgramId('');
-                  setSelectedCourseId('all');
-                }}
-                className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${activeProgramId === '' ? 'bg-white text-indigo-950 shadow-xs border border-slate-200' : 'text-slate-600 hover:text-slate-900'}`}
-              >
-                Department V&amp;M
-              </button>
-              <button 
-                onClick={() => {
-                  if (activeProgramId === '') {
-                    const firstProg = data?.programs?.find(p => p.departmentId === activeDeptId)?.id || '';
-                    setActiveProgramId(firstProg);
-                  }
-                  setActiveModule('vision_mission');
-                }}
-                className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${activeProgramId !== '' && activeModule === 'vision_mission' ? 'bg-white text-indigo-950 shadow-xs border border-slate-200' : 'text-slate-600 hover:text-slate-900'}`}
-              >
-                Program V&amp;M
-              </button>
               <button 
                 onClick={() => {
                   if (activeProgramId === '') {
@@ -1404,8 +1337,9 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
           <div className="max-w-[1700px] mx-auto space-y-6">
 
             {activeProgramId === '' ? (
-              <div className="max-w-4xl mx-auto space-y-4 py-1 animate-in fade-in duration-350">
-                <div className="text-center select-none">
+              <div className="max-w-4xl mx-auto space-y-6 py-1 animate-in fade-in duration-350">
+                
+                <div className="text-center select-none pt-2">
                   <h1 className="text-2xl font-serif font-bold text-slate-900 tracking-tight">
                     Departmental Vision &amp; Mission Charters
                   </h1>
@@ -1734,170 +1668,171 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
             )}
 
             {/* ----------------- MODULE VIEW 3: UNIVERSITY & DEPARTMENT VISION/MISSION ----------------- */}
-            {activeModule === 'vision_mission' && activeDepartment && activeProgram && (
+            {activeModule === 'vision_mission' && activeDepartment && (
               <div className="max-w-4xl mx-auto space-y-6 animate-in duration-200 fade-in-25">
                 
-                {/* Department Specific Brand Identity Sheets */}
+                {/* Department or Program Specific Brand Identity Sheets */}
                 <div className="bg-white border border-slate-200 rounded-3xl shadow-xl overflow-hidden">
                   
-                  <div className="bg-indigo-900/90 text-white p-6 select-none flex items-center justify-between border-b border-indigo-800">
-                    <div>
-                      <span className="text-[10px] uppercase font-mono tracking-widest text-indigo-200 font-bold">DEPARTMENT SPECIFIC CHARTER</span>
-                      <h3 className="font-serif font-bold text-lg">{activeDepartment.name} Vision &amp; Mission</h3>
-                    </div>
-                    <GraduationCap className="w-8 h-8 opacity-40 text-white" />
-                  </div>
-
-                  <div className="p-6 md:p-8 space-y-8">
-                    
-                    {/* Department Vision Block */}
-                    <div className="space-y-4 bg-slate-50 border border-slate-200 p-8 rounded-3xl shadow-xs text-left relative overflow-hidden">
-                      <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-indigo-500"></div>
-                      <div className="flex items-center gap-2 pl-2">
-                        <Award className="w-5 h-5 text-indigo-650 shrink-0" />
-                        <h4 className="font-sans font-extrabold text-slate-950 text-base tracking-wide uppercase">DEPARTMENT VISION STATEMENT</h4>
-                      </div>
-                      
-                      {isConfiguring ? (
-                        <div className="space-y-2 pl-2">
-                          <textarea
-                            value={editVision}
-                            onChange={(e) => setEditVision(e.target.value)}
-                            rows={3}
-                            className="w-full p-4 text-base bg-white border border-indigo-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 font-normal"
-                            placeholder="Type department vision statement..."
-                          />
-                          <p className="text-[10px] text-slate-400 italic">This will alter the active department vision across all linked interfaces.</p>
+                  {activeProgram ? (
+                    <>
+                      <div className="bg-indigo-900/90 text-white p-6 select-none flex items-center justify-between border-b border-indigo-800">
+                        <div>
+                          <span className="text-[10px] uppercase font-mono tracking-widest text-indigo-200 font-bold">PROGRAM SPECIFIC CHARTER</span>
+                          <h3 className="font-serif font-bold text-lg">{activeProgram.name} ({activeProgram.code}) Vision &amp; Mission</h3>
                         </div>
-                      ) : (
-                        <p className="font-sans text-base leading-relaxed italic text-slate-900 pl-9 py-1 font-medium">
-                          "{editVision || '(Department vision statement undefined)'}"
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Department Mission Block */}
-                    <div className="space-y-4 bg-slate-50 border border-slate-200 p-8 rounded-3xl shadow-xs text-left relative overflow-hidden">
-                      <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-indigo-500"></div>
-                      <div className="flex items-center gap-2 pl-2">
-                        <Compass className="w-5 h-5 text-indigo-650 shrink-0" />
-                        <h4 className="font-sans font-extrabold text-slate-950 text-base tracking-wide uppercase">DEPARTMENT MISSION STATEMENT</h4>
+                        <GraduationCap className="w-8 h-8 opacity-40 text-white" />
                       </div>
 
-                      {isConfiguring ? (
-                        <div className="space-y-2 pl-2">
-                          <textarea
-                            value={editMission}
-                            onChange={(e) => setEditMission(e.target.value)}
-                            rows={5}
-                            className="w-full p-4 text-base bg-white border border-indigo-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 font-normal"
-                            placeholder="Type department mission statement..."
-                          />
-                          <p className="text-[10px] text-slate-400 italic">This will alter the active department mission across all linked interfaces.</p>
+                      <div className="p-6 md:p-8 space-y-8">
+                        
+                        {/* Program Vision Block */}
+                        <div className="space-y-4 bg-slate-50 border border-slate-200 p-8 rounded-3xl shadow-xs text-left relative overflow-hidden">
+                          <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-indigo-500"></div>
+                          <div className="flex items-center gap-2 pl-2">
+                            <Award className="w-5 h-5 text-indigo-650 shrink-0" />
+                            <h4 className="font-sans font-extrabold text-slate-950 text-base tracking-wide uppercase">PROGRAM VISION STATEMENT</h4>
+                          </div>
+                          
+                          {isConfiguring ? (
+                            <div className="space-y-2 pl-2">
+                              <textarea
+                                value={editProgramVision}
+                                onChange={(e) => setEditProgramVision(e.target.value)}
+                                rows={3}
+                                className="w-full p-4 text-base bg-white border border-indigo-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 font-normal"
+                                placeholder="Type program vision statement..."
+                              />
+                              <p className="text-[10px] text-slate-400 italic">This will alter the active program vision across all linked interfaces.</p>
+                            </div>
+                          ) : (
+                            <p className="font-sans text-base leading-relaxed italic text-slate-900 pl-9 py-1 font-medium">
+                              "{editProgramVision || '(Program vision statement undefined)'}"
+                            </p>
+                          )}
                         </div>
-                      ) : (
-                        <p className="font-sans text-base leading-relaxed text-slate-900 pl-9 py-1 font-medium">
-                          {editMission || '(Department mission statement undefined)'}
-                        </p>
-                      )}
-                    </div>
 
-                    {/* Configuration Department Save Area */}
-                    {isConfiguring && (
-                       <div className="flex justify-end border-t border-indigo-100 pt-5">
-                        <button
-                          onClick={handleSaveVisionMission}
-                          disabled={savingLoad}
-                          className="px-6 py-2.5 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center gap-2 shadow-md hover:shadow-lg hover:scale-105 active:scale-95 duration-100"
-                        >
-                          {savingLoad ? <Loader2 className="w-4 h-4 animate-spin" /> : '💾 SAVE DEPARTMENT CHARTER CHANGES'}
-                        </button>
-                      </div>
-                    )}
+                        {/* Program Mission Block */}
+                        <div className="space-y-4 bg-slate-50 border border-slate-200 p-8 rounded-3xl shadow-xs text-left relative overflow-hidden">
+                          <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-indigo-500"></div>
+                          <div className="flex items-center gap-2 pl-2">
+                            <Compass className="w-5 h-5 text-indigo-650 shrink-0" />
+                            <h4 className="font-sans font-extrabold text-slate-950 text-base tracking-wide uppercase">PROGRAM MISSION STATEMENT</h4>
+                          </div>
 
-                  </div>
-
-                </div>
-
-                {/* Program Specific Brand Identity Sheets */}
-                <div className="bg-white border border-slate-200 rounded-3xl shadow-xl overflow-hidden">
-                  
-                  <div className="bg-indigo-950/90 text-white p-6 select-none flex items-center justify-between border-b border-indigo-900">
-                    <div>
-                      <span className="text-[10px] uppercase font-mono tracking-widest text-indigo-300 font-bold">PROGRAM SPECIFIC CHARTER</span>
-                      <h3 className="font-serif font-bold text-lg">{activeProgram.name} ({activeProgram.code}) Vision &amp; Mission</h3>
-                    </div>
-                    <Compass className="w-8 h-8 opacity-40 text-white" />
-                  </div>
-
-                  <div className="p-6 md:p-8 space-y-8">
-                    
-                    {/* Program Vision Block */}
-                    <div className="space-y-4 bg-slate-50 border border-slate-200 p-8 rounded-3xl shadow-xs text-left relative overflow-hidden">
-                      <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-indigo-600"></div>
-                      <div className="flex items-center gap-2 pl-2">
-                        <Award className="w-5 h-5 text-indigo-650 shrink-0" />
-                        <h4 className="font-sans font-extrabold text-slate-950 text-base tracking-wide uppercase">PROGRAM VISION STATEMENT</h4>
-                      </div>
-                      
-                      {isConfiguring ? (
-                        <div className="space-y-2 pl-2">
-                          <textarea
-                            value={editProgramVision}
-                            onChange={(e) => setEditProgramVision(e.target.value)}
-                            rows={3}
-                            className="w-full p-4 text-base bg-white border border-indigo-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 font-normal"
-                            placeholder="Type program vision statement..."
-                          />
-                          <p className="text-[10px] text-slate-400 italic">This will alter the active program vision across all linked interfaces.</p>
+                          {isConfiguring ? (
+                            <div className="space-y-2 pl-2">
+                              <textarea
+                                value={editProgramMission}
+                                onChange={(e) => setEditProgramMission(e.target.value)}
+                                rows={5}
+                                className="w-full p-4 text-base bg-white border border-indigo-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 font-normal"
+                                placeholder="Type program mission statement..."
+                              />
+                              <p className="text-[10px] text-slate-400 italic">This will alter the active program mission across all linked interfaces.</p>
+                            </div>
+                          ) : (
+                            <p className="font-sans text-base leading-relaxed text-slate-900 pl-9 py-1 font-medium">
+                              {editProgramMission || '(Program mission statement undefined)'}
+                            </p>
+                          )}
                         </div>
-                      ) : (
-                        <p className="font-sans text-base leading-relaxed italic text-slate-900 pl-9 py-1 font-medium">
-                          "{editProgramVision || '(Program vision statement undefined)'}"
-                        </p>
-                      )}
-                    </div>
 
-                    {/* Program Mission Block */}
-                    <div className="space-y-4 bg-slate-50 border border-slate-200 p-8 rounded-3xl shadow-xs text-left relative overflow-hidden">
-                      <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-indigo-600"></div>
-                      <div className="flex items-center gap-2 pl-2">
-                        <Compass className="w-5 h-5 text-indigo-650 shrink-0" />
-                        <h4 className="font-sans font-extrabold text-slate-950 text-base tracking-wide uppercase">PROGRAM MISSION STATEMENT</h4>
+                        {/* Configuration Program Save Area */}
+                        {isConfiguring && (
+                           <div className="flex justify-end border-t border-indigo-100 pt-5">
+                            <button
+                              onClick={handleSaveProgramVisionMission}
+                              disabled={savingLoad}
+                              className="px-6 py-2.5 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center gap-2 shadow-md hover:shadow-lg hover:scale-105 active:scale-95 duration-100"
+                            >
+                              {savingLoad ? <Loader2 className="w-4 h-4 animate-spin" /> : '💾 SAVE PROGRAM CHARTER CHANGES'}
+                            </button>
+                          </div>
+                        )}
+
                       </div>
-
-                      {isConfiguring ? (
-                        <div className="space-y-2 pl-2">
-                          <textarea
-                            value={editProgramMission}
-                            onChange={(e) => setEditProgramMission(e.target.value)}
-                            rows={5}
-                            className="w-full p-4 text-base bg-white border border-indigo-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 font-normal"
-                            placeholder="Type program mission statement..."
-                          />
-                          <p className="text-[10px] text-slate-400 italic">This will alter the active program mission across all linked interfaces.</p>
+                    </>
+                  ) : (
+                    <>
+                      <div className="bg-indigo-900/90 text-white p-6 select-none flex items-center justify-between border-b border-indigo-800">
+                        <div>
+                          <span className="text-[10px] uppercase font-mono tracking-widest text-indigo-200 font-bold">DEPARTMENT SPECIFIC CHARTER</span>
+                          <h3 className="font-serif font-bold text-lg">{activeDepartment.name} Vision &amp; Mission</h3>
                         </div>
-                      ) : (
-                        <p className="font-sans text-base leading-relaxed text-slate-900 pl-9 py-1 font-medium">
-                          {editProgramMission || '(Program mission statement undefined)'}
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Configuration Program Save Area */}
-                    {isConfiguring && (
-                       <div className="flex justify-end border-t border-indigo-100 pt-5">
-                        <button
-                          onClick={handleSaveProgramVisionMission}
-                          disabled={savingLoad}
-                          className="px-6 py-2.5 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center gap-2 shadow-md hover:shadow-lg hover:scale-105 active:scale-95 duration-100"
-                        >
-                          {savingLoad ? <Loader2 className="w-4 h-4 animate-spin" /> : '💾 SAVE PROGRAM CHARTER CHANGES'}
-                        </button>
+                        <GraduationCap className="w-8 h-8 opacity-40 text-white" />
                       </div>
-                    )}
 
-                  </div>
+                      <div className="p-6 md:p-8 space-y-8">
+                        
+                        {/* Department Vision Block */}
+                        <div className="space-y-4 bg-slate-50 border border-slate-200 p-8 rounded-3xl shadow-xs text-left relative overflow-hidden">
+                          <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-indigo-500"></div>
+                          <div className="flex items-center gap-2 pl-2">
+                            <Award className="w-5 h-5 text-indigo-650 shrink-0" />
+                            <h4 className="font-sans font-extrabold text-slate-950 text-base tracking-wide uppercase">DEPARTMENT VISION STATEMENT</h4>
+                          </div>
+                          
+                          {isConfiguring ? (
+                            <div className="space-y-2 pl-2">
+                              <textarea
+                                value={editVision}
+                                onChange={(e) => setEditVision(e.target.value)}
+                                rows={3}
+                                className="w-full p-4 text-base bg-white border border-indigo-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 font-normal"
+                                placeholder="Type department vision statement..."
+                              />
+                              <p className="text-[10px] text-slate-400 italic">This will alter the active department vision across all linked interfaces.</p>
+                            </div>
+                          ) : (
+                            <p className="font-sans text-base leading-relaxed italic text-slate-900 pl-9 py-1 font-medium">
+                              "{editVision || '(Department vision statement undefined)'}"
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Department Mission Block */}
+                        <div className="space-y-4 bg-slate-50 border border-slate-200 p-8 rounded-3xl shadow-xs text-left relative overflow-hidden">
+                          <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-indigo-500"></div>
+                          <div className="flex items-center gap-2 pl-2">
+                            <Compass className="w-5 h-5 text-indigo-650 shrink-0" />
+                            <h4 className="font-sans font-extrabold text-slate-950 text-base tracking-wide uppercase">DEPARTMENT MISSION STATEMENT</h4>
+                          </div>
+
+                          {isConfiguring ? (
+                            <div className="space-y-2 pl-2">
+                              <textarea
+                                value={editMission}
+                                onChange={(e) => setEditMission(e.target.value)}
+                                rows={5}
+                                className="w-full p-4 text-base bg-white border border-indigo-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 font-normal"
+                                placeholder="Type department mission statement..."
+                              />
+                              <p className="text-[10px] text-slate-400 italic">This will alter the active department mission across all linked interfaces.</p>
+                            </div>
+                          ) : (
+                            <p className="font-sans text-base leading-relaxed text-slate-900 pl-9 py-1 font-medium">
+                              {editMission || '(Department mission statement undefined)'}
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Configuration Department Save Area */}
+                        {isConfiguring && (
+                           <div className="flex justify-end border-t border-indigo-100 pt-5">
+                            <button
+                              onClick={handleSaveVisionMission}
+                              disabled={savingLoad}
+                              className="px-6 py-2.5 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center gap-2 shadow-md hover:shadow-lg hover:scale-105 active:scale-95 duration-100"
+                            >
+                              {savingLoad ? <Loader2 className="w-4 h-4 animate-spin" /> : '💾 SAVE DEPARTMENT CHARTER CHANGES'}
+                            </button>
+                          </div>
+                        )}
+
+                      </div>
+                    </>
+                  )}
 
                 </div>
 
