@@ -304,10 +304,12 @@ const INITIAL_CATEGORIES: MarksCategory[] = [
   { name: 'Quizzes', percentage: 0, units: 0 },
   { name: 'Class Participation', percentage: 0, units: 0 },
   { name: 'Class Project', percentage: 0, units: 0 },
+  { name: 'Project', percentage: 0, units: 0 },
   { name: 'Presentation', percentage: 0, units: 0 },
   { name: 'Lab Project', percentage: 0, units: 0 },
   { name: 'Problem Based Learning', percentage: 0, units: 0 },
   { name: 'Complex Problem', percentage: 0, units: 0 },
+  { name: 'Open Ended Lab', percentage: 0, units: 0 },
   { name: 'Other Activities', percentage: 0, units: 0 },
   { name: 'Viva', percentage: 0, units: 0 },
   { name: 'Lab Performance', percentage: 0, units: 0 },
@@ -321,10 +323,12 @@ const INITIAL_UNITS_DATA: Record<string, UnitItem[]> = {
   'Quizzes': [],
   'Class Participation': [],
   'Class Project': [],
+  'Project': [],
   'Presentation': [],
   'Lab Project': [],
   'Problem Based Learning': [],
   'Complex Problem': [],
+  'Open Ended Lab': [],
   'Other Activities': [],
   'Viva': [],
   'Lab Performance': [],
@@ -346,14 +350,16 @@ const THEORY_CATEGORY_NAMES = [
 ];
 
 const LAB_CATEGORY_NAMES = [
-  'Lab Reports',
   'Mid Term',
   'Final',
+  'Lab Reports',
   'Lab Performance',
   'Viva',
+  'Assignments',
+  'Quizzes',
+  'Open Ended Lab',
   'Other Activities',
-  'Lab Project',
-  'Presentation',
+  'Project',
 ];
 
 const getShortLabel = (catName: string, unitNo: number, totalUnits: number): string => {
@@ -375,6 +381,8 @@ const getShortLabel = (catName: string, unitNo: number, totalUnits: number): str
     prefix = 'LP';
   } else if (lower.startsWith('viva')) {
     prefix = 'V';
+  } else if (lower.includes('open ended') || lower.includes('open-ended')) {
+    prefix = 'OEL';
   } else if (lower.includes('project')) {
     prefix = 'P';
   } else if (lower.includes('attendance')) {
@@ -392,7 +400,24 @@ const getShortLabel = (catName: string, unitNo: number, totalUnits: number): str
 };
 
 const normalizeCourse = (course: InstructorCourse): InstructorCourse => {
-  const courseType = course.courseType || 'Theory';
+  let courseType: 'Theory' | 'Lab' = 'Theory';
+  const code = String(course.code || '').trim().toUpperCase();
+  const title = String(course.title || '').trim().toLowerCase();
+
+  if (code.endsWith('L') || title.includes('lab')) {
+    courseType = 'Lab';
+  } else {
+    const raw = (course as any).courseType || (course as any).course_subtype || (course as any).courseSubtype || (course as any).subtype;
+    if (raw) {
+      courseType = String(raw).toLowerCase().includes('lab') ? 'Lab' : 'Theory';
+    } else if ((course as any).course_type) {
+      const ct = String((course as any).course_type).toLowerCase();
+      if (ct === 'lab' || ct === 'theory') {
+        courseType = ct === 'lab' ? 'Lab' : 'Theory';
+      }
+    }
+  }
+
   const allowedNames = courseType === 'Lab' ? LAB_CATEGORY_NAMES : THEORY_CATEGORY_NAMES;
 
   let updatedCategories = (course.categories || []).filter(c => 
@@ -607,24 +632,30 @@ const MarksheetDocument = ({
     const categoryContributions: Record<string, number> = {};
 
     activeCats.forEach(cat => {
-      let catSum = 0;
-      let totalWeightSum = 0;
+      let categoryObtainedSum = 0;
+      let categoryMaxMarksSum = 0;
       const existingUnits = course.unitsData[cat.name] || [];
       if (cat.units > 0) {
         for (let u = 1; u <= cat.units; u++) {
           const matchingUnit = existingUnits.find(unit => unit.unitNo === u);
-          const totalMarks = matchingUnit ? matchingUnit.totalMarks : 10;
-          const weightage = matchingUnit ? matchingUnit.weightage : (100 / cat.units);
-          
-          totalWeightSum += weightage;
-          const mark = getStudentMark(std, cat.name, u, totalMarks, course.unitsData);
-          if (totalMarks > 0) {
-            catSum += (mark / totalMarks) * weightage;
+          const questions = matchingUnit?.questions || [];
+          if (questions.length > 0) {
+            questions.forEach(q => {
+              categoryMaxMarksSum += q.maxMarks || 0;
+              const qKey = `q-${cat.name}-${u}-${q.id}`;
+              categoryObtainedSum += std.marks?.[qKey] ?? 0;
+            });
+          } else {
+            const totalMarks = matchingUnit ? matchingUnit.totalMarks : 10;
+            categoryMaxMarksSum += totalMarks;
+            const dKey = `${cat.name}-${u}`;
+            categoryObtainedSum += std.marks?.[dKey] ?? 0;
           }
         }
       }
-      const divisor = totalWeightSum > 0 ? totalWeightSum : 100;
-      const categoryContribution = (catSum / divisor) * cat.percentage;
+      const categoryContribution = categoryMaxMarksSum > 0
+        ? (categoryObtainedSum / categoryMaxMarksSum) * cat.percentage
+        : 0;
       categoryContributions[cat.name] = categoryContribution;
       aggregate += categoryContribution;
     });
@@ -2623,24 +2654,30 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
     selectedCourse.categories.forEach(cat => {
       if (cat.percentage > 0) {
         if (cat.units > 0) {
-          let catSum = 0;
-          let totalWeightSum = 0;
+          let categoryObtainedSum = 0;
+          let categoryMaxMarksSum = 0;
           const existingUnits = selectedCourse.unitsData[cat.name] || [];
           
           for (let u = 1; u <= cat.units; u++) {
             const matchingUnit = existingUnits.find(unit => unit.unitNo === u);
-            const totalMarks = matchingUnit ? matchingUnit.totalMarks : 10;
-            const weightage = matchingUnit ? matchingUnit.weightage : (100 / cat.units);
-            
-            totalWeightSum += weightage;
-            const mark = getStudentMark(student, cat.name, u, totalMarks, selectedCourse.unitsData);
-            if (totalMarks > 0) {
-              catSum += (mark / totalMarks) * weightage;
+            const questions = matchingUnit?.questions || [];
+            if (questions.length > 0) {
+              questions.forEach(q => {
+                categoryMaxMarksSum += q.maxMarks || 0;
+                const qKey = `q-${cat.name}-${u}-${q.id}`;
+                categoryObtainedSum += student.marks?.[qKey] ?? 0;
+              });
+            } else {
+              const totalMarks = matchingUnit ? matchingUnit.totalMarks : 10;
+              categoryMaxMarksSum += totalMarks;
+              const dKey = `${cat.name}-${u}`;
+              categoryObtainedSum += student.marks?.[dKey] ?? 0;
             }
           }
           
-          const divisor = totalWeightSum > 0 ? totalWeightSum : 100;
-          const categoryContribution = (catSum / divisor) * cat.percentage;
+          const categoryContribution = categoryMaxMarksSum > 0
+            ? (categoryObtainedSum / categoryMaxMarksSum) * cat.percentage
+            : 0;
           aggregate += categoryContribution;
         } else {
           aggregate += 0;
@@ -2972,10 +3009,10 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                       setActiveModal('marksheet-report');
                       setOpenMenu(null);
                     }}
-                    className="w-full text-left px-3.5 py-1.5 text-xs text-slate-700 hover:bg-emerald-50 hover:text-emerald-950 flex items-center gap-2 rounded text-left font-bold"
+                    className="w-full text-left px-3.5 py-1.5 text-xs text-slate-900 hover:bg-slate-50 hover:text-black flex items-center gap-2 rounded font-bold"
                   >
-                    <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                    <span className="text-emerald-800 font-bold">Standard Mark Sheet (PDF)</span>
+                    <FileSpreadsheet className="w-3.5 h-3.5 text-slate-700 shrink-0" />
+                    <span className="text-slate-900 font-bold">Standard Mark Sheet (PDF)</span>
                   </button>
                   <button
                     onClick={() => { 
@@ -2983,10 +3020,10 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                       setActiveModal('marksheet-report');
                       setOpenMenu(null);
                     }}
-                    className="w-full text-left px-3.5 py-1.5 text-xs text-slate-700 hover:bg-blue-50 hover:text-blue-950 flex items-center gap-2 rounded text-left font-bold"
+                    className="w-full text-left px-3.5 py-1.5 text-xs text-slate-900 hover:bg-slate-50 hover:text-black flex items-center gap-2 rounded font-bold"
                   >
-                    <FileSpreadsheet className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                    <span className="text-blue-800 font-bold">Combined Mark Sheet (PDF)</span>
+                    <FileSpreadsheet className="w-3.5 h-3.5 text-slate-700 shrink-0" />
+                    <span className="text-slate-900 font-bold">Combined Mark Sheet (PDF)</span>
                   </button>
                   <button
                     onClick={() => { 
@@ -2994,28 +3031,12 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                       setActiveModal('marksheet-report');
                       setOpenMenu(null);
                     }}
-                    className="w-full text-left px-3.5 py-1.5 text-xs text-slate-700 hover:bg-violet-50 hover:text-violet-950 flex items-center gap-2 rounded text-left font-bold"
+                    className="w-full text-left px-3.5 py-1.5 text-xs text-slate-900 hover:bg-slate-50 hover:text-black flex items-center gap-2 rounded font-bold"
                   >
-                    <FileSpreadsheet className="w-3.5 h-3.5 text-violet-600 shrink-0" />
-                    <span className="text-violet-800 font-bold">Award List (PDF)</span>
+                    <FileSpreadsheet className="w-3.5 h-3.5 text-slate-700 shrink-0" />
+                    <span className="text-slate-900 font-bold">Award List (PDF)</span>
                   </button>
-                  <button
-                    onClick={() => { 
-                      handleExportCourseSheet();
-                      setOpenMenu(null);
-                    }}
-                    className="w-full text-left px-3.5 py-1.5 text-xs text-slate-700 hover:bg-indigo-50 hover:text-indigo-950 flex items-center gap-2 rounded text-left font-medium"
-                  >
-                    <FileSpreadsheet className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                    <span>Export Marks Ledger (Excel)</span>
-                  </button>
-                  <button
-                    onClick={() => { window.print(); setOpenMenu(null); }}
-                    className="w-full text-left px-3.5 py-1.5 text-xs text-slate-700 hover:bg-indigo-50 hover:text-indigo-950 flex items-center gap-2 rounded text-left font-medium"
-                  >
-                    <Plus className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                    <span>Print Outcome Evaluation Report</span>
-                  </button>
+
                 </div>
               )}
             </div>
@@ -3758,24 +3779,30 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                             
                             let aggregate = 0;
                             const catGrades = activeCats.map(cat => {
-                              let catSum = 0;
-                              let totalWeightSum = 0;
+                              let categoryObtainedSum = 0;
+                              let categoryMaxMarksSum = 0;
                               const existingUnits = selectedCourse.unitsData[cat.name] || [];
                               if (cat.units > 0) {
                                   for (let u = 1; u <= cat.units; u++) {
                                     const matchingUnit = existingUnits.find(unit => unit.unitNo === u);
-                                    const totalMarks = matchingUnit ? matchingUnit.totalMarks : 10;
-                                    const weightage = matchingUnit ? matchingUnit.weightage : (100 / cat.units);
-                                    
-                                    totalWeightSum += weightage;
-                                    const mark = getStudentMark(std, cat.name, u, totalMarks, selectedCourse.unitsData);
-                                    if (totalMarks > 0) {
-                                      catSum += (mark / totalMarks) * weightage;
+                                    const questions = matchingUnit?.questions || [];
+                                    if (questions.length > 0) {
+                                      questions.forEach(q => {
+                                        categoryMaxMarksSum += q.maxMarks || 0;
+                                        const qKey = `q-${cat.name}-${u}-${q.id}`;
+                                        categoryObtainedSum += std.marks?.[qKey] ?? 0;
+                                      });
+                                    } else {
+                                      const totalMarks = matchingUnit ? matchingUnit.totalMarks : 10;
+                                      categoryMaxMarksSum += totalMarks;
+                                      const dKey = `${cat.name}-${u}`;
+                                      categoryObtainedSum += std.marks?.[dKey] ?? 0;
                                     }
                                   }
                               }
-                              const divisor = totalWeightSum > 0 ? totalWeightSum : 100;
-                              const categoryContribution = (catSum / divisor) * cat.percentage;
+                              const categoryContribution = categoryMaxMarksSum > 0
+                                ? (categoryObtainedSum / categoryMaxMarksSum) * cat.percentage
+                                : 0;
                               aggregate += categoryContribution;
                               return parseFloat(categoryContribution.toFixed(1));
                             });
@@ -4160,8 +4187,8 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                                         <thead className="bg-[#f8fafc] border-b-2 border-slate-300 select-none">
                                           <tr className="divide-x divide-slate-300 font-semibold text-slate-800 text-center">
                                             <th className="py-2.5 w-12 sticky left-0 bg-[#f8fafc] z-10 border-r border-b border-slate-300">S.#</th>
-                                            <th className="py-2.5 w-28 sticky left-12 bg-[#f8fafc] z-10 text-left pl-3 border-r border-b border-slate-300">Reg No</th>
-                                            <th className="py-2.5 w-40 sticky left-40 bg-[#f8fafc] z-10 text-left pl-3 border-r border-b border-slate-300">Student Name</th>
+                                            <th className="py-2.5 w-36 sticky left-12 bg-[#f8fafc] z-10 text-left pl-3 border-r border-b border-slate-300">Reg No</th>
+                                            <th className="py-2.5 w-40 sticky left-48 bg-[#f8fafc] z-10 text-left pl-3 border-r border-b border-slate-300">Student Name</th>
                                             
                                             {unitQuestions.map(q => (
                                               <th key={q.id} className="py-2.5 w-24 bg-white font-sans text-center border-r border-b border-slate-300">
@@ -4219,10 +4246,10 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                                                   <td className="p-2 text-center text-slate-500 bg-slate-50 group-hover:bg-[#f8fafc] sticky left-0 z-10 transition-colors border-r-2 border-r-slate-300 border-b border-b-slate-300">
                                                     {stdIdx + 1}
                                                   </td>
-                                                  <td className="p-2 pl-3 font-extrabold text-indigo-950 bg-white group-hover:bg-[#fafbff] sticky left-12 z-10 text-[10.5px] tracking-wide truncate transition-colors">
+                                                  <td className="p-2 pl-3 font-extrabold text-indigo-950 bg-white group-hover:bg-[#fafbff] sticky left-12 z-10 text-[10.5px] tracking-wide whitespace-nowrap transition-colors">
                                                     {student.regNo}
                                                   </td>
-                                                  <td className="p-2 pl-3 font-bold text-slate-700 bg-white group-hover:bg-[#fafbff] sticky left-40 z-10 text-left truncate transition-colors">
+                                                  <td className="p-2 pl-3 font-bold text-slate-700 bg-white group-hover:bg-[#fafbff] sticky left-48 z-10 text-left truncate transition-colors">
                                                     {student.name}
                                                   </td>
 
@@ -4593,8 +4620,8 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                                           <thead className="bg-[#f8fafc] border-b border-slate-200">
                                             <tr className="divide-x divide-slate-300 font-semibold text-slate-800 text-center">
                                               <th className="py-2.5 w-12 sticky left-0 bg-[#f8fafc] z-10 border-r border-b border-slate-300">S.#</th>
-                                              <th className="py-2.5 w-28 sticky left-12 bg-[#f8fafc] z-10 text-left pl-3 border-r border-b border-slate-300">Reg No</th>
-                                              <th className="py-2.5 w-40 sticky left-40 bg-[#f8fafc] z-10 text-left pl-3 border-r border-b border-slate-300">Student Name</th>
+                                              <th className="py-2.5 w-36 sticky left-12 bg-[#f8fafc] z-10 text-left pl-3 border-r border-b border-slate-300">Reg No</th>
+                                              <th className="py-2.5 w-40 sticky left-48 bg-[#f8fafc] z-10 text-left pl-3 border-r border-b border-slate-300">Student Name</th>
                                               <th className="py-2.5 bg-white text-center text-[#4f46e5] font-black border-r border-b border-slate-300">Obtained score</th>
                                               <th className="py-2.5 w-20 bg-[#f8fafc] border-r border-b border-slate-300 text-slate-700">Percent</th>
                                               <th className="py-2.5 w-20 bg-[#f8fafc] border-b border-slate-300 text-slate-700">Status</th>
@@ -4637,10 +4664,10 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                                                     <td className="p-2 text-center text-slate-500 bg-slate-50 group-hover:bg-[#f8fafc] sticky left-0 z-10 transition-colors border-r-2 border-r-slate-300 border-b border-b-slate-300">
                                                       {stdIdx + 1}
                                                     </td>
-                                                    <td className="p-2 pl-3 font-extrabold text-indigo-950 bg-white group-hover:bg-[#fafbff] sticky left-12 z-10 text-[10.5px] tracking-wide truncate transition-colors border-r-2 border-r-slate-300 border-b border-b-slate-300 border-l border-l-slate-200">
+                                                    <td className="p-2 pl-3 font-extrabold text-indigo-950 bg-white group-hover:bg-[#fafbff] sticky left-12 z-10 text-[10.5px] tracking-wide whitespace-nowrap transition-colors border-r-2 border-r-slate-300 border-b border-b-slate-300 border-l border-l-slate-200">
                                                       {student.regNo}
                                                     </td>
-                                                    <td className="p-2 pl-3 font-bold text-slate-700 bg-white group-hover:bg-[#fafbff] sticky left-40 z-10 text-left truncate transition-colors border-r-2 border-r-slate-300 border-b border-b-slate-300">
+                                                    <td className="p-2 pl-3 font-bold text-slate-700 bg-white group-hover:bg-[#fafbff] sticky left-48 z-10 text-left truncate transition-colors border-r-2 border-r-slate-300 border-b border-b-slate-300">
                                                       {student.name}
                                                     </td>
                                                     <td className="p-1.5 text-center flex items-center justify-center gap-1.5 bg-white border-r border-b border-slate-300">

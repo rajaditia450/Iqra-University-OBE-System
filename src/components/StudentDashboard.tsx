@@ -25,6 +25,11 @@ import {
 import { Student, Course, Program, Department, InstructorCourse } from '../types';
 import { apiService } from '../services/apiService';
 
+const normalizeRegNo = (reg: string) => {
+  if (!reg) return '';
+  return reg.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+};
+
 // Interfaces for local bindings and mapping data
 interface StudentCourseBinding {
   studentRegNo: string;
@@ -60,6 +65,7 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
   // UI States
   const [expandedCourseCode, setExpandedCourseCode] = useState<string | null>(null);
   const [cloFilterCourseCode, setCloFilterCourseCode] = useState<string>('all');
+  const [selectedSemester, setSelectedSemester] = useState<string>('all');
 
   useEffect(() => {
     if (!activeRegNo) return;
@@ -178,22 +184,43 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
         let mappedInstructorCourses: InstructorCourse[] = [];
         try {
           const studentCourses = await apiService.getStudentCourses();
+          const regToUse = matchingStudent ? matchingStudent.regNo : activeRegNo;
+          
           if (Array.isArray(studentCourses)) {
-            const regToUse = matchingStudent ? matchingStudent.regNo : activeRegNo;
             const dynamicBindings = studentCourses.map((sc: any) => ({
               studentRegNo: regToUse,
               courseCode: sc.code
             }));
             setStudentBindings(prev => {
-              const filtered = prev.filter(b => b.studentRegNo !== regToUse);
+              const filtered = prev.filter(b => normalizeRegNo(b.studentRegNo) !== normalizeRegNo(regToUse));
               return [...filtered, ...dynamicBindings];
             });
 
             const loadedDepts = obData.departments || [];
             const loadedProgs = obData.programs || [];
 
+            const localSavedCoursesStr = localStorage.getItem('IQRA_OBE_INSTRUCTOR_COURSES');
+            const localSavedCourses: InstructorCourse[] = localSavedCoursesStr ? JSON.parse(localSavedCoursesStr) : [];
+
             mappedInstructorCourses = studentCourses.map((sc: any) => {
-              const standardCategories = sc.categories || [
+              const matchingLocalCourse = localSavedCourses.find((lc: any) => lc.code.trim().toLowerCase() === sc.code.trim().toLowerCase());
+
+              const codeStr = String(sc.code || matchingLocalCourse?.code || '').trim().toUpperCase();
+              const titleStr = String(sc.title || matchingLocalCourse?.title || '').trim().toLowerCase();
+              const isLab = sc.courseType === 'Lab' || sc.course_subtype === 'Lab' || matchingLocalCourse?.courseType === 'Lab' || codeStr.endsWith('L') || titleStr.includes('lab');
+
+              const standardCategories = matchingLocalCourse?.categories || sc.categories || (isLab ? [
+                { name: "Mid Term", percentage: 20, units: 1 },
+                { name: "Final", percentage: 30, units: 1 },
+                { name: "Lab Reports", percentage: 10, units: 3 },
+                { name: "Lab Performance", percentage: 10, units: 3 },
+                { name: "Viva", percentage: 5, units: 1 },
+                { name: "Assignments", percentage: 5, units: 3 },
+                { name: "Quizzes", percentage: 5, units: 3 },
+                { name: "Open Ended Lab", percentage: 5, units: 1 },
+                { name: "Other Activities", percentage: 5, units: 1 },
+                { name: "Project", percentage: 5, units: 1 }
+              ] : [
                 { name: "Assignments", percentage: 15, units: 3 },
                 { name: "Quizzes", percentage: 10, units: 3 },
                 { name: "Class Participation", percentage: 5, units: 1 },
@@ -201,8 +228,36 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
                 { name: "Presentation", percentage: 5, units: 1 },
                 { name: "Mid Term", percentage: 20, units: 1 },
                 { name: "Final", percentage: 30, units: 1 }
-              ];
-              const standardUnitsData = sc.unitsData || {
+              ]);
+
+              const standardUnitsData = matchingLocalCourse?.unitsData || sc.unitsData || (isLab ? {
+                "Mid Term": [{ unitNo: 1, passing: 15, totalMarks: 30, weightage: 100 }],
+                "Final": [{ unitNo: 1, passing: 20, totalMarks: 40, weightage: 100 }],
+                "Lab Reports": [
+                  { unitNo: 1, passing: 5, totalMarks: 10, weightage: 33.3 },
+                  { unitNo: 2, passing: 5, totalMarks: 10, weightage: 33.3 },
+                  { unitNo: 3, passing: 5, totalMarks: 10, weightage: 33.4 }
+                ],
+                "Lab Performance": [
+                  { unitNo: 1, passing: 5, totalMarks: 10, weightage: 33.3 },
+                  { unitNo: 2, passing: 5, totalMarks: 10, weightage: 33.3 },
+                  { unitNo: 3, passing: 5, totalMarks: 10, weightage: 33.4 }
+                ],
+                "Viva": [{ unitNo: 1, passing: 5, totalMarks: 10, weightage: 100 }],
+                "Assignments": [
+                  { unitNo: 1, passing: 5, totalMarks: 10, weightage: 33.3 },
+                  { unitNo: 2, passing: 5, totalMarks: 10, weightage: 33.3 },
+                  { unitNo: 3, passing: 5, totalMarks: 10, weightage: 33.4 }
+                ],
+                "Quizzes": [
+                  { unitNo: 1, passing: 5, totalMarks: 10, weightage: 33.3 },
+                  { unitNo: 2, passing: 5, totalMarks: 10, weightage: 33.3 },
+                  { unitNo: 3, passing: 5, totalMarks: 10, weightage: 33.4 }
+                ],
+                "Open Ended Lab": [{ unitNo: 1, passing: 5, totalMarks: 10, weightage: 100 }],
+                "Other Activities": [{ unitNo: 1, passing: 5, totalMarks: 10, weightage: 100 }],
+                "Project": [{ unitNo: 1, passing: 15, totalMarks: 30, weightage: 100 }]
+              } : {
                 "Assignments": [
                   { unitNo: 1, passing: 5, totalMarks: 10, weightage: 33.3 },
                   { unitNo: 2, passing: 5, totalMarks: 10, weightage: 33.3 },
@@ -218,39 +273,125 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
                 "Presentation": [{ unitNo: 1, passing: 5, totalMarks: 10, weightage: 100 }],
                 "Mid Term": [{ unitNo: 1, passing: 15, totalMarks: 30, weightage: 100 }],
                 "Final": [{ unitNo: 1, passing: 20, totalMarks: 40, weightage: 100 }]
-              };
+              });
 
-              const pId = sc.programId || matchingStudent?.programId || 'bscs';
+              const pId = sc.programId || matchingLocalCourse?.programId || matchingStudent?.programId || 'bscs';
               const prog = loadedProgs.find((p: any) => p.id === pId);
               const pName = prog ? prog.name : 'Bachelor of Science in Computer Science (BSCS)';
               
-              const dId = sc.departmentId || prog?.departmentId || matchingStudent?.departmentId || 'computing';
+              const dId = sc.departmentId || matchingLocalCourse?.departmentId || prog?.departmentId || matchingStudent?.departmentId || 'computing';
               const dept = loadedDepts.find((d: any) => d.id === dId);
               const dName = dept ? dept.name : 'Department of Computing and Technology';
 
+              const matchingLocalStudent = matchingLocalCourse?.students?.find((s: any) => normalizeRegNo(s.regNo) === normalizeRegNo(regToUse));
+              const studentMarksToUse = matchingLocalStudent?.marks || sc.studentMarks || {};
+
+              const matchingLocalOBEMarkKey = matchingLocalCourse?.obeMarks ? Object.keys(matchingLocalCourse.obeMarks).find(k => normalizeRegNo(k) === normalizeRegNo(regToUse)) : null;
+              const obeMarksToUse = matchingLocalOBEMarkKey ? matchingLocalCourse.obeMarks[matchingLocalOBEMarkKey] : (sc.obeMarks || {});
+
               return {
-                id: sc.id || `course-assigned-${sc.code}`,
+                id: sc.id || matchingLocalCourse?.id || `course-assigned-${sc.code}`,
                 code: sc.code,
-                title: sc.title,
+                title: sc.title || matchingLocalCourse?.title || '',
                 departmentId: dId,
                 departmentName: dName,
                 programId: pId,
                 programName: pName,
-                creditHours: sc.creditHours || 3,
+                creditHours: sc.creditHours || matchingLocalCourse?.creditHours || 3,
                 categories: standardCategories,
                 unitsData: standardUnitsData,
                 students: [
                   {
                     regNo: regToUse,
                     name: matchingStudent ? matchingStudent.name : 'Logged-In Student',
-                    marks: sc.studentMarks || {}
+                    marks: studentMarksToUse
                   }
                 ],
-                obeQuestions: sc.obeQuestions || [],
+                obeQuestions: sc.obeQuestions || matchingLocalCourse?.obeQuestions || [],
                 obeMarks: {
-                  [regToUse]: sc.obeMarks || {}
-                }
+                  [regToUse]: obeMarksToUse
+                },
+                selectedGradingSystem: matchingLocalCourse?.selectedGradingSystem || sc.selectedGradingSystem || 'ready1'
               };
+            });
+
+            // Merge any local saved courses that have this student but are not in the backend response
+            localSavedCourses.forEach((lc: any) => {
+              const studentEnrolled = lc.students?.some((s: any) => normalizeRegNo(s.regNo) === normalizeRegNo(regToUse));
+              const alreadyMapped = mappedInstructorCourses.some((mic: any) => mic.code.trim().toLowerCase() === lc.code.trim().toLowerCase());
+              if (studentEnrolled && !alreadyMapped) {
+                const standardCategories = lc.categories || [
+                  { name: "Assignments", percentage: 15, units: 3 },
+                  { name: "Quizzes", percentage: 10, units: 3 },
+                  { name: "Class Participation", percentage: 5, units: 1 },
+                  { name: "Class Project", percentage: 15, units: 1 },
+                  { name: "Presentation", percentage: 5, units: 1 },
+                  { name: "Mid Term", percentage: 20, units: 1 },
+                  { name: "Final", percentage: 30, units: 1 }
+                ];
+                const standardUnitsData = lc.unitsData || {
+                  "Assignments": [
+                    { unitNo: 1, passing: 5, totalMarks: 10, weightage: 33.3 },
+                    { unitNo: 2, passing: 5, totalMarks: 10, weightage: 33.3 },
+                    { unitNo: 3, passing: 5, totalMarks: 10, weightage: 33.4 }
+                  ],
+                  "Quizzes": [
+                    { unitNo: 1, passing: 5, totalMarks: 10, weightage: 33.3 },
+                    { unitNo: 2, passing: 5, totalMarks: 10, weightage: 33.3 },
+                    { unitNo: 3, passing: 5, totalMarks: 10, weightage: 33.4 }
+                  ],
+                  "Class Participation": [{ unitNo: 1, passing: 5, totalMarks: 10, weightage: 100 }],
+                  "Class Project": [{ unitNo: 1, passing: 15, totalMarks: 30, weightage: 100 }],
+                  "Presentation": [{ unitNo: 1, passing: 5, totalMarks: 10, weightage: 100 }],
+                  "Mid Term": [{ unitNo: 1, passing: 15, totalMarks: 30, weightage: 100 }],
+                  "Final": [{ unitNo: 1, passing: 20, totalMarks: 40, weightage: 100 }]
+                };
+
+                const pId = lc.programId || matchingStudent?.programId || 'bscs';
+                const prog = loadedProgs.find((p: any) => p.id === pId);
+                const pName = prog ? prog.name : 'Bachelor of Science in Computer Science (BSCS)';
+                
+                const dId = lc.departmentId || prog?.departmentId || matchingStudent?.departmentId || 'computing';
+                const dept = loadedDepts.find((d: any) => d.id === dId);
+                const dName = dept ? dept.name : 'Department of Computing and Technology';
+
+                const matchingLocalStudent = lc.students?.find((s: any) => normalizeRegNo(s.regNo) === normalizeRegNo(regToUse));
+                const studentMarksToUse = matchingLocalStudent?.marks || {};
+
+                const matchingLocalOBEMarkKey = lc.obeMarks ? Object.keys(lc.obeMarks).find(k => normalizeRegNo(k) === normalizeRegNo(regToUse)) : null;
+                const obeMarksToUse = matchingLocalOBEMarkKey ? lc.obeMarks[matchingLocalOBEMarkKey] : {};
+
+                mappedInstructorCourses.push({
+                  id: lc.id || `course-assigned-${lc.code}`,
+                  code: lc.code,
+                  title: lc.title || '',
+                  departmentId: dId,
+                  departmentName: dName,
+                  programId: pId,
+                  programName: pName,
+                  creditHours: lc.creditHours || 3,
+                  categories: standardCategories,
+                  unitsData: standardUnitsData,
+                  students: [
+                    {
+                      regNo: regToUse,
+                      name: matchingStudent ? matchingStudent.name : 'Logged-In Student',
+                      marks: studentMarksToUse
+                    }
+                  ],
+                  obeQuestions: lc.obeQuestions || [],
+                  obeMarks: {
+                    [regToUse]: obeMarksToUse
+                  },
+                  selectedGradingSystem: lc.selectedGradingSystem || 'ready1'
+                });
+
+                // Also bind this student dynamically
+                setStudentBindings(prev => {
+                  if (prev.some(b => normalizeRegNo(b.studentRegNo) === normalizeRegNo(regToUse) && b.courseCode === lc.code)) return prev;
+                  return [...prev, { studentRegNo: regToUse, courseCode: lc.code }];
+                });
+              }
             });
           } else {
             const instCourses = apiService.getLocalInstructorCourses();
@@ -259,6 +400,16 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
         } catch (apiErr) {
           console.warn("Failed to fetch student courses from backend, falling back to local storage.", apiErr);
           const instCourses = apiService.getLocalInstructorCourses();
+          const regToUse = matchingStudent ? matchingStudent.regNo : activeRegNo;
+          instCourses.forEach(lc => {
+            const studentEnrolled = lc.students?.some((s: any) => normalizeRegNo(s.regNo) === normalizeRegNo(regToUse));
+            if (studentEnrolled) {
+              setStudentBindings(prev => {
+                if (prev.some(b => normalizeRegNo(b.studentRegNo) === normalizeRegNo(regToUse) && b.courseCode === lc.code)) return prev;
+                return [...prev, { studentRegNo: regToUse, courseCode: lc.code }];
+              });
+            }
+          });
           mappedInstructorCourses = instCourses || [];
         }
         setInstructorCourses(mappedInstructorCourses);
@@ -277,7 +428,7 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
 
   // Find active student details
   const activeStudent = useMemo(() => {
-    return students.find(s => s.regNo === activeRegNo) || null;
+    return students.find(s => normalizeRegNo(s.regNo) === normalizeRegNo(activeRegNo)) || null;
   }, [students, activeRegNo]);
 
   // Find student's program and department details
@@ -311,12 +462,40 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
     return '1st Semester';
   };
 
+  const getStudentMark = (
+    student: any,
+    categoryName: string,
+    unitNo: number,
+    totalMarks: number,
+    unitsData?: Record<string, any[]>
+  ): number => {
+    if (unitsData && unitsData[categoryName]) {
+      const matchingUnit = unitsData[categoryName].find((u: any) => u.unitNo === unitNo);
+      if (matchingUnit && matchingUnit.questions && matchingUnit.questions.length > 0) {
+        return matchingUnit.questions.reduce((sum: number, q: any) => {
+          const qKey = `q-${categoryName}-${unitNo}-${q.id}`;
+          return sum + (student.marks?.[qKey] ?? 0);
+        }, 0);
+      }
+    }
+
+    if (student.marks && student.marks[`${categoryName}-${unitNo}`] !== undefined) {
+      return student.marks[`${categoryName}-${unitNo}`];
+    }
+
+    if (student.marks && student.marks[categoryName] !== undefined && unitNo === 1) {
+      return student.marks[categoryName];
+    }
+    
+    return 0;
+  };
+
   // Helper to retrieve stable, realistic grades/attainments based on the student's registration ID
   // This guarantees high-fidelity, complete visuals for all courses instead of all empty tables.
   const computeStudentCourseResult = (stdRegNo: string, courseCode: string) => {
     // Look up if there is an Instructor Course with these marks
     const instCourse = instructorCourses.find(ic => ic.code === courseCode);
-    const std = instCourse?.students.find(s => s.regNo === stdRegNo);
+    const std = instCourse?.students.find(s => normalizeRegNo(s.regNo) === normalizeRegNo(stdRegNo));
 
     let aggregate = 0;
     let hasAnyMarks = false;
@@ -327,33 +506,40 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
       let totalAggregate = 0;
       
       activeCats.forEach(cat => {
-        let catSum = 0;
-        let totalWeightSum = 0;
+        let categoryObtainedSum = 0;
+        let categoryMaxMarksSum = 0;
         const existingUnits = instCourse.unitsData[cat.name] || [];
+        
         if (cat.units > 0) {
           for (let u = 1; u <= cat.units; u++) {
             const matchingUnit = existingUnits.find(unit => unit.unitNo === u);
-            const totalMarks = matchingUnit ? matchingUnit.totalMarks : 10;
-            const weightage = matchingUnit ? matchingUnit.weightage : (100 / cat.units);
+            const questions = matchingUnit?.questions || [];
             
-            totalWeightSum += weightage;
-            
-            let mark = 0;
-            if (std.marks && std.marks[`${cat.name}-${u}`] !== undefined) {
-              mark = std.marks[`${cat.name}-${u}`];
-              hasAnyMarks = true;
-            } else if (std.marks && std.marks[cat.name] !== undefined && u === 1) {
-              mark = std.marks[cat.name];
-              hasAnyMarks = true;
+            if (questions.length > 0) {
+              questions.forEach(q => {
+                categoryMaxMarksSum += q.maxMarks || 0;
+                const qKey = `q-${cat.name}-${u}-${q.id}`;
+                categoryObtainedSum += std.marks?.[qKey] ?? 0;
+              });
+            } else {
+              const totalMarks = matchingUnit ? matchingUnit.totalMarks : 10;
+              categoryMaxMarksSum += totalMarks;
+              const dKey = `${cat.name}-${u}`;
+              categoryObtainedSum += std.marks?.[dKey] ?? 0;
             }
 
-            if (totalMarks > 0) {
-              catSum += (mark / totalMarks) * weightage;
+            if (std.marks && (
+              std.marks[`${cat.name}-${u}`] !== undefined || 
+              std.marks[cat.name] !== undefined ||
+              Object.keys(std.marks).some(k => k.startsWith(`q-${cat.name}-${u}-`))
+            )) {
+              hasAnyMarks = true;
             }
           }
         }
-        const divisor = totalWeightSum > 0 ? totalWeightSum : 100;
-        const categoryContribution = (catSum / divisor) * cat.percentage;
+        const categoryContribution = categoryMaxMarksSum > 0
+          ? (categoryObtainedSum / categoryMaxMarksSum) * cat.percentage
+          : 0;
         totalAggregate += categoryContribution;
       });
 
@@ -467,7 +653,7 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
       .filter(b => b.studentRegNo === activeRegNo)
       .map(b => b.courseCode);
     
-    return courses
+    const matched = courses
       .filter(c => studentCodes.includes(c.code))
       .map(c => {
         const results = computeStudentCourseResult(activeRegNo, c.code);
@@ -476,6 +662,15 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
           results
         };
       });
+
+    const seen = new Set<string>();
+    return matched.filter(c => {
+      if (seen.has(c.code)) {
+        return false;
+      }
+      seen.add(c.code);
+      return true;
+    });
   }, [courses, studentBindings, activeRegNo, instructorCourses]);
 
   // Group enrolled courses by Semester
@@ -531,6 +726,60 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
       passedCourses
     };
   }, [enrolledCoursesWithGrades, studentSummary]);
+
+  // Calculate Semester GPA dynamically for each semester group
+  const semesterGPAs = useMemo(() => {
+    const gpas: Record<string, number> = {};
+    Object.keys(coursesBySemester).forEach(semKey => {
+      const semCourses = coursesBySemester[semKey];
+      let totalPointsProduct = 0;
+      let totalCredits = 0;
+      let hasGrades = false;
+
+      semCourses.forEach(c => {
+        const crHrs = c.creditHours || 3;
+        if (c.results && c.results.points !== undefined && c.results.hasAnyMarks) {
+          totalPointsProduct += c.results.points * crHrs;
+          totalCredits += crHrs;
+          hasGrades = true;
+        }
+      });
+
+      gpas[semKey] = hasGrades && totalCredits > 0 ? totalPointsProduct / totalCredits : 0.0;
+    });
+    return gpas;
+  }, [coursesBySemester]);
+
+  // Determine which semester to use for displaying "Semester GPA" in the header
+  const currentSemesterForGPA = useMemo(() => {
+    if (selectedSemester !== 'all') {
+      return selectedSemester;
+    }
+    const semKeys = Object.keys(coursesBySemester);
+    if (semKeys.length > 0) {
+      // Return highest/latest semester
+      const sorted = [...semKeys].sort((a, b) => b.localeCompare(a));
+      return sorted[0];
+    }
+    return '';
+  }, [selectedSemester, coursesBySemester]);
+
+  // Get active GPA score for the selected or default latest semester
+  const activeSemesterGPA = useMemo(() => {
+    if (!currentSemesterForGPA || !semesterGPAs[currentSemesterForGPA]) {
+      return 0.0;
+    }
+    return semesterGPAs[currentSemesterForGPA];
+  }, [currentSemesterForGPA, semesterGPAs]);
+
+  // Automatically select the latest semester on load
+  useEffect(() => {
+    const semKeys = Object.keys(coursesBySemester);
+    if (semKeys.length > 0 && selectedSemester === 'all') {
+      const sorted = [...semKeys].sort((a, b) => b.localeCompare(a));
+      setSelectedSemester(sorted[0]);
+    }
+  }, [coursesBySemester]);
 
   // Filter GAs (Graduate Attributes) associated with the student's program (or standard 10)
   const programGAs = useMemo(() => {
@@ -623,7 +872,7 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
   // Helper to retrieve detailed marks breakdown for expanded views
   const getCourseMarksBreakdown = (courseCode: string) => {
     const instCourse = instructorCourses.find(ic => ic.code === courseCode);
-    const std = instCourse?.students.find(s => s.regNo === activeRegNo);
+    const std = instCourse?.students.find(s => normalizeRegNo(s.regNo) === normalizeRegNo(activeRegNo));
     
     if (!instCourse || !std || !std.marks) {
       // Do not generate dummy mock marks. Return categories with 0 scores.
@@ -642,27 +891,33 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
     const breakdown: { category: string; scored: number; max: number; pct: number }[] = [];
 
     categoriesList.forEach(cat => {
-      let catSum = 0;
-      let totalWeightSum = 0;
+      let categoryObtainedSum = 0;
+      let categoryMaxMarksSum = 0;
       const existingUnits = instCourse.unitsData[cat.name] || [];
       
       if (cat.units > 0) {
         for (let u = 1; u <= cat.units; u++) {
           const matchingUnit = existingUnits.find(unit => unit.unitNo === u);
-          const totalMarks = matchingUnit ? matchingUnit.totalMarks : 10;
-          const weightage = matchingUnit ? matchingUnit.weightage : (100 / cat.units);
+          const questions = matchingUnit?.questions || [];
           
-          totalWeightSum += weightage;
-          let mark = std.marks?.[`${cat.name}-${u}`] ?? std.marks?.[cat.name] ?? 0;
-          
-          if (totalMarks > 0) {
-            catSum += (mark / totalMarks) * weightage;
+          if (questions.length > 0) {
+            questions.forEach(q => {
+              categoryMaxMarksSum += q.maxMarks || 0;
+              const qKey = `q-${cat.name}-${u}-${q.id}`;
+              categoryObtainedSum += std.marks?.[qKey] ?? 0;
+            });
+          } else {
+            const totalMarks = matchingUnit ? matchingUnit.totalMarks : 10;
+            categoryMaxMarksSum += totalMarks;
+            const dKey = `${cat.name}-${u}`;
+            categoryObtainedSum += std.marks?.[dKey] ?? 0;
           }
         }
       }
 
-      const divisor = totalWeightSum > 0 ? totalWeightSum : 100;
-      const finalContribution = (catSum / divisor) * cat.percentage;
+      const finalContribution = categoryMaxMarksSum > 0
+        ? (categoryObtainedSum / categoryMaxMarksSum) * cat.percentage
+        : 0;
       
       breakdown.push({
         category: cat.name,
@@ -750,25 +1005,41 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
             </div>
 
             {/* GPA AND PROGRESS WIDGETS */}
-            <div className="grid grid-cols-3 gap-3 w-full md:w-auto relative z-10">
-              <div className="bg-indigo-50/50 border border-indigo-100 p-3 rounded-2xl text-center">
-                <p className="text-[9px] uppercase font-bold text-indigo-500 tracking-wider">Cumulative GPA</p>
-                <div className="flex items-center justify-center gap-1 mt-0.5">
-                  <Award className="h-4 w-4 text-indigo-600" />
-                  <span className="text-lg font-black text-indigo-950 font-mono">{GPAStats.cgpa.toFixed(2)}</span>
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:flex lg:items-center gap-4 w-full md:w-auto relative z-10">
+              {/* Semester GPA widget */}
+              <div className="bg-blue-50 border border-blue-200 p-3.5 rounded-xl text-center min-w-[130px] flex-1 lg:flex-none shadow-xs">
+                <p className="text-xs uppercase font-extrabold text-blue-700 tracking-wider">
+                  {currentSemesterForGPA ? `${currentSemesterForGPA.split(' ')[0]} GPA` : 'Semester GPA'}
+                </p>
+                <div className="flex items-center justify-center gap-1.5 mt-1.5">
+                  <Award className="h-5 w-5 text-blue-600 shrink-0" />
+                  <span className="text-xl font-extrabold text-blue-950 font-mono">{activeSemesterGPA.toFixed(2)}</span>
                 </div>
               </div>
-              <div className="bg-emerald-50/50 border border-emerald-100 p-3 rounded-2xl text-center">
-                <p className="text-[9px] uppercase font-bold text-emerald-600 tracking-wider">Passed Credits</p>
-                <div className="flex items-center justify-center gap-0.5 mt-0.5">
-                  <span className="text-lg font-black text-emerald-950 font-mono">{GPAStats.passedCourses * 3}</span>
-                  <span className="text-[10px] text-emerald-600 font-bold">Hrs</span>
+
+              {/* Cumulative GPA widget */}
+              <div className="bg-indigo-50 border border-indigo-200 p-3.5 rounded-xl text-center min-w-[130px] flex-1 lg:flex-none shadow-xs">
+                <p className="text-xs uppercase font-extrabold text-indigo-700 tracking-wider">Cumulative GPA</p>
+                <div className="flex items-center justify-center gap-1.5 mt-1.5">
+                  <Award className="h-5 w-5 text-indigo-600 shrink-0" />
+                  <span className="text-xl font-extrabold text-indigo-950 font-mono">{GPAStats.cgpa.toFixed(2)}</span>
                 </div>
               </div>
-              <div className="bg-slate-50 border border-slate-200 p-3 rounded-2xl text-center">
-                <p className="text-[9px] uppercase font-bold text-slate-500 tracking-wider">Courses</p>
-                <div className="flex items-center justify-center gap-0.5 mt-0.5">
-                  <span className="text-lg font-black text-slate-900 font-mono">{enrolledCoursesWithGrades.length}</span>
+
+              {/* Passed Credits widget */}
+              <div className="bg-emerald-50 border border-emerald-200 p-3.5 rounded-xl text-center min-w-[130px] flex-1 lg:flex-none shadow-xs">
+                <p className="text-xs uppercase font-extrabold text-emerald-700 tracking-wider">Passed Credits</p>
+                <div className="flex items-center justify-center gap-1 mt-1.5">
+                  <span className="text-xl font-extrabold text-emerald-950 font-mono">{GPAStats.passedCourses * 3}</span>
+                  <span className="text-xs text-emerald-700 font-extrabold uppercase font-mono">Hrs</span>
+                </div>
+              </div>
+
+              {/* Courses widget */}
+              <div className="bg-slate-50 border border-slate-200 p-3.5 rounded-xl text-center min-w-[130px] flex-1 lg:flex-none shadow-xs">
+                <p className="text-xs uppercase font-extrabold text-slate-600 tracking-wider">Total Courses</p>
+                <div className="flex items-center justify-center gap-1 mt-1.5">
+                  <span className="text-xl font-extrabold text-slate-900 font-mono">{enrolledCoursesWithGrades.length}</span>
                 </div>
               </div>
             </div>
@@ -912,147 +1183,212 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
                     </p>
                   </div>
                 ) : (
-                  Object.keys(coursesBySemester).map(semesterKey => (
-                    <div key={semesterKey} className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-                      {/* Semester Header */}
-                      <div className="bg-slate-50 border-b border-slate-100 px-6 py-4 flex items-center gap-2.5">
-                        <Calendar className="h-4.5 w-4.5 text-indigo-600" />
-                        <h3 className="text-sm font-black text-indigo-950 uppercase tracking-tight">{semesterKey} Academic Ledger</h3>
-                      </div>
-
-                      {/* Course Row List */}
-                      <div className="divide-y divide-slate-150/80">
-                        {coursesBySemester[semesterKey].map(course => {
-                          const isExpanded = expandedCourseCode === course.code;
-                          const hasPassed = course.results.letterGrade !== 'F';
-
-                          return (
-                            <div key={course.code} className="hover:bg-slate-50/30 transition-all">
-                              {/* Row Clickable */}
-                              <div 
-                                onClick={() => setExpandedCourseCode(isExpanded ? null : course.code)}
-                                className="px-6 py-4.5 flex flex-col md:flex-row md:items-center justify-between gap-4 cursor-pointer"
-                              >
-                                <div className="space-y-1 flex-1">
-                                  <div className="flex items-center gap-2">
-                                    <span className="font-mono text-[10px] font-bold text-indigo-600 tracking-tight bg-indigo-50/80 px-2 py-0.5 rounded border border-indigo-100/40">
-                                      {course.code}
-                                    </span>
-                                    <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full capitalize border ${
-                                      course.type === 'core'
-                                        ? 'bg-indigo-50/50 text-indigo-700 border-indigo-100/50'
-                                        : 'bg-amber-50 text-amber-700 border-amber-100/50'
-                                    }`}>
-                                      {course.type} Course
-                                    </span>
-                                  </div>
-                                  <h4 className="text-sm font-bold text-slate-800 tracking-tight group-hover:text-indigo-600 transition-colors">
-                                    {course.title}
-                                  </h4>
-                                  <p className="text-[10px] text-slate-400 font-medium">3 Credit Hours • Lecture-Based OBE Class</p>
-                                </div>
-
-                                <div className="flex items-center gap-6 self-start md:self-auto">
-                                  {/* Percentage aggregate */}
-                                  <div className="text-right">
-                                    <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Score</p>
-                                    <p className="text-sm font-black text-slate-700 font-mono">{Math.round(course.results.aggregate)}%</p>
-                                  </div>
-
-                                  {/* Letter Grade */}
-                                  <div className="text-center min-w-[48px]">
-                                    <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Grade</p>
-                                    <span className={`inline-block px-2.5 py-0.5 text-xs font-black rounded-md ${
-                                      hasPassed 
-                                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' 
-                                        : 'bg-red-50 text-red-700 border border-red-100'
-                                    }`}>
-                                      {course.results.letterGrade}
-                                    </span>
-                                  </div>
-
-                                  {/* GPA points */}
-                                  <div className="text-right min-w-[48px]">
-                                    <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">GPA</p>
-                                    <p className="text-sm font-black text-indigo-950 font-mono">{course.results.points.toFixed(2)}</p>
-                                  </div>
-
-                                  {/* Arrow Toggle */}
-                                  <div className="text-slate-400 bg-slate-50 p-1 rounded-lg">
-                                    {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                                  </div>
-                                </div>
-                              </div>
-
-                              {/* Course Expanded Details: Question/Assessment Breakdown */}
-                              {isExpanded && (
-                                <div className="px-6 pb-6 pt-2 bg-slate-50/50 border-t border-slate-100 space-y-4">
-                                  <div>
-                                    <h5 className="text-[11px] font-black uppercase text-indigo-950 tracking-wider flex items-center gap-1.5 pb-2 border-b border-slate-100">
-                                      <ClipboardCheck className="h-3.5 w-3.5 text-indigo-600" />
-                                      Assessment Marks Breakdown & CLO Map
-                                    </h5>
-                                    
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 mt-3">
-                                      {getCourseMarksBreakdown(course.code).map((item, idx) => (
-                                        <div key={idx} className="bg-white border border-slate-200/60 p-3 rounded-xl flex justify-between items-center">
-                                          <div>
-                                            <p className="text-[10px] font-bold text-slate-700 truncate max-w-[120px]">{item.category}</p>
-                                            <p className="text-[9px] text-slate-400 font-mono mt-0.5">Weight: {item.max}%</p>
-                                          </div>
-                                          <div className="text-right">
-                                            <p className="text-xs font-extrabold text-indigo-950 font-mono">{item.scored} <span className="text-[10px] text-slate-400">/ {item.max}</span></p>
-                                            <p className="text-[9px] font-semibold text-emerald-600 font-mono mt-0.5">{item.pct}%</p>
-                                          </div>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  </div>
-
-                                  {/* CLO Attainments for Expanded Course */}
-                                  <div className="pt-2">
-                                    <h5 className="text-[11px] font-black uppercase text-indigo-950 tracking-wider flex items-center gap-1.5 pb-2 border-b border-slate-100">
-                                      <Layers className="h-3.5 w-3.5 text-indigo-600" />
-                                      Course Learning Outcome (CLO) Attainments
-                                    </h5>
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-3">
-                                      {course.results.clos.map((clo, idx) => {
-                                        const attained = clo.status === 'Attained';
-                                        return (
-                                          <div key={idx} className="bg-white border border-slate-200/60 p-3.5 rounded-xl space-y-2">
-                                            <div className="flex items-center justify-between">
-                                              <span className="font-mono text-xs font-bold text-indigo-600">{clo.code}</span>
-                                              <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${
-                                                attained 
-                                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-100' 
-                                                  : 'bg-amber-50 text-amber-700 border-amber-100'
-                                              }`}>
-                                                {clo.status}
-                                              </span>
-                                            </div>
-                                            <div className="flex items-center justify-between text-[11px] text-slate-500 font-medium pt-0.5">
-                                              <span>Outcome Mastery Percentage:</span>
-                                              <span className="font-bold text-slate-700 font-mono">{Math.round(clo.percentage)}%</span>
-                                            </div>
-                                            <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                                              <div 
-                                                className={`h-full rounded-full ${attained ? 'bg-emerald-500' : 'bg-amber-500'}`}
-                                                style={{ width: `${clo.percentage}%` }}
-                                              />
-                                            </div>
-                                          </div>
-                                        );
-                                      })}
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
+                  <div className="space-y-6">
+                    {/* Compact Professional Semester Navigation Pills */}
+                    <div className="flex flex-wrap items-center gap-2 bg-slate-100/80 p-2 rounded-xl border border-slate-200 max-w-fit shadow-xs">
+                      <span className="text-xs uppercase font-bold text-slate-500 px-2">
+                        Academic Semesters:
+                      </span>
+                      {Object.keys(coursesBySemester).map(semKey => (
+                        <button
+                          key={semKey}
+                          onClick={() => {
+                            setSelectedSemester(semKey);
+                            setExpandedCourseCode(null);
+                          }}
+                          className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                            selectedSemester === semKey
+                              ? 'bg-indigo-600 text-white shadow-sm'
+                              : 'text-slate-600 hover:text-indigo-950 hover:bg-slate-200/50'
+                          }`}
+                        >
+                          {semKey.replace(' Semester', '')}
+                        </button>
+                      ))}
+                      <button
+                        onClick={() => {
+                          setSelectedSemester('all');
+                          setExpandedCourseCode(null);
+                        }}
+                        className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                          selectedSemester === 'all'
+                            ? 'bg-indigo-600 text-white shadow-sm'
+                            : 'text-slate-600 hover:text-indigo-950 hover:bg-slate-200/50'
+                        }`}
+                      >
+                        All Semesters
+                      </button>
                     </div>
-                  ))
+
+                    {/* Semesters list */}
+                    {Object.keys(coursesBySemester)
+                      .filter(semesterKey => selectedSemester === 'all' || selectedSemester === semesterKey)
+                      .map(semesterKey => (
+                        <div key={semesterKey} className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
+                          {/* Semester Header */}
+                          <div className="bg-slate-50 border-b border-slate-200 px-6 py-4 flex items-center justify-between">
+                            <div className="flex items-center gap-2.5">
+                              <Calendar className="h-5 w-5 text-indigo-600" />
+                              <h3 className="text-sm font-bold text-indigo-950 uppercase tracking-wider">{semesterKey} Academic Ledger</h3>
+                            </div>
+                            {semesterGPAs[semesterKey] !== undefined && (
+                              <span className="bg-indigo-50 text-indigo-700 text-xs font-bold px-3 py-1 rounded-lg border border-indigo-200 font-mono">
+                                SGPA: {semesterGPAs[semesterKey].toFixed(2)}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Course Cards Grid */}
+                          <div className="p-5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 bg-slate-50/10">
+                            {coursesBySemester[semesterKey].map(course => {
+                              const isExpanded = expandedCourseCode === course.code;
+                              const hasPassed = course.results.letterGrade !== 'F';
+
+                              return (
+                                <div 
+                                  key={course.code} 
+                                  className={`bg-white border rounded-xl transition-all duration-200 flex flex-col justify-between overflow-hidden relative ${
+                                    isExpanded 
+                                      ? 'border-indigo-500 ring-2 ring-indigo-500/5 col-span-1 md:col-span-2 lg:col-span-3 shadow-xs' 
+                                      : 'border-slate-200 hover:border-slate-300 hover:shadow-sm'
+                                  }`}
+                                >
+                                  {/* Main Card Content */}
+                                  <div className="p-5 space-y-4">
+                                    {/* Badges Row */}
+                                    <div className="flex items-center justify-between">
+                                      <span className="font-mono text-xs font-bold text-indigo-700 bg-indigo-50 px-2.5 py-0.5 rounded border border-indigo-200">
+                                        {course.code}
+                                      </span>
+                                      <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full capitalize border tracking-wide ${
+                                        course.title?.toLowerCase().includes('lab')
+                                          ? 'bg-purple-100 text-purple-850 border-purple-200'
+                                          : course.type === 'core'
+                                            ? 'bg-blue-100 text-blue-850 border-blue-200'
+                                            : 'bg-amber-100 text-amber-850 border-amber-200'
+                                      }`}>
+                                        {course.type} Course
+                                      </span>
+                                    </div>
+
+                                    {/* Course Title */}
+                                    <div>
+                                      <h4 className="text-sm font-bold text-slate-800 tracking-tight leading-snug min-h-[40px]" title={course.title}>
+                                        {course.title}
+                                      </h4>
+                                      <p className="text-xs text-slate-500 font-medium font-sans mt-1">
+                                        {course.creditHours || 3} Credit Hours • Lecture-Based OBE Class
+                                      </p>
+                                    </div>
+
+                                    {/* Main Stats Row */}
+                                    <div className="grid grid-cols-3 gap-2 pt-3 border-t border-slate-100 bg-slate-50 p-2.5 rounded-lg">
+                                      <div className="text-center">
+                                        <p className="text-xs uppercase font-bold text-slate-400 tracking-wider">Score</p>
+                                        <p className="text-sm font-bold text-slate-800 font-mono mt-0.5">{Math.round(course.results.aggregate)}%</p>
+                                      </div>
+
+                                      <div className="text-center border-x border-slate-200">
+                                        <p className="text-xs uppercase font-bold text-slate-400 tracking-wider">Grade</p>
+                                        <span className={`inline-block px-2 py-0.5 text-xs font-bold rounded mt-0.5 ${
+                                          hasPassed 
+                                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' 
+                                            : 'bg-red-100 text-red-800 border border-red-200'
+                                        }`}>
+                                          {course.results.letterGrade}
+                                        </span>
+                                      </div>
+
+                                      <div className="text-center">
+                                        <p className="text-xs uppercase font-bold text-slate-400 tracking-wider">GPA</p>
+                                        <p className="text-sm font-bold text-indigo-950 font-mono mt-0.5">{course.results.points.toFixed(2)}</p>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Card Footer Action */}
+                                  <div 
+                                    onClick={() => setExpandedCourseCode(isExpanded ? null : course.code)}
+                                    className="bg-slate-50 border-t border-slate-200 px-5 py-2.5 flex items-center justify-between text-xs font-bold text-slate-600 hover:text-indigo-600 hover:bg-slate-100 cursor-pointer transition-colors"
+                                  >
+                                    <span>{isExpanded ? 'Hide Details' : 'View Assessment & CLO Map'}</span>
+                                    <div className="text-slate-400">
+                                      {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                                    </div>
+                                  </div>
+
+                                  {/* Course Expanded Details: Question/Assessment Breakdown */}
+                                  {isExpanded && (
+                                    <div className="px-5 pb-5 pt-3 bg-slate-50/50 border-t border-slate-200 space-y-4 animate-fade-in">
+                                      <div>
+                                        <h5 className="text-xs font-bold uppercase text-indigo-950 tracking-wider flex items-center gap-1.5 pb-2 border-b border-slate-200">
+                                          <ClipboardCheck className="h-4.5 w-4.5 text-indigo-600" />
+                                          Assessment Marks Breakdown & CLO Map
+                                        </h5>
+                                        
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 mt-3">
+                                          {getCourseMarksBreakdown(course.code).map((item, idx) => (
+                                            <div key={idx} className="bg-white border border-slate-200 p-3 rounded-lg flex justify-between items-center shadow-xs">
+                                              <div>
+                                                <p className="text-xs font-bold text-slate-700 truncate max-w-[120px]" title={item.category}>{item.category}</p>
+                                                <p className="text-xs text-slate-500 font-mono font-medium mt-0.5">Weight: {item.max}%</p>
+                                              </div>
+                                              <div className="text-right">
+                                                <p className="text-xs font-bold text-indigo-950 font-mono">
+                                                  {item.scored} <span className="text-slate-500">/{item.max}</span>
+                                                </p>
+                                                <p className="text-xs font-bold text-emerald-600 font-mono mt-0.5">{item.pct}%</p>
+                                              </div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+
+                                      {/* CLO Attainments for Expanded Course */}
+                                      <div className="pt-2">
+                                        <h5 className="text-xs font-bold uppercase text-indigo-950 tracking-wider flex items-center gap-1.5 pb-2 border-b border-slate-200">
+                                          <Layers className="h-4.5 w-4.5 text-indigo-600" />
+                                          Course Learning Outcome (CLO) Attainments
+                                        </h5>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-3">
+                                          {course.results.clos.map((clo, idx) => {
+                                            const attained = clo.status === 'Attained';
+                                            return (
+                                              <div key={idx} className="bg-white border border-slate-200 p-4 rounded-lg space-y-2.5 shadow-xs">
+                                                <div className="flex items-center justify-between">
+                                                  <span className="font-mono text-xs font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">{clo.code}</span>
+                                                  <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full border ${
+                                                    attained 
+                                                      ? 'bg-emerald-100 text-emerald-800 border-emerald-200' 
+                                                      : 'bg-amber-100 text-amber-800 border-amber-200'
+                                                  }`}>
+                                                    {clo.status}
+                                                  </span>
+                                                </div>
+                                                <div className="flex items-center justify-between text-xs text-slate-500 font-medium pt-0.5">
+                                                  <span>Outcome Mastery:</span>
+                                                  <span className="font-bold text-slate-700 font-mono">{Math.round(clo.percentage)}%</span>
+                                                </div>
+                                                <div className="w-full bg-slate-150 h-2 rounded-full overflow-hidden">
+                                                  <div 
+                                                    className={`h-full rounded-full ${attained ? 'bg-emerald-500' : 'bg-amber-500'}`}
+                                                    style={{ width: `${clo.percentage}%` }}
+                                                  />
+                                                </div>
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                  </div>
                 )}
               </motion.div>
             )}

@@ -719,7 +719,22 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
       const existingCourse = existingInstructorCourses.find(ec => ec.id === uniqId) || 
                              existingInstructorCourses.find(ec => ec.code === assignment.courseCode && !ec.id.includes('-'));
       
-      const standardCategories = [
+      const codeStr = String(assignment.courseCode || course?.code || '').trim().toUpperCase();
+      const titleStr = String(course?.title || '').trim().toLowerCase();
+      const isLab = course?.courseType === 'Lab' || codeStr.endsWith('L') || titleStr.includes('lab');
+
+      const standardCategories = isLab ? [
+        { name: "Mid Term", percentage: 20, units: 1 },
+        { name: "Final", percentage: 30, units: 1 },
+        { name: "Lab Reports", percentage: 10, units: 3 },
+        { name: "Lab Performance", percentage: 10, units: 3 },
+        { name: "Viva", percentage: 5, units: 1 },
+        { name: "Assignments", percentage: 5, units: 3 },
+        { name: "Quizzes", percentage: 5, units: 3 },
+        { name: "Open Ended Lab", percentage: 5, units: 1 },
+        { name: "Other Activities", percentage: 5, units: 1 },
+        { name: "Project", percentage: 5, units: 1 }
+      ] : [
         { name: "Assignments", percentage: 15, units: 3 },
         { name: "Quizzes", percentage: 10, units: 3 },
         { name: "Class Participation", percentage: 5, units: 1 },
@@ -729,7 +744,34 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
         { name: "Final", percentage: 30, units: 1 }
       ];
 
-      const standardUnitsData = {
+      const standardUnitsData = isLab ? {
+        "Mid Term": [{ unitNo: 1, passing: 15, totalMarks: 30, weightage: 100 }],
+        "Final": [{ unitNo: 1, passing: 20, totalMarks: 40, weightage: 100 }],
+        "Lab Reports": [
+          { unitNo: 1, passing: 5, totalMarks: 10, weightage: 33.3 },
+          { unitNo: 2, passing: 5, totalMarks: 10, weightage: 33.3 },
+          { unitNo: 3, passing: 5, totalMarks: 10, weightage: 33.4 }
+        ],
+        "Lab Performance": [
+          { unitNo: 1, passing: 5, totalMarks: 10, weightage: 33.3 },
+          { unitNo: 2, passing: 5, totalMarks: 10, weightage: 33.3 },
+          { unitNo: 3, passing: 5, totalMarks: 10, weightage: 33.4 }
+        ],
+        "Viva": [{ unitNo: 1, passing: 5, totalMarks: 10, weightage: 100 }],
+        "Assignments": [
+          { unitNo: 1, passing: 5, totalMarks: 10, weightage: 33.3 },
+          { unitNo: 2, passing: 5, totalMarks: 10, weightage: 33.3 },
+          { unitNo: 3, passing: 5, totalMarks: 10, weightage: 33.4 }
+        ],
+        "Quizzes": [
+          { unitNo: 1, passing: 5, totalMarks: 10, weightage: 33.3 },
+          { unitNo: 2, passing: 5, totalMarks: 10, weightage: 33.3 },
+          { unitNo: 3, passing: 5, totalMarks: 10, weightage: 33.4 }
+        ],
+        "Open Ended Lab": [{ unitNo: 1, passing: 5, totalMarks: 10, weightage: 100 }],
+        "Other Activities": [{ unitNo: 1, passing: 5, totalMarks: 10, weightage: 100 }],
+        "Project": [{ unitNo: 1, passing: 15, totalMarks: 30, weightage: 100 }]
+      } : {
         "Assignments": [
           { unitNo: 1, passing: 5, totalMarks: 10, weightage: 33.3 },
           { unitNo: 2, passing: 5, totalMarks: 10, weightage: 33.3 },
@@ -754,7 +796,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
         id: existingCourse?.id || uniqId,
         code: assignment.courseCode,
         title: finalTitle,
-        courseType: course?.courseType || 'Theory',
+        courseType: isLab ? 'Lab' : 'Theory',
         departmentId: course?.departmentId || 'computing',
         departmentName: matchedDept?.name || 'Department of Computing and Technology',
         programId: finalProgramId,
@@ -1045,6 +1087,8 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
             // Parse Course Subtype (Theory or Lab) - extremely robust matching
             let parsedSubtype: 'Theory' | 'Lab' = 'Theory';
             if (rawSubtype && String(rawSubtype).trim().toLowerCase().includes('lab')) {
+              parsedSubtype = 'Lab';
+            } else if (codeClean.endsWith('L') || titleClean.toLowerCase().includes('lab')) {
               parsedSubtype = 'Lab';
             }
 

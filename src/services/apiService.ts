@@ -632,13 +632,18 @@ const normalizeCourse = (c: any): Course => {
 
   // The backend does not have a separate theory/lab subtype, or uses subtype/course_subtype
   let frontendSubtype: 'Theory' | 'Lab' = 'Theory';
-  const rawSubtype = c.subtype || c.course_subtype || c.courseSubtype;
-  if (rawSubtype) {
-    frontendSubtype = String(rawSubtype).toLowerCase().includes('lab') ? 'Lab' : 'Theory';
-  } else if (c.course_type && (String(c.course_type).toLowerCase() === 'theory' || String(c.course_type).toLowerCase() === 'lab')) {
-    frontendSubtype = String(c.course_type).toLowerCase() === 'lab' ? 'Lab' : 'Theory';
-  } else if (c.courseType && (String(c.courseType).toLowerCase() === 'theory' || String(c.courseType).toLowerCase() === 'lab')) {
-    frontendSubtype = String(c.courseType).toLowerCase() === 'lab' ? 'Lab' : 'Theory';
+  const titleLower = String(c.title || '').trim().toLowerCase();
+  if (code.endsWith('L') || titleLower.includes('lab')) {
+    frontendSubtype = 'Lab';
+  } else {
+    const rawSubtype = c.subtype || c.course_subtype || c.courseSubtype;
+    if (rawSubtype) {
+      frontendSubtype = String(rawSubtype).toLowerCase().includes('lab') ? 'Lab' : 'Theory';
+    } else if (c.course_type && (String(c.course_type).toLowerCase() === 'theory' || String(c.course_type).toLowerCase() === 'lab')) {
+      frontendSubtype = String(c.course_type).toLowerCase() === 'lab' ? 'Lab' : 'Theory';
+    } else if (c.courseType && (String(c.courseType).toLowerCase() === 'theory' || String(c.courseType).toLowerCase() === 'lab')) {
+      frontendSubtype = String(c.courseType).toLowerCase() === 'lab' ? 'Lab' : 'Theory';
+    }
   }
 
   return {
@@ -1720,5 +1725,10 @@ const DUMMY_PLAYGROUND_COURSES: InstructorCourse[] = [
 ];
 
 const getLocalInstructorCourses = (): InstructorCourse[] => {
-  return [];
+  try {
+    const data = localStorage.getItem('IQRA_OBE_INSTRUCTOR_COURSES');
+    return data ? JSON.parse(data) : [];
+  } catch (e) {
+    return [];
+  }
 };

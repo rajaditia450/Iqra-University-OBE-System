@@ -370,8 +370,8 @@ export default function MarksEntrySpreadsheet({
               {/* Row 1: Header groupings (e.g. ASSIGNMENTS 1, ASSIGNMENTS 2, etc.) */}
               <tr className="divide-x divide-slate-300 border-b border-slate-300 text-slate-800 font-bold">
                 <th rowSpan={4} className="py-3 px-2 w-12 sticky left-0 bg-[#f8fafc] z-30 border-b-2 border-slate-300 text-center border-r-2 border-r-slate-300">S.#</th>
-                <th rowSpan={4} className="py-3 px-3 w-28 sticky left-12 bg-[#f8fafc] z-30 border-b-2 border-slate-300 text-left pl-3 text-slate-800 border-r-2 border-r-slate-300 border-l border-l-slate-200">Reg No</th>
-                <th rowSpan={4} className="py-3 px-4 w-44 sticky left-40 bg-[#f8fafc] z-30 border-b-2 border-slate-300 text-left pl-3 text-slate-800 border-r-2 border-r-slate-300">Student Name</th>
+                <th rowSpan={4} className="py-3 px-3 w-36 sticky left-12 bg-[#f8fafc] z-30 border-b-2 border-slate-300 text-left pl-3 text-slate-800 border-r-2 border-r-slate-300 border-l border-l-slate-200">Reg No</th>
+                <th rowSpan={4} className="py-3 px-4 w-44 sticky left-48 bg-[#f8fafc] z-30 border-b-2 border-slate-300 text-left pl-3 text-slate-800 border-r-2 border-r-slate-300">Student Name</th>
                 
                 {columnGroups.map(group => (
                   <th
@@ -474,12 +474,12 @@ export default function MarksEntrySpreadsheet({
                       </td>
 
                       {/* Reg No */}
-                      <td className="p-2 pl-3 font-extrabold text-slate-900 bg-white sticky left-12 z-10 text-[10.5px] tracking-wide truncate border-r-2 border-r-slate-300 border-b border-b-slate-300 border-l border-l-slate-200">
+                      <td className="p-2 pl-3 font-extrabold text-slate-900 bg-white sticky left-12 z-10 text-[10.5px] tracking-wide whitespace-nowrap border-r-2 border-r-slate-300 border-b border-b-slate-300 border-l border-l-slate-200">
                         {student.regNo}
                       </td>
 
                       {/* Student Name */}
-                      <td className="p-2 pl-3 font-semibold text-slate-700 bg-white sticky left-40 z-10 text-left font-sans truncate border-r-2 border-r-slate-300 border-b border-b-slate-300">
+                      <td className="p-2 pl-3 font-semibold text-slate-700 bg-white sticky left-48 z-10 text-left font-sans truncate border-r-2 border-r-slate-300 border-b border-b-slate-300">
                         {student.name}
                       </td>
 

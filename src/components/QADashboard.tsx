@@ -301,37 +301,44 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
         const std = instCourse.students?.find((s: any) => s.regNo === student.regNo);
         if (std && std.marks) {
           let catSumTotal = 0;
-          let totalWeightSum = 0;
           
           instCourse.categories?.forEach((cat: any) => {
             if (cat.percentage > 0) {
-              let catSum = 0;
-              let catWeightSum = 0;
+              let categoryObtainedSum = 0;
+              let categoryMaxMarksSum = 0;
+              const existingUnits = instCourse.unitsData?.[cat.name] || [];
               
               for (let u = 1; u <= cat.units; u++) {
-                const unitId = `${cat.name}-${u}`;
-                const matchingUnit = instCourse.unitsData?.[cat.name]?.find((un: any) => un.unitNo === u);
-                const totalMarks = matchingUnit ? matchingUnit.totalMarks : 10;
-                const weightage = matchingUnit ? matchingUnit.weightage : (100 / cat.units);
+                const matchingUnit = existingUnits.find((unit: any) => unit.unitNo === u);
+                const questions = matchingUnit?.questions || [];
                 
-                catWeightSum += weightage;
-                
-                let mark = 0;
-                if (std.marks[unitId] !== undefined) {
-                  mark = std.marks[unitId];
-                  hasAnyMarks = true;
-                } else if (std.marks[cat.name] !== undefined && u === 1) {
-                  mark = std.marks[cat.name];
-                  hasAnyMarks = true;
-                }
-                
-                if (totalMarks > 0) {
-                  catSum += (mark / totalMarks) * weightage;
+                if (questions.length > 0) {
+                  questions.forEach((q: any) => {
+                    categoryMaxMarksSum += q.maxMarks || 0;
+                    const qKey = `q-${cat.name}-${u}-${q.id}`;
+                    if (std.marks?.[qKey] !== undefined) {
+                      categoryObtainedSum += std.marks[qKey];
+                      hasAnyMarks = true;
+                    }
+                  });
+                } else {
+                  const totalMarks = matchingUnit ? matchingUnit.totalMarks : 10;
+                  categoryMaxMarksSum += totalMarks;
+                  const dKey = `${cat.name}-${u}`;
+                  if (std.marks?.[dKey] !== undefined) {
+                    categoryObtainedSum += std.marks[dKey];
+                    hasAnyMarks = true;
+                  } else if (std.marks?.[cat.name] !== undefined && u === 1) {
+                    categoryObtainedSum += std.marks[cat.name];
+                    hasAnyMarks = true;
+                  }
                 }
               }
               
-              const divisor = catWeightSum > 0 ? catWeightSum : 100;
-              catSumTotal += (catSum / divisor) * cat.percentage;
+              const categoryContribution = categoryMaxMarksSum > 0
+                ? (categoryObtainedSum / categoryMaxMarksSum) * cat.percentage
+                : 0;
+              catSumTotal += categoryContribution;
             }
           });
           
@@ -2042,13 +2049,54 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                       
                       // Fallback simulated detailed marks for beautiful sheet formatting
                       const courseStudents = reportMetrics.filteredStudents;
-                      const dummyCategories = [
+                      const codeStr = String(activeCourseCode || courseObj?.code || '').trim().toUpperCase();
+                      const titleStr = String(courseObj?.title || '').trim().toLowerCase();
+                      const isLab = courseObj?.courseType === 'Lab' || codeStr.endsWith('L') || titleStr.includes('lab');
+                      const dummyCategories = isLab ? [
+                        { name: "Mid Term", percentage: 20, units: 1 },
+                        { name: "Final", percentage: 30, units: 1 },
+                        { name: "Lab Reports", percentage: 10, units: 3 },
+                        { name: "Lab Performance", percentage: 10, units: 3 },
+                        { name: "Viva", percentage: 5, units: 1 },
+                        { name: "Assignments", percentage: 5, units: 3 },
+                        { name: "Quizzes", percentage: 5, units: 3 },
+                        { name: "Open Ended Lab", percentage: 5, units: 1 },
+                        { name: "Other Activities", percentage: 5, units: 1 },
+                        { name: "Project", percentage: 5, units: 1 }
+                      ] : [
                         { name: "Assignments", percentage: 15, units: 3 },
                         { name: "Quizzes", percentage: 10, units: 3 },
                         { name: "Mid Term", percentage: 30, units: 1 },
                         { name: "Final", percentage: 45, units: 1 }
                       ];
-                      const dummyUnitsData: Record<string, any[]> = {
+                      const dummyUnitsData: Record<string, any[]> = isLab ? {
+                        "Mid Term": [{ unitNo: 1, totalMarks: 30, weightage: 100 }],
+                        "Final": [{ unitNo: 1, totalMarks: 40, weightage: 100 }],
+                        "Lab Reports": [
+                          { unitNo: 1, totalMarks: 10, weightage: 33.3 },
+                          { unitNo: 2, totalMarks: 10, weightage: 33.3 },
+                          { unitNo: 3, totalMarks: 10, weightage: 33.4 }
+                        ],
+                        "Lab Performance": [
+                          { unitNo: 1, totalMarks: 10, weightage: 33.3 },
+                          { unitNo: 2, totalMarks: 10, weightage: 33.3 },
+                          { unitNo: 3, totalMarks: 10, weightage: 33.4 }
+                        ],
+                        "Viva": [{ unitNo: 1, totalMarks: 10, weightage: 100 }],
+                        "Assignments": [
+                          { unitNo: 1, totalMarks: 10, weightage: 33.3 },
+                          { unitNo: 2, totalMarks: 10, weightage: 33.3 },
+                          { unitNo: 3, totalMarks: 10, weightage: 33.4 }
+                        ],
+                        "Quizzes": [
+                          { unitNo: 1, totalMarks: 10, weightage: 33.3 },
+                          { unitNo: 2, totalMarks: 10, weightage: 33.3 },
+                          { unitNo: 3, totalMarks: 10, weightage: 33.4 }
+                        ],
+                        "Open Ended Lab": [{ unitNo: 1, totalMarks: 10, weightage: 100 }],
+                        "Other Activities": [{ unitNo: 1, totalMarks: 10, weightage: 100 }],
+                        "Project": [{ unitNo: 1, totalMarks: 30, weightage: 100 }]
+                      } : {
                         "Assignments": [
                           { unitNo: 1, totalMarks: 10, weightage: 33.3 },
                           { unitNo: 2, totalMarks: 10, weightage: 33.3 },
@@ -2210,37 +2258,37 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
 
                                   instCourse.categories?.forEach((cat: any) => {
                                     if (cat.percentage > 0) {
-                                      let catSum = 0;
-                                      let catWeightSum = 0;
-                                      let maxPossibleMarks = 0;
-                                      let scoredMarksSum = 0;
+                                      let categoryObtainedSum = 0;
+                                      let categoryMaxMarksSum = 0;
+                                      const existingUnits = instCourse.unitsData?.[cat.name] || [];
                                       
                                       for (let u = 1; u <= cat.units; u++) {
-                                        const unitId = `${cat.name}-${u}`;
-                                        const matchingUnit = instCourse.unitsData?.[cat.name]?.find((un: any) => un.unitNo === u);
-                                        const totalMarks = matchingUnit ? matchingUnit.totalMarks : 10;
-                                        const weightage = matchingUnit ? matchingUnit.weightage : (100 / cat.units);
-                                        
-                                        catWeightSum += weightage;
-                                        maxPossibleMarks += totalMarks;
-                                        
-                                        let mark = std.marks?.[unitId] ?? 0;
-                                        scoredMarksSum += mark;
-
-                                        if (totalMarks > 0) {
-                                          catSum += (mark / totalMarks) * weightage;
+                                        const matchingUnit = existingUnits.find((unit: any) => unit.unitNo === u);
+                                        const questions = matchingUnit?.questions || [];
+                                        if (questions.length > 0) {
+                                          questions.forEach((q: any) => {
+                                            categoryMaxMarksSum += q.maxMarks || 0;
+                                            const qKey = `q-${cat.name}-${u}-${q.id}`;
+                                            categoryObtainedSum += std.marks?.[qKey] ?? 0;
+                                          });
+                                        } else {
+                                          const totalMarks = matchingUnit ? matchingUnit.totalMarks : 10;
+                                          categoryMaxMarksSum += totalMarks;
+                                          const dKey = `${cat.name}-${u}`;
+                                          categoryObtainedSum += std.marks?.[dKey] ?? 0;
                                         }
                                       }
                                       
-                                      const divisor = catWeightSum > 0 ? catWeightSum : 100;
-                                      const categoryContribution = (catSum / divisor) * cat.percentage;
+                                      const categoryContribution = categoryMaxMarksSum > 0
+                                        ? (categoryObtainedSum / categoryMaxMarksSum) * cat.percentage
+                                        : 0;
                                       grandTotalPercentage += categoryContribution;
                                       categoriesCount++;
 
-                                      const pct = maxPossibleMarks > 0 ? (scoredMarksSum / maxPossibleMarks) * 100 : 0;
+                                      const pct = categoryMaxMarksSum > 0 ? (categoryObtainedSum / categoryMaxMarksSum) * 100 : 0;
                                       categoryPassDetails[cat.name] = {
-                                        totalMarks: maxPossibleMarks,
-                                        score: scoredMarksSum,
+                                        totalMarks: categoryMaxMarksSum,
+                                        score: categoryObtainedSum,
                                         pct,
                                         isPassed: pct >= 50
                                       };
