@@ -2889,7 +2889,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                 className={getNavbarItemClass(openMenu === 'edit-items')}
               >
                 <Edit3 className="w-3.5 h-3.5" />
-                <span>Edit Items</span>
+                <span>CLO Mapping</span>
                 <ChevronDown className="w-3 h-3 opacity-60" />
               </button>
               {openMenu === 'edit-items' && selectedCourse && (

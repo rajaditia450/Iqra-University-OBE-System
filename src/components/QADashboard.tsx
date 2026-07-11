@@ -28,7 +28,9 @@ import {
   TrendingUp,
   BarChart2,
   Edit,
-  Trash2
+  Trash2,
+  X,
+  Building
 } from 'lucide-react';
 
 interface QADashboardProps {
@@ -72,6 +74,10 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
   // Dropdown states for Desktop-Style Menu Bar
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [activeModal, setActiveModal] = useState<'about' | 'clos' | 'plos' | 'statistics' | 'integrity' | 'help' | 'add_program' | 'edit_program_vm' | 'add_course' | 'edit_course' | null>(null);
+  const [viewVmModal, setViewVmModal] = useState<{ type: 'department' | 'program'; id: string; name: string; code?: string; vision: string; mission: string } | null>(null);
+  const [isEditingVm, setIsEditingVm] = useState(false);
+  const [editVmVision, setEditVmVision] = useState('');
+  const [editVmMission, setEditVmMission] = useState('');
 
   // Pagination for 44 courses to prevent vertical scrolling
   const [currentPage, setCurrentPage] = useState(1);
@@ -608,6 +614,45 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
     }
   };
 
+  const handleSaveVmModal = async () => {
+    if (!viewVmModal || !data) return;
+    try {
+      setSavingLoad(true);
+      if (viewVmModal.type === 'department') {
+        const updated = await apiService.updateDepartment(viewVmModal.id, {
+          vision: editVmVision,
+          mission: editVmMission
+        });
+        const upgradedDepts = data.departments.map(d => d.id === viewVmModal.id ? { ...d, ...updated } : d);
+        setData({ ...data, departments: upgradedDepts });
+        setViewVmModal({
+          ...viewVmModal,
+          vision: editVmVision,
+          mission: editVmMission
+        });
+        showNotification("Department Vision & Mission saved successfully.", "success");
+      } else {
+        const updated = await apiService.updateProgram(viewVmModal.id, {
+          vision: editVmVision,
+          mission: editVmMission
+        });
+        const upgradedProgs = data.programs.map(p => p.id === viewVmModal.id ? { ...p, ...updated } : p);
+        setData({ ...data, programs: upgradedProgs });
+        setViewVmModal({
+          ...viewVmModal,
+          vision: editVmVision,
+          mission: editVmMission
+        });
+        showNotification("Program Vision & Mission saved successfully.", "success");
+      }
+      setIsEditingVm(false);
+    } catch (err) {
+      showNotification("Failed to update Vision & Mission details.", "error");
+    } finally {
+      setSavingLoad(false);
+    }
+  };
+
   // Handle adding custom program
   const handleAddProgram = async () => {
     if (!newProgramName.trim() || !newProgramCode.trim() || !data) {
@@ -903,6 +948,80 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
           {/* Menu triggers */}
           <div className="flex flex-wrap items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
             
+
+            {/* VISION & MISSION MENU */}
+            <div className="relative">
+              <button
+                onClick={() => setOpenMenu(openMenu === 'vision_mission_dropdown' ? null : 'vision_mission_dropdown')}
+                onMouseEnter={() => openMenu && setOpenMenu('vision_mission_dropdown')}
+                className={`px-3 py-1 text-xs font-sans font-semibold text-slate-700 hover:bg-slate-200 hover:text-slate-900 rounded cursor-pointer transition-all ${openMenu === 'vision_mission_dropdown' ? 'bg-slate-200 text-slate-900 shadow-sm' : ''}`}
+              >
+                Vision &amp; Mission
+              </button>
+              {openMenu === 'vision_mission_dropdown' && (
+                <div className="absolute left-0 mt-1 w-80 bg-white border border-slate-300 rounded-lg shadow-xl py-1.5 z-50 animate-in fade-in slide-in-from-top-1 duration-100">
+                  <div className="px-3.5 py-1 text-[9px] text-slate-400 font-bold uppercase tracking-wider font-sans">
+                    Academic Department
+                  </div>
+                  {activeDepartment && (
+                    <button
+                      onClick={() => {
+                        setActiveProgramId('');
+                        setActiveModule('vision_mission');
+                        setViewVmModal({
+                          type: 'department',
+                          id: activeDepartment.id,
+                          name: activeDepartment.name,
+                          vision: activeDepartment.vision,
+                          mission: activeDepartment.mission
+                        });
+                        setOpenMenu(null);
+                      }}
+                      className="w-full text-left px-3.5 py-2 text-xs text-indigo-950 bg-indigo-50/50 hover:bg-indigo-50 hover:text-indigo-950 flex items-start gap-2 rounded font-bold text-left border-l-2 border-indigo-500 focus:outline-none"
+                    >
+                      <Building className="w-3.5 h-3.5 text-indigo-600 shrink-0 mt-0.5" />
+                      <span className="leading-snug">{activeDepartment.name}</span>
+                    </button>
+                  )}
+
+                  <div className="border-t border-slate-100 my-1.5"></div>
+                  
+                  <div className="px-3.5 py-1 text-[9px] text-slate-400 font-bold uppercase tracking-wider font-sans">
+                    Department Programs
+                  </div>
+                  
+                  <div className="max-h-60 overflow-y-auto">
+                    {data?.programs
+                      .filter(p => !activeDeptId || p.departmentId === activeDeptId)
+                      .map(p => (
+                        <button
+                          key={p.id}
+                          onClick={() => {
+                            setActiveProgramId(p.id);
+                            setActiveModule('vision_mission');
+                            setViewVmModal({
+                              type: 'program',
+                              id: p.id,
+                              name: p.name,
+                              code: p.code,
+                              vision: p.vision || 'To produce outstanding and ethically-grounded professionals equipped with modern analytical tools and problem-solving skills to lead in the domain of ' + p.name + '.',
+                              mission: p.mission || 'To deliver rigorous, comprehensive, and student-centered curriculum in ' + p.name + ' that blends theoretical foundations with hands-on practice, preparing graduates for lifelong learning, research excellence, and socially-responsible career paths in the global technological environment.'
+                            });
+                            setOpenMenu(null);
+                          }}
+                          className="w-full text-left px-3.5 py-1.5 text-xs text-slate-705 hover:bg-indigo-50 hover:text-indigo-950 flex items-center gap-2 rounded text-left font-medium focus:outline-none"
+                        >
+                          <Compass className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                          <span>{p.code} — {p.name}</span>
+                        </button>
+                      ))}
+                    {(!data?.programs || data.programs.filter(p => !activeDeptId || p.departmentId === activeDeptId).length === 0) && (
+                      <div className="px-3.5 py-2 text-xs text-slate-400 italic">No programs registered</div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
 
 
             {/* VIEW MENU */}
@@ -1295,7 +1414,6 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                 {/* Professional Academic-style Text blocks */}
                 <div className="space-y-6">
                   {data.departments.filter(d => d.id === activeDeptId).map((dept) => {
-                    const isEditing = editingDeptId === dept.id;
                     return (
                       <div key={dept.id} className="bg-white border-2 border-slate-200 rounded-3xl p-8 shadow-sm relative overflow-hidden transition-all duration-200 text-left">
                         {/* Minimal left side accent stripe */}
@@ -1308,94 +1426,23 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                               {dept.name}
                             </h3>
                           </div>
-                          
-                          {!isEditing ? (
-                            <button
-                              onClick={() => {
-                                setEditingDeptId(dept.id);
-                                setTempVision(dept.vision);
-                                setTempMission(dept.mission);
-                              }}
-                              className="px-4 py-2 text-xs font-extrabold text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-xl flex items-center gap-1.5 transition cursor-pointer border border-slate-300"
-                            >
-                              <Edit className="w-3.5 h-3.5" />
-                              Edit Charter Draft
-                            </button>
-                          ) : (
-                            <div className="flex items-center gap-2">
-                              <button
-                                onClick={async () => {
-                                  try {
-                                    setSavingLoad(true);
-                                    const updated = await apiService.updateDepartment(dept.id, {
-                                      vision: tempVision,
-                                      mission: tempMission
-                                    });
-                                    setData(prev => {
-                                      if (!prev) return prev;
-                                      return {
-                                        ...prev,
-                                        departments: prev.departments.map(d => d.id === dept.id ? updated : d)
-                                      };
-                                    });
-                                    setEditingDeptId(null);
-                                    showNotification("Departmental vision & mission draft saved successfully.", "success");
-                                  } catch (err) {
-                                    showNotification("Error updating department.", "error");
-                                  } finally {
-                                    setSavingLoad(false);
-                                  }
-                                }}
-                                disabled={savingLoad}
-                                className="px-4 py-2 text-xs font-extrabold text-black bg-indigo-100 hover:bg-indigo-200 disabled:opacity-50 rounded-xl flex items-center gap-1.5 transition cursor-pointer shadow-sm border border-indigo-200"
-                              >
-                                {savingLoad ? 'Saving...' : '✓ Save Changes'}
-                              </button>
-                              <button
-                                onClick={() => setEditingDeptId(null)}
-                                className="px-3.5 py-2 text-xs font-extrabold text-slate-750 hover:bg-slate-100 rounded-xl transition cursor-pointer border border-slate-300"
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                          )}
                         </div>
 
                         <div className="space-y-6 pl-2 text-left">
                           {/* Vision section */}
                           <div className="space-y-2">
                             <h4 className="text-base font-sans font-extrabold tracking-wide text-slate-950 uppercase border-l-4 border-indigo-600 pl-2.5">DEPARTMENT VISION</h4>
-                            {!isEditing ? (
-                              <p className="text-slate-900 text-[16px] font-sans leading-relaxed italic pr-4 font-normal">
-                                "{dept.vision}"
-                              </p>
-                            ) : (
-                              <textarea
-                                value={tempVision}
-                                onChange={(e) => setTempVision(e.target.value)}
-                                rows={2}
-                                className="w-full text-base p-4 font-sans bg-slate-50 border border-slate-300 rounded-xl focus:border-indigo-500 outline-none text-slate-900 leading-relaxed font-normal"
-                                placeholder="Enter department vision statement..."
-                              />
-                            )}
+                            <p className="text-slate-900 text-[16px] font-sans leading-relaxed italic pr-4 font-normal">
+                              "{dept.vision}"
+                            </p>
                           </div>
 
                           {/* Mission section */}
                           <div className="space-y-2">
                             <h4 className="text-base font-sans font-extrabold tracking-wide text-slate-950 uppercase border-l-4 border-indigo-600 pl-2.5">DEPARTMENT MISSION</h4>
-                            {!isEditing ? (
-                              <p className="text-slate-900 text-[16px] font-sans leading-relaxed pr-4 font-normal">
-                                {dept.mission}
-                              </p>
-                            ) : (
-                              <textarea
-                                value={tempMission}
-                                onChange={(e) => setTempMission(e.target.value)}
-                                rows={4}
-                                className="w-full text-base p-4 font-sans bg-slate-50 border border-slate-300 rounded-xl focus:border-indigo-500 outline-none text-slate-900 leading-relaxed font-normal"
-                                placeholder="Enter department mission statement..."
-                              />
-                            )}
+                            <p className="text-slate-900 text-[16px] font-sans leading-relaxed pr-4 font-normal">
+                              {dept.mission}
+                            </p>
                           </div>
                         </div>
                       </div>
@@ -2564,6 +2611,174 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
         )}
 
       </main>
+
+      {/* Vision & Mission Modal Popup */}
+      {viewVmModal && (
+        <div 
+          className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4 z-50 select-none animate-in fade-in duration-150" 
+          onClick={() => { setViewVmModal(null); setIsEditingVm(false); }}
+        >
+          <div 
+            className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-2xl overflow-hidden animate-in zoom-in-95 duration-150 flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Titlebar */}
+            <div className="bg-[#1e1b4b] text-white px-5 py-4 flex items-center justify-between border-b border-indigo-950">
+              <div className="flex items-center gap-2.5">
+                <GraduationCap className="w-5 h-5 text-indigo-300" />
+                <div>
+                  <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-indigo-200 block">
+                    {viewVmModal.type === 'department' ? 'DEPARTMENT SPECIFICATION' : 'PROGRAM SPECIFICATION'}
+                  </span>
+                  <h3 className="text-sm font-bold text-white leading-tight">
+                    {viewVmModal.name} {viewVmModal.code ? `(${viewVmModal.code})` : ''}
+                  </h3>
+                </div>
+              </div>
+              <button 
+                onClick={() => { setViewVmModal(null); setIsEditingVm(false); }}
+                className="text-white/70 hover:text-white cursor-pointer hover:bg-white/15 rounded-lg p-1.5 transition-all focus:outline-none"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 md:p-8 space-y-6 max-h-[70vh] overflow-y-auto">
+              
+              {/* Vision Section */}
+              <div className="space-y-3 bg-slate-50 border border-slate-200 p-6 rounded-2xl text-left relative overflow-hidden">
+                <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-indigo-500"></div>
+                <div className="flex items-center justify-between gap-2 pl-1">
+                  <div className="flex items-center gap-2">
+                    <Award className="w-4.5 h-4.5 text-indigo-600 shrink-0" />
+                    <h4 className="font-sans font-black text-slate-900 text-xs tracking-wider uppercase">VISION STATEMENT</h4>
+                  </div>
+                  {!isEditingVm && (
+                    <button
+                      onClick={() => {
+                        setIsEditingVm(true);
+                        setEditVmVision(viewVmModal.vision);
+                        setEditVmMission(viewVmModal.mission);
+                      }}
+                      className="text-indigo-600 hover:text-indigo-950 font-bold text-xs flex items-center gap-1 cursor-pointer transition-colors focus:outline-none"
+                    >
+                      <Edit className="w-3.5 h-3.5" />
+                      <span>Edit</span>
+                    </button>
+                  )}
+                </div>
+                {isEditingVm ? (
+                  <div className="pl-7 pr-1 py-0.5">
+                    <textarea
+                      value={editVmVision}
+                      onChange={(e) => setEditVmVision(e.target.value)}
+                      rows={3}
+                      className="w-full text-slate-800 text-sm bg-white border border-slate-300 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all leading-relaxed font-sans font-medium"
+                      placeholder="Enter vision statement..."
+                    />
+                  </div>
+                ) : (
+                  <p className="text-slate-800 text-sm leading-relaxed italic pl-7 py-0.5 font-medium">
+                    "{viewVmModal.vision || 'Vision statement undefined.'}"
+                  </p>
+                )}
+              </div>
+
+              {/* Mission Section */}
+              <div className="space-y-3 bg-slate-50 border border-slate-200 p-6 rounded-2xl text-left relative overflow-hidden">
+                <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-indigo-500"></div>
+                <div className="flex items-center justify-between gap-2 pl-1">
+                  <div className="flex items-center gap-2">
+                    <Compass className="w-4.5 h-4.5 text-indigo-600 shrink-0" />
+                    <h4 className="font-sans font-black text-slate-900 text-xs tracking-wider uppercase">MISSION STATEMENT</h4>
+                  </div>
+                  {!isEditingVm && (
+                    <button
+                      onClick={() => {
+                        setIsEditingVm(true);
+                        setEditVmVision(viewVmModal.vision);
+                        setEditVmMission(viewVmModal.mission);
+                      }}
+                      className="text-indigo-600 hover:text-indigo-950 font-bold text-xs flex items-center gap-1 cursor-pointer transition-colors focus:outline-none"
+                    >
+                      <Edit className="w-3.5 h-3.5" />
+                      <span>Edit</span>
+                    </button>
+                  )}
+                </div>
+                {isEditingVm ? (
+                  <div className="pl-7 pr-1 py-0.5">
+                    <textarea
+                      value={editVmMission}
+                      onChange={(e) => setEditVmMission(e.target.value)}
+                      rows={5}
+                      className="w-full text-slate-800 text-sm bg-white border border-slate-300 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all leading-relaxed font-sans font-medium"
+                      placeholder="Enter mission statement..."
+                    />
+                  </div>
+                ) : (
+                  <p className="text-slate-800 text-sm leading-relaxed pl-7 py-0.5 font-medium whitespace-pre-line">
+                    {viewVmModal.mission || 'Mission statement undefined.'}
+                  </p>
+                )}
+              </div>
+
+            </div>
+
+            {/* Modal Footer */}
+            <div className="bg-slate-50 border-t border-slate-100 px-6 py-4 flex justify-end gap-3">
+              {isEditingVm ? (
+                <>
+                  <button
+                    onClick={() => setIsEditingVm(false)}
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 text-xs font-bold rounded-lg transition-colors cursor-pointer focus:outline-none"
+                    disabled={savingLoad}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSaveVmModal}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer focus:outline-none flex items-center gap-1.5"
+                    disabled={savingLoad}
+                  >
+                    {savingLoad ? (
+                      <>
+                        <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                        <span>Saving...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>Save Changes</span>
+                      </>
+                    )}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={() => {
+                      setIsEditingVm(true);
+                      setEditVmVision(viewVmModal.vision);
+                      setEditVmMission(viewVmModal.mission);
+                    }}
+                    className="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 hover:text-indigo-950 text-xs font-bold rounded-lg transition-colors cursor-pointer focus:outline-none flex items-center gap-1"
+                  >
+                    <Edit className="w-3.5 h-3.5" />
+                    <span>Edit</span>
+                  </button>
+                  <button
+                    onClick={() => setViewVmModal(null)}
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 text-xs font-bold rounded-lg transition-colors cursor-pointer focus:outline-none"
+                  >
+                    Dismiss
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Dynamic Modal Windows (ResultMate Desktop Style) */}
       {activeModal && (

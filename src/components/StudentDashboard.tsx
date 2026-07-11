@@ -553,56 +553,100 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
       aggregate = 0;
     }
 
-    // Calculate Letter Grade based on Active system or standard Iqra grading
-    let letterGrade = 'B';
-    const system = instCourse?.selectedGradingSystem || 'ready1';
-    
-    if (!hasAnyMarks) {
-      letterGrade = '-';
-    } else if (system === 'ready2') {
-      if (aggregate >= 90) letterGrade = 'A+';
-      else if (aggregate >= 85) letterGrade = 'A';
-      else if (aggregate >= 80) letterGrade = 'A-';
-      else if (aggregate >= 75) letterGrade = 'B+';
-      else if (aggregate >= 70) letterGrade = 'B';
-      else if (aggregate >= 65) letterGrade = 'B-';
-      else if (aggregate >= 60) letterGrade = 'C+';
-      else if (aggregate >= 55) letterGrade = 'C';
-      else if (aggregate >= 50) letterGrade = 'D';
-      else letterGrade = 'F';
-    } else {
-      // ready1 or fallback
-      if (aggregate >= 85) letterGrade = 'A';
-      else if (aggregate >= 80) letterGrade = 'A-';
-      else if (aggregate >= 75) letterGrade = 'B+';
-      else if (aggregate >= 71) letterGrade = 'B';
-      else if (aggregate >= 68) letterGrade = 'B-';
-      else if (aggregate >= 64) letterGrade = 'C+';
-      else if (aggregate >= 61) letterGrade = 'C';
-      else if (aggregate >= 57) letterGrade = 'C-';
-      else if (aggregate >= 53) letterGrade = 'D+';
-      else if (aggregate >= 50) letterGrade = 'D';
-      else letterGrade = 'F';
-    }
-
-    // Map GP points
+    // Calculate Letter Grade and GP points based on Active system of instCourse
+    let letterGrade = '-';
     let points = 0.0;
-    if (letterGrade === '-') {
-      points = 0.0;
-    } else {
-      switch (letterGrade) {
-        case 'A+': points = 4.0; break;
-        case 'A': points = 4.0; break;
-        case 'A-': points = 3.7; break;
-        case 'B+': points = 3.3; break;
-        case 'B': points = 3.0; break;
-        case 'B-': points = 2.7; break;
-        case 'C+': points = 2.3; break;
-        case 'C': points = 2.0; break;
-        case 'C-': points = 1.7; break;
-        case 'D+': points = 1.3; break;
-        case 'D': points = 1.0; break;
-        default: points = 0.0;
+    const system = instCourse?.selectedGradingSystem || 'ready1';
+
+    if (hasAnyMarks) {
+      if (system === 'ready1') {
+        if (aggregate >= 88) { letterGrade = 'A'; points = 4.0; }
+        else if (aggregate >= 81) { letterGrade = 'B+'; points = 3.5; }
+        else if (aggregate >= 74) { letterGrade = 'B'; points = 3.0; }
+        else if (aggregate >= 67) { letterGrade = 'C+'; points = 2.5; }
+        else if (aggregate >= 60) { letterGrade = 'C'; points = 2.0; }
+        else { letterGrade = 'F'; points = 0.0; }
+      } else if (system === 'ready2') {
+        if (aggregate >= 90) { letterGrade = 'A+'; points = 4.0; }
+        else if (aggregate >= 85) { letterGrade = 'A'; points = 4.0; }
+        else if (aggregate >= 80) { letterGrade = 'A-'; points = 3.7; }
+        else if (aggregate >= 75) { letterGrade = 'B+'; points = 3.3; }
+        else if (aggregate >= 70) { letterGrade = 'B'; points = 3.0; }
+        else if (aggregate >= 65) { letterGrade = 'B-'; points = 2.7; }
+        else if (aggregate >= 60) { letterGrade = 'C+'; points = 2.3; }
+        else if (aggregate >= 55) { letterGrade = 'C'; points = 2.0; }
+        else if (aggregate >= 50) { letterGrade = 'D'; points = 1.0; }
+        else { letterGrade = 'F'; points = 0.0; }
+      } else if (system === 'custom') {
+        const DEFAULT_CUSTOM_GRADES = [
+          { grade: 'A', percentage: '88% - 100%', points: '4' },
+          { grade: 'B+', percentage: '81% - 87%', points: '3.5' },
+          { grade: 'B', percentage: '74% - 80%', points: '3' },
+          { grade: 'C+', percentage: '67% - 73%', points: '2.5' },
+          { grade: 'C', percentage: '60% - 66%', points: '2' },
+          { grade: 'F', percentage: 'Below 60%', points: '0' },
+        ];
+        const list = instCourse.customGradingSystem || DEFAULT_CUSTOM_GRADES;
+        
+        const parsePercentRangeLocal = (pctStr: string): { min: number; max: number } => {
+          if (!pctStr) return { min: 0, max: 0 };
+          const clean = pctStr.replace(/%/g, '').trim();
+          if (clean.toLowerCase().includes('below')) {
+            const val = parseInt(clean.replace(/below/i, '').trim(), 10);
+            return { min: 0, max: isNaN(val) ? 0 : val };
+          }
+          const parts = clean.split(/[-–to]/);
+          if (parts.length === 2) {
+            const minVal = parseInt(parts[0].trim(), 10);
+            const maxVal = parseInt(parts[1].trim(), 10);
+            return {
+              min: isNaN(minVal) ? 0 : minVal,
+              max: isNaN(maxVal) ? 0 : maxVal
+            };
+          }
+          const single = parseInt(clean, 10);
+          return { min: isNaN(single) ? 0 : single, max: isNaN(single) ? 0 : single };
+        };
+
+        let found = false;
+        for (const tier of list) {
+          const range = parsePercentRangeLocal(tier.percentage);
+          if (aggregate >= range.min && aggregate <= range.max) {
+            letterGrade = tier.grade;
+            points = parseFloat(tier.points) || 0.0;
+            found = true;
+            break;
+          }
+        }
+        if (!found) {
+          const sorted = [...list].sort((a, b) => {
+            const rA = parsePercentRangeLocal(a.percentage);
+            const rB = parsePercentRangeLocal(b.percentage);
+            return rA.min - rB.min;
+          });
+          if (sorted.length > 0) {
+            const lowestRange = parsePercentRangeLocal(sorted[0].percentage);
+            if (aggregate < lowestRange.min) {
+              letterGrade = 'F';
+              points = 0.0;
+            } else {
+              const highestTier = sorted[sorted.length - 1];
+              letterGrade = highestTier.grade;
+              points = parseFloat(highestTier.points) || 0.0;
+            }
+          } else {
+            letterGrade = 'F';
+            points = 0.0;
+          }
+        }
+      } else {
+        // Fallback
+        if (aggregate >= 88) { letterGrade = 'A'; points = 4.0; }
+        else if (aggregate >= 81) { letterGrade = 'B+'; points = 3.5; }
+        else if (aggregate >= 74) { letterGrade = 'B'; points = 3.0; }
+        else if (aggregate >= 67) { letterGrade = 'C+'; points = 2.5; }
+        else if (aggregate >= 60) { letterGrade = 'C'; points = 2.0; }
+        else { letterGrade = 'F'; points = 0.0; }
       }
     }
 
@@ -1046,18 +1090,7 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
           </div>
         )}
 
-        {/* DEMO ADVISORY */}
-        <div className="bg-indigo-50/40 border border-indigo-100/80 rounded-2xl p-4 flex gap-3.5 items-start">
-          <div className="h-8 w-8 bg-indigo-100 rounded-lg flex items-center justify-center text-indigo-600 shrink-0 shadow-sm mt-0.5">
-            <Sparkles className="h-4.5 w-4.5" />
-          </div>
-          <div className="space-y-0.5">
-            <h4 className="text-xs font-bold text-indigo-950">Official Student Results Ledger & Outcome-Based Education (OBE) Audit</h4>
-            <p className="text-[11px] text-slate-500 leading-normal font-medium">
-              This dashboard provides complete, secure, read-only transparency into your academic records. You can explore your semester transcript grades, individual assessment item points, Course Learning Outcome (CLO) attainment indices, and Graduate Attribute (GA) profiles.
-            </p>
-          </div>
-        </div>
+
 
         {/* SECURE STUDENT INFO ON MOBILE */}
         {activeStudent && (
