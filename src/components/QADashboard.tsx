@@ -127,6 +127,36 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
       .sort((a, b) => a.id.localeCompare(b.id));
   }, [semesterReportData]);
 
+  const combinedGAData = useMemo(() => {
+    if (!semesterReportData?.semesters) return [];
+    const uniqueGAsList = uniqueGAs;
+    
+    return uniqueGAsList.map(ga => {
+      let totalAttainment = 0;
+      let semesterCount = 0;
+      let totalCourses = 0;
+      
+      semesterReportData.semesters.forEach((sem: any) => {
+        const found = sem.attributes?.find((attr: any) => attr.id === ga.id);
+        if (found) {
+          totalAttainment += found.averageAttainment;
+          semesterCount++;
+          totalCourses += found.contributingCoursesCount || sem.courseCodes?.length || 0;
+        }
+      });
+      
+      const averageAttainment = semesterCount > 0 ? Math.round(totalAttainment / semesterCount) : 0;
+      
+      return {
+        id: ga.id,
+        title: ga.title,
+        averageAttainment,
+        contributingCoursesCount: totalCourses,
+        semestersCount: semesterCount,
+      };
+    });
+  }, [uniqueGAs, semesterReportData]);
+
   // Core navigation selectors directly in header
   const [activeDeptId, setActiveDeptId] = useState<string>(() => {
     return localStorage.getItem('IQRA_OBE_USER_DEPT_ID') || 'computing';
@@ -3328,13 +3358,13 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                         <h4 className="text-sm font-black text-slate-800 flex items-center gap-2">
                           <Activity className="w-4 h-4 text-indigo-600" />
                           {selectedSemesterGaFocus === 'all' 
-                            ? 'Semester-Wise GA Attainment Distribution Plan' 
-                            : `Attainment Progression Trend for ${selectedSemesterGaFocus}`}
+                            ? 'Program-Wide Graduate Attribute (GA) Attainment Distribution' 
+                            : `Attainment Progress Trend for ${selectedSemesterGaFocus}`}
                         </h4>
                         <p className="text-xs text-slate-400 mt-0.5">
                           {selectedSemesterGaFocus === 'all'
-                            ? 'Displays students\' average performance in each Graduate Attribute (GA) clustered by academic semesters.'
-                            : `Displays average student performance for Graduate Attribute ${selectedSemesterGaFocus} across all curriculum semesters.`}
+                            ? "Displays students' overall average performance in each Graduate Attribute (GA) combined across all curriculum semesters."
+                            : `Displays average student performance for Graduate Attribute ${selectedSemesterGaFocus} across all combined curriculum semesters.`}
                         </p>
                       </div>
 
@@ -3351,78 +3381,61 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                             <div className="w-full text-left">0%</div>
                           </div>
 
-                          {/* Render Clusters for Semesters */}
-                          {semesterReportData.semesters.map((sem: any) => {
-                            // Filter attributes based on GA focus
-                            const filteredAttrs = sem.attributes?.filter((attr: any) => 
-                              selectedSemesterGaFocus === 'all' || attr.id === selectedSemesterGaFocus
-                            ) || [];
-
-                            if (filteredAttrs.length === 0) return null;
-
-                            return (
-                              <div key={sem.semester} className="flex-1 flex flex-col items-center relative z-10 h-full justify-end">
+                          {/* Render Bars for Combined GAs */}
+                          <div className="flex-1 flex items-end justify-center gap-4 md:gap-8 relative z-10 h-full w-full px-6">
+                            {combinedGAData
+                              ?.filter((ga: any) => selectedSemesterGaFocus === 'all' || ga.id === selectedSemesterGaFocus)
+                              ?.map((ga: any) => {
+                                const averageAttainment = ga.averageAttainment;
+                                const colors = getGAColor(ga.id);
                                 
-                                {/* Clustered Bars group */}
-                                <div className="flex gap-2 items-end justify-center w-full px-2">
-                                  {filteredAttrs.map((attr: any) => {
-                                    const averageAttainment = attr.averageAttainment;
-                                    const colors = getGAColor(attr.id);
+                                return (
+                                  <div key={ga.id} className="flex-1 max-w-[64px] flex flex-col items-center group relative">
                                     
-                                    return (
-                                      <div key={attr.id} className="flex-1 max-w-[28px] flex flex-col items-center group relative">
-                                        
-                                        {/* Tooltip */}
-                                        <div className="absolute bottom-full mb-2 opacity-0 group-hover:opacity-100 transition-opacity bg-slate-900 text-white text-[10px] p-3 rounded-lg shadow-xl pointer-events-none w-52 font-sans z-40 text-left leading-normal">
-                                          <p className="font-extrabold text-indigo-300 uppercase font-mono text-[9px] mb-1">
-                                            {sem.semester} Semester Plan
-                                          </p>
-                                          <p className="font-black text-white text-xs mb-1">
-                                            {attr.id}: {attr.title}
-                                          </p>
-                                          <div className="border-t border-slate-700 my-1.5 pt-1.5 flex justify-between items-center">
-                                            <span className="font-bold text-[10px]">Average Attainment:</span>
-                                            <span className="font-black text-indigo-400 text-xs">{averageAttainment}%</span>
-                                          </div>
-                                          <div className="text-[9.5px] text-slate-400 font-medium">
-                                            Contributing Courses: {attr.contributingCoursesCount || sem.courseCodes?.length || 0}
-                                          </div>
-                                          <div className="mt-1 flex items-center gap-1.5">
-                                            <span className="text-[9.5px] text-slate-400 font-medium">Status:</span>
-                                            <span className={`px-1.5 py-0.2 rounded text-[8px] font-black uppercase ${
-                                              averageAttainment >= 50 ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
-                                            }`}>
-                                              {averageAttainment >= 50 ? 'Passed' : 'Audit Required'}
-                                            </span>
-                                          </div>
-                                        </div>
-
-                                        {/* Bar Backing and Fill */}
-                                        <div className="w-full bg-slate-200/60 hover:bg-slate-200 rounded-t-md h-52 flex items-end overflow-hidden border border-slate-300/40 shadow-2xs hover:border-indigo-400/50 transition-colors">
-                                          <div 
-                                            style={{ height: `${averageAttainment}%` }}
-                                            className={`w-full rounded-t-sm transition-all duration-500 cursor-pointer ${colors.split(' ')[0]}`}
-                                          />
-                                        </div>
-
-                                        {/* Dynamic small tag under each bar inside cluster */}
-                                        {selectedSemesterGaFocus === 'all' && (
-                                          <span className="text-[7.5px] font-mono font-bold text-slate-400 mt-1 uppercase scale-90">
-                                            {attr.id.replace('GA-', '')}
-                                          </span>
-                                        )}
+                                    {/* Tooltip */}
+                                    <div className="absolute bottom-full mb-2 opacity-0 group-hover:opacity-100 transition-opacity bg-slate-900 text-white text-[10px] p-3 rounded-lg shadow-xl pointer-events-none w-56 font-sans z-40 text-left leading-normal">
+                                      <p className="font-extrabold text-indigo-300 uppercase font-mono text-[9px] mb-1">
+                                        Overall Program Attainment
+                                      </p>
+                                      <p className="font-black text-white text-xs mb-1">
+                                        {ga.id}: {ga.title}
+                                      </p>
+                                      <div className="border-t border-slate-700 my-1.5 pt-1.5 flex justify-between items-center">
+                                        <span className="font-bold text-[10px]">Average Attainment:</span>
+                                        <span className="font-black text-indigo-400 text-xs">{averageAttainment}%</span>
                                       </div>
-                                    );
-                                  })}
-                                </div>
+                                      <div className="text-[9.5px] text-slate-400 font-medium">
+                                        Mapped Semesters: {ga.semestersCount}
+                                      </div>
+                                      <div className="text-[9.5px] text-slate-400 font-medium">
+                                        Contributing Courses: {ga.contributingCoursesCount}
+                                      </div>
+                                      <div className="mt-1 flex items-center gap-1.5">
+                                        <span className="text-[9.5px] text-slate-400 font-medium">Status:</span>
+                                        <span className={`px-1.5 py-0.2 rounded text-[8px] font-black uppercase ${
+                                          averageAttainment >= 50 ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                                        }`}>
+                                          {averageAttainment >= 50 ? 'Passed' : 'Audit Required'}
+                                        </span>
+                                      </div>
+                                    </div>
 
-                                {/* Semester Label bottom of the cluster */}
-                                <div className="text-[10px] font-bold text-slate-700 mt-2 font-mono whitespace-nowrap bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full uppercase tracking-tight">
-                                  {sem.semester}
-                                </div>
-                              </div>
-                            );
-                          })}
+                                    {/* Bar Backing and Fill */}
+                                    <div className="w-full bg-slate-200/60 hover:bg-slate-200 rounded-t-md h-52 flex items-end overflow-hidden border border-slate-300/40 shadow-2xs hover:border-indigo-400/50 transition-colors">
+                                      <div 
+                                        style={{ height: `${averageAttainment}%` }}
+                                        className={`w-full rounded-t-sm transition-all duration-500 cursor-pointer ${colors.split(' ')[0]}`}
+                                      />
+                                    </div>
+
+                                    {/* GA label bottom of the bar */}
+                                    <span className="text-[10px] font-mono font-black text-slate-700 mt-2 uppercase">
+                                      {ga.id}
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                          </div>
                         </div>
                       </div>
 
@@ -3457,99 +3470,76 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                       </div>
                     </div>
 
-                    {/* Semester-Wise Breakdown Details Card */}
-                    <div className="grid grid-cols-1 gap-6">
-                      {semesterReportData.semesters.map((sem: any) => {
-                        const hasFocusAttr = sem.attributes?.some((attr: any) => 
-                          selectedSemesterGaFocus === 'all' || attr.id === selectedSemesterGaFocus
-                        );
+                    {/* Combined Program-Wide Graduate Attribute Attainment Details Card */}
+                    <div className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+                      {/* Card Header */}
+                      <div className="bg-slate-50 border-b border-slate-250 px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div className="space-y-1">
+                          <span className="text-[10px] font-mono font-black text-indigo-600 bg-indigo-50 border border-indigo-150 px-2.5 py-0.5 rounded-full uppercase">
+                            Combined Curriculum
+                          </span>
+                          <h4 className="text-sm font-black text-slate-800">
+                            Graduate Attributes (GA) Program-Wide Attainment Plan
+                          </h4>
+                        </div>
+                        <div className="text-xs text-slate-500 font-semibold">
+                          Showing average attainment over all mapped semesters
+                        </div>
+                      </div>
 
-                        if (!hasFocusAttr) return null;
+                      {/* Attributes List */}
+                      <div className="divide-y divide-slate-150">
+                        {combinedGAData
+                          ?.filter((ga: any) => selectedSemesterGaFocus === 'all' || ga.id === selectedSemesterGaFocus)
+                          ?.map((ga: any) => {
+                            const isPassed = ga.averageAttainment >= 50;
+                            const badgeStyle = getGATextColors(ga.id);
 
-                        return (
-                          <div key={sem.semester} className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm hover:shadow-md transition-shadow">
-                            
-                            {/* Card Header */}
-                            <div className="bg-slate-50 border-b border-slate-250 px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                              <div className="space-y-1">
-                                <span className="text-[10px] font-mono font-black text-indigo-600 bg-indigo-50 border border-indigo-150 px-2.5 py-0.5 rounded-full uppercase">
-                                  {sem.semester} Semester Plan
-                                </span>
-                                <h4 className="text-sm font-black text-slate-800">
-                                  Mapped Curriculum Objectives Plan
-                                </h4>
-                              </div>
-                              <div className="flex items-center gap-1.5">
-                                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Contributing Courses:</span>
-                                <div className="flex flex-wrap gap-1">
-                                  {sem.courseCodes?.map((code: string) => (
-                                    <span key={code} className="px-2 py-0.5 bg-slate-200 border border-slate-300 text-slate-700 rounded text-[9.5px] font-mono font-bold">
-                                      {code}
+                            return (
+                              <div key={ga.id} className="p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 hover:bg-slate-50/50 transition-colors">
+                                <div className="flex items-start gap-3.5 max-w-xl">
+                                  <span className={`px-2.5 py-1 rounded-lg border font-mono font-black text-[11px] shrink-0 tracking-tight ${badgeStyle.text} ${badgeStyle.bg} ${badgeStyle.border}`}>
+                                    {ga.id}
+                                  </span>
+                                  <div className="space-y-0.5">
+                                    <h5 className="text-xs font-extrabold text-slate-800 leading-snug">
+                                      {ga.title}
+                                    </h5>
+                                    <p className="text-[10.5px] text-slate-400 font-medium">
+                                      Curriculum analysis for attribute compliance over {ga.contributingCoursesCount} mapped course(s) across {ga.semestersCount} semester(s).
+                                    </p>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-6 w-full md:w-auto shrink-0 justify-between md:justify-end">
+                                  {/* Horizontal Progress Bar */}
+                                  <div className="flex items-center gap-2.5 w-48 sm:w-56 shrink-0">
+                                    <div className="w-full bg-slate-100 border border-slate-200 rounded-full h-2 overflow-hidden shadow-2xs">
+                                      <div 
+                                        style={{ width: `${ga.averageAttainment}%` }}
+                                        className={`h-full rounded-full transition-all duration-500 ${
+                                          isPassed ? 'bg-emerald-500' : 'bg-rose-500'
+                                        }`}
+                                      />
+                                    </div>
+                                    <span className="text-xs font-mono font-black text-slate-800 tracking-tight w-10 text-right">
+                                      {ga.averageAttainment}%
                                     </span>
-                                  ))}
-                                  {(!sem.courseCodes || sem.courseCodes.length === 0) && (
-                                    <span className="text-slate-400 italic text-xs font-sans">No courses mapped</span>
-                                  )}
+                                  </div>
+
+                                  {/* Status Badge */}
+                                  <span className={`px-3 py-1 rounded-full text-[9px] font-black border tracking-wider uppercase inline-block text-center w-28 ${
+                                    isPassed 
+                                      ? 'bg-emerald-50 text-emerald-800 border-emerald-150 shadow-2xs' 
+                                      : 'bg-rose-50 text-rose-800 border-rose-150 shadow-2xs'
+                                  }`}>
+                                    {isPassed ? 'Passed' : 'Audit Required'}
+                                  </span>
                                 </div>
                               </div>
-                            </div>
-
-                            {/* Attributes List */}
-                            <div className="divide-y divide-slate-150">
-                              {sem.attributes?.filter((attr: any) => 
-                                selectedSemesterGaFocus === 'all' || attr.id === selectedSemesterGaFocus
-                              ).map((attr: any) => {
-                                const isPassed = attr.averageAttainment >= 50;
-                                const badgeStyle = getGATextColors(attr.id);
-
-                                return (
-                                  <div key={attr.id} className="p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 hover:bg-slate-50/50 transition-colors">
-                                    <div className="flex items-start gap-3.5 max-w-xl">
-                                      <span className={`px-2.5 py-1 rounded-lg border font-mono font-black text-[11px] shrink-0 tracking-tight ${badgeStyle.text} ${badgeStyle.bg} ${badgeStyle.border}`}>
-                                        {attr.id}
-                                      </span>
-                                      <div className="space-y-0.5">
-                                        <h5 className="text-xs font-extrabold text-slate-800 leading-snug">
-                                          {attr.title}
-                                        </h5>
-                                        <p className="text-[10.5px] text-slate-400 font-medium">
-                                          Curriculum analysis for attribute compliance over {attr.contributingCoursesCount || sem.courseCodes?.length || 1} mapped course(s).
-                                        </p>
-                                      </div>
-                                    </div>
-
-                                    <div className="flex items-center gap-6 w-full md:w-auto shrink-0 justify-between md:justify-end">
-                                      {/* Horizontal Progress Bar */}
-                                      <div className="flex items-center gap-2.5 w-48 sm:w-56 shrink-0">
-                                        <div className="w-full bg-slate-100 border border-slate-200 rounded-full h-2 overflow-hidden shadow-2xs">
-                                          <div 
-                                            style={{ width: `${attr.averageAttainment}%` }}
-                                            className={`h-full rounded-full transition-all duration-500 ${
-                                              isPassed ? 'bg-emerald-500' : 'bg-rose-500'
-                                            }`}
-                                          />
-                                        </div>
-                                        <span className="text-xs font-mono font-black text-slate-800 tracking-tight w-10 text-right">
-                                          {attr.averageAttainment}%
-                                        </span>
-                                      </div>
-
-                                      {/* Status Badge */}
-                                      <span className={`px-3 py-1 rounded-full text-[9px] font-black border tracking-wider uppercase inline-block text-center w-28 ${
-                                        isPassed 
-                                          ? 'bg-emerald-50 text-emerald-800 border-emerald-150 shadow-2xs' 
-                                          : 'bg-rose-50 text-rose-800 border-rose-150 shadow-2xs'
-                                      }`}>
-                                        {isPassed ? 'Passed' : 'Audit Required'}
-                                      </span>
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        );
-                      })}
+                            );
+                          })}
+                      </div>
                     </div>
                   </div>
                 )}
