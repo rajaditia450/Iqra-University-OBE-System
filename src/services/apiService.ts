@@ -1524,6 +1524,16 @@ export const apiService = {
     return res.ok ? res.json() : null;
   },
 
+  async getProgramGAAttainmentBySemester(programId: string) {
+    const res = await fetchWithTimeout(`${BASE_URL}/reports/program-ga-attainment-by-semester/?programId=${programId.toLowerCase()}`, {
+      headers: getHeaders()
+    }, 5000);
+    if (!res.ok) {
+      throw new Error(`Failed to fetch program GA attainment by semester: ${res.statusText || res.status}`);
+    }
+    return res.json();
+  },
+
   saveLocalStorageData(data: OBEData): void {
     saveLocalStorageData(data);
   }
