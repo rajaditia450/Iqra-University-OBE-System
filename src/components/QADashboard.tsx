@@ -332,41 +332,38 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
           
           instCourse.categories?.forEach((cat: any) => {
             if (cat.percentage > 0) {
-              let categoryObtainedSum = 0;
-              let categoryMaxMarksSum = 0;
               const existingUnits = instCourse.unitsData?.[cat.name] || [];
               
               for (let u = 1; u <= cat.units; u++) {
                 const matchingUnit = existingUnits.find((unit: any) => unit.unitNo === u);
+                const unitWeightage = matchingUnit?.weightage ?? (100 / cat.units);
+                const totalMarks = matchingUnit ? matchingUnit.totalMarks : 10;
                 const questions = matchingUnit?.questions || [];
                 
+                let unitObtained = 0;
                 if (questions.length > 0) {
                   questions.forEach((q: any) => {
-                    categoryMaxMarksSum += q.maxMarks || 0;
                     const qKey = `q-${cat.name}-${u}-${q.id}`;
                     if (std.marks?.[qKey] !== undefined) {
-                      categoryObtainedSum += std.marks[qKey];
+                      unitObtained += std.marks[qKey];
                       hasAnyMarks = true;
                     }
                   });
                 } else {
-                  const totalMarks = matchingUnit ? matchingUnit.totalMarks : 10;
-                  categoryMaxMarksSum += totalMarks;
                   const dKey = `${cat.name}-${u}`;
                   if (std.marks?.[dKey] !== undefined) {
-                    categoryObtainedSum += std.marks[dKey];
+                    unitObtained += std.marks[dKey];
                     hasAnyMarks = true;
                   } else if (std.marks?.[cat.name] !== undefined && u === 1) {
-                    categoryObtainedSum += std.marks[cat.name];
+                    unitObtained += std.marks[cat.name];
                     hasAnyMarks = true;
                   }
                 }
+
+                if (totalMarks > 0) {
+                  catSumTotal += (unitObtained / totalMarks) * (unitWeightage / 100) * cat.percentage;
+                }
               }
-              
-              const categoryContribution = categoryMaxMarksSum > 0
-                ? (categoryObtainedSum / categoryMaxMarksSum) * cat.percentage
-                : 0;
-              catSumTotal += categoryContribution;
             }
           });
           
