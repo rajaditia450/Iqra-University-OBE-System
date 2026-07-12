@@ -1391,8 +1391,9 @@ export const apiService = {
     return res.json();
   },
 
-  async getStudentGAAttainment(regNo: string) {
-    const res = await fetchWithTimeout(`${BASE_URL}/reports/student-ga-attainment/?regNo=${regNo}`, {
+  async getStudentGAAttainment(regNo?: string) {
+    const url = regNo ? `${BASE_URL}/reports/student-ga-attainment/?regNo=${regNo}` : `${BASE_URL}/reports/student-ga-attainment/`;
+    const res = await fetchWithTimeout(url, {
       headers: getHeaders()
     }, 5000);
     if (!res.ok) throw new Error('Failed to fetch student GA attainment');
@@ -1407,8 +1408,9 @@ export const apiService = {
     return res.json();
   },
 
-  async getStudentSummary(regNo: string) {
-    const res = await fetchWithTimeout(`${BASE_URL}/reports/student-summary/?regNo=${regNo}`, {
+  async getStudentSummary(regNo?: string) {
+    const url = regNo ? `${BASE_URL}/reports/student-summary/?regNo=${regNo}` : `${BASE_URL}/reports/student-summary/`;
+    const res = await fetchWithTimeout(url, {
       headers: getHeaders()
     }, 5000);
     if (!res.ok) throw new Error('Failed to fetch student summary');

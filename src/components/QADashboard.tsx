@@ -39,6 +39,25 @@ interface QADashboardProps {
 
 type ActiveViewModule = 'allocation' | 'po_mapping' | 'vision_mission' | 'po_configure' | 'attainment_reports';
 
+function naturalCompare(s1: string, s2: string): number {
+  const aParts = s1.split(/(\d+)/);
+  const bParts = s2.split(/(\d+)/);
+  const length = Math.min(aParts.length, bParts.length);
+  for (let i = 0; i < length; i++) {
+    const aPart = aParts[i];
+    const bPart = bParts[i];
+    if (aPart !== bPart) {
+      const aNum = parseInt(aPart, 10);
+      const bNum = parseInt(bPart, 10);
+      if (!isNaN(aNum) && !isNaN(bNum)) {
+        return aNum - bNum;
+      }
+      return aPart.localeCompare(bPart);
+    }
+  }
+  return aParts.length - bParts.length;
+}
+
 export default function QADashboard({ onLogout }: QADashboardProps) {
   const [data, setData] = useState<OBEData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -70,6 +89,8 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
   const [editingProgramInline, setEditingProgramInline] = useState<boolean>(false);
   const [tempProgramVision, setTempProgramVision] = useState('');
   const [tempProgramMission, setTempProgramMission] = useState('');
+  const [isEditingVmInline, setIsEditingVmInline] = useState<boolean>(false);
+  const [isEditingPoInline, setIsEditingPoInline] = useState<boolean>(false);
 
   // Dropdown states for Desktop-Style Menu Bar
   const [openMenu, setOpenMenu] = useState<string | null>(null);
@@ -232,10 +253,11 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
     }
   }, [activeDeptId, data]);
 
-  // Reset page when selectors change
+  // Reset page and inline editor when selectors change
   useEffect(() => {
     setCurrentPage(1);
-  }, [activeDeptId, activeProgramId, selectedCourseId, searchPhrase]);
+    setIsEditingVmInline(false);
+  }, [activeDeptId, activeProgramId, selectedCourseId, searchPhrase, activeModule]);
 
   // Extract batch code from student registration number
   const getStudentBatchCode = (regNo: string): string => {
@@ -386,6 +408,7 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
         activeGAs = data.gas.filter(ga => ga.programId === selectedReportProgramId || (!ga.programId && ga.departmentId === activeDeptId));
       }
     }
+    activeGAs = [...activeGAs].sort((a, b) => naturalCompare(a.id, b.id));
 
     if (activeGAs.length === 0) {
       // Fallback GAs
@@ -466,9 +489,11 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
   const filteredGAs = useMemo(() => {
     if (!data) return [];
     // Only yield GAs matching the currently active program code specifically
-    return data.gas.filter(g => 
+    const list = data.gas.filter(g => 
       String(g.programId).trim().toLowerCase() === String(activeProgramId).trim().toLowerCase()
     );
+    // Sort naturally so that GA-10 comes after GA-9
+    return [...list].sort((a, b) => naturalCompare(a.id, b.id));
   }, [data, activeDeptId, activeProgramId]);
 
   // Filtered courses matching selected department and selectors
@@ -872,7 +897,7 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
       return;
     }
     const coursesInDept = data.courses.filter(c => c.departmentId === activeDeptId);
-    const gasInDept = data.gas.filter(g => g.departmentId === activeDeptId);
+    const gasInDept = [...data.gas.filter(g => g.departmentId === activeDeptId)].sort((a, b) => naturalCompare(a.id, b.id));
     
     let csv = "Course Code,Course Title," + gasInDept.map(g => g.id).join(",") + "\n";
     coursesInDept.forEach(c => {
@@ -967,13 +992,6 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                       onClick={() => {
                         setActiveProgramId('');
                         setActiveModule('vision_mission');
-                        setViewVmModal({
-                          type: 'department',
-                          id: activeDepartment.id,
-                          name: activeDepartment.name,
-                          vision: activeDepartment.vision,
-                          mission: activeDepartment.mission
-                        });
                         setOpenMenu(null);
                       }}
                       className="w-full text-left px-3.5 py-2 text-xs text-indigo-950 bg-indigo-50/50 hover:bg-indigo-50 hover:text-indigo-950 flex items-start gap-2 rounded font-bold text-left border-l-2 border-indigo-500 focus:outline-none"
@@ -998,14 +1016,6 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                           onClick={() => {
                             setActiveProgramId(p.id);
                             setActiveModule('vision_mission');
-                            setViewVmModal({
-                              type: 'program',
-                              id: p.id,
-                              name: p.name,
-                              code: p.code,
-                              vision: p.vision || 'To produce outstanding and ethically-grounded professionals equipped with modern analytical tools and problem-solving skills to lead in the domain of ' + p.name + '.',
-                              mission: p.mission || 'To deliver rigorous, comprehensive, and student-centered curriculum in ' + p.name + ' that blends theoretical foundations with hands-on practice, preparing graduates for lifelong learning, research excellence, and socially-responsible career paths in the global technological environment.'
-                            });
                             setOpenMenu(null);
                           }}
                           className="w-full text-left px-3.5 py-1.5 text-xs text-slate-705 hover:bg-indigo-50 hover:text-indigo-950 flex items-center gap-2 rounded text-left font-medium focus:outline-none"
@@ -1022,70 +1032,85 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
               )}
             </div>
 
-
-            {/* VIEW MENU */}
+            {/* PROGRAM OBJECTIVE MENU */}
             <div className="relative">
               <button
-                onClick={() => setOpenMenu(openMenu === 'view' ? null : 'view')}
-                onMouseEnter={() => openMenu && setOpenMenu('view')}
-                className={`px-3 py-1 text-xs font-sans font-semibold text-slate-700 hover:bg-slate-200 hover:text-slate-900 rounded cursor-pointer transition-all ${openMenu === 'view' ? 'bg-slate-200 text-slate-900 shadow-sm' : ''}`}
+                onClick={() => {
+                  setOpenMenu(openMenu === 'program_objective_dropdown' ? null : 'program_objective_dropdown');
+                  setActiveModule('po_configure');
+                }}
+                onMouseEnter={() => openMenu && setOpenMenu('program_objective_dropdown')}
+                className={`px-3 py-1 text-xs font-sans font-semibold text-slate-700 hover:bg-slate-200 hover:text-slate-900 rounded cursor-pointer transition-all ${openMenu === 'program_objective_dropdown' || activeModule === 'po_configure' ? 'bg-indigo-900 text-white shadow-sm font-bold' : ''}`}
               >
-                View
+                Program Objective
               </button>
-              {openMenu === 'view' && (
-                <div className="absolute left-0 mt-1 w-72 bg-white border border-slate-300 rounded-lg shadow-xl py-1 z-50 animate-in fade-in slide-in-from-top-1 duration-100">
-                  <button
-                    onClick={() => { setActiveModule('allocation'); setOpenMenu(null); }}
-                    className={`w-full text-left px-3.5 py-1.5 text-xs flex items-center justify-between rounded ${activeModule === 'allocation' ? 'bg-indigo-50 text-indigo-950 font-bold' : 'text-slate-700 hover:bg-indigo-50'}`}
-                  >
-                    <span className="flex items-center gap-2">
-                       <Layout className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                       Course to GA Allocation Matrix
-                    </span>
-                    {activeModule === 'allocation' && <Check className="w-3.5 h-3.5 text-indigo-600 shrink-0" />}
-                  </button>
-                  <button
-                    onClick={() => { setActiveModule('po_mapping'); setOpenMenu(null); }}
-                    className={`w-full text-left px-3.5 py-1.5 text-xs flex items-center justify-between rounded ${activeModule === 'po_mapping' ? 'bg-indigo-50 text-indigo-950 font-bold' : 'text-slate-700 hover:bg-indigo-50'}`}
-                  >
-                    <span className="flex items-center gap-2">
-                       <Activity className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                       PO to GA Mapping Matrix
-                    </span>
-                    {activeModule === 'po_mapping' && <Check className="w-3.5 h-3.5 text-indigo-600 shrink-0" />}
-                  </button>
+              {openMenu === 'program_objective_dropdown' && (
+                <div className="absolute left-0 mt-1 w-80 bg-white border border-slate-300 rounded-lg shadow-xl py-1.5 z-50 animate-in fade-in slide-in-from-top-1 duration-100" onClick={(e) => e.stopPropagation()}>
+                  <div className="px-3.5 py-1 text-[9px] text-slate-400 font-bold uppercase tracking-wider font-sans">
+                    Program Objectives List
+                  </div>
+                  <div className="space-y-0.5">
+                    {activeProgram ? (
+                      activeProgram.pos.map((po, idx) => (
+                        <button
+                          key={po.id}
+                          onClick={() => {
+                            setActiveModule('po_configure');
+                            setOpenMenu(null);
+                          }}
+                          className="w-full text-left px-3.5 py-1.5 text-xs text-slate-705 hover:bg-indigo-50 hover:text-indigo-950 flex items-center gap-2 rounded text-left font-medium focus:outline-none"
+                        >
+                          <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-[10px] shrink-0 font-serif">
+                            {idx + 1}
+                          </span>
+                          <span className="truncate">{po.id}: {po.text || 'Not defined yet'}</span>
+                        </button>
+                      ))
+                    ) : (
+                      ['PO-1', 'PO-2', 'PO-3', 'PO-4'].map((poCode, idx) => (
+                        <button
+                          key={poCode}
+                          onClick={() => {
+                            setActiveModule('po_configure');
+                            setOpenMenu(null);
+                          }}
+                          className="w-full text-left px-3.5 py-1.5 text-xs text-slate-405 hover:bg-indigo-50 flex items-center gap-2 rounded text-left font-medium focus:outline-none"
+                        >
+                          <span className="w-5 h-5 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center font-bold text-[10px] shrink-0">
+                            {idx + 1}
+                          </span>
+                          <span className="font-mono">{poCode} Objective</span>
+                        </button>
+                      ))
+                    )}
+                  </div>
                 </div>
               )}
             </div>
 
-            {/* CONFIGURE MENU */}
-            <div className="relative">
-              <button
-                onClick={() => setOpenMenu(openMenu === 'configure' ? null : 'configure')}
-                onMouseEnter={() => openMenu && setOpenMenu('configure')}
-                className={`px-3 py-1 text-xs font-sans font-semibold text-slate-700 hover:bg-slate-200 hover:text-slate-900 rounded cursor-pointer transition-all ${openMenu === 'configure' ? 'bg-slate-200 text-slate-900 shadow-sm' : ''}`}
-              >
-                Configure
-              </button>
-              {openMenu === 'configure' && (
-                <div className="absolute left-0 mt-1 w-64 bg-white border border-slate-300 rounded-lg shadow-xl py-1 z-50 animate-in fade-in slide-in-from-top-1 duration-100">
-                  <button
-                    onClick={() => { setActiveModule('vision_mission'); setOpenMenu(null); }}
-                    className="w-full text-left px-3.5 py-1.5 text-xs text-slate-700 hover:bg-indigo-50 hover:text-indigo-950 flex items-center gap-2 rounded focus:outline-none"
-                  >
-                    <Sliders className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                    <span>Department Attributes Settings</span>
-                  </button>
-                  <button
-                    onClick={() => { setActiveModule('po_configure'); setOpenMenu(null); }}
-                    className="w-full text-left px-3.5 py-1.5 text-xs text-slate-705 hover:bg-indigo-50 hover:text-indigo-950 flex items-center gap-2 rounded focus:outline-none"
-                  >
-                    <Settings className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                    <span>Program PO Objectives (PO1-PO4)</span>
-                  </button>
-                </div>
-              )}
-            </div>
+            {/* COURSES TO GA MAPPING BUTTON */}
+            <button
+              onClick={() => {
+                setActiveModule('allocation');
+                setOpenMenu(null);
+              }}
+              className={`px-3 py-1 text-xs font-sans font-semibold text-slate-700 hover:bg-slate-200 hover:text-slate-900 rounded cursor-pointer transition-all ${activeModule === 'allocation' ? 'bg-indigo-900 text-white shadow-sm font-bold' : ''}`}
+            >
+              Courses to GA mapping
+            </button>
+
+            {/* GA TO PO MAPPING BUTTON */}
+            <button
+              onClick={() => {
+                setActiveModule('po_mapping');
+                setOpenMenu(null);
+              }}
+              className={`px-3 py-1 text-xs font-sans font-semibold text-slate-700 hover:bg-slate-200 hover:text-slate-900 rounded cursor-pointer transition-all ${activeModule === 'po_mapping' ? 'bg-indigo-900 text-white shadow-sm font-bold' : ''}`}
+            >
+              GA to PO mapping
+            </button>
+
+
 
             {/* REPORTS MENU */}
             <div className="relative">
@@ -1224,53 +1249,7 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
             </div>
 
 
-            {/* Quick view switcher buttons */}
-            <div className="flex items-center gap-1 bg-slate-200/50 p-1 rounded-lg border border-slate-200">
-              <button 
-                onClick={() => {
-                  if (activeProgramId === '') {
-                    const firstProg = data?.programs?.find(p => p.departmentId === activeDeptId)?.id || '';
-                    setActiveProgramId(firstProg);
-                  }
-                  setActiveModule('allocation');
-                }}
-                className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${activeProgramId !== '' && activeModule === 'allocation' ? 'bg-white text-indigo-950 shadow-xs border border-slate-200' : 'text-slate-600 hover:text-slate-900'}`}
-              >
-                Allocation Matrix
-              </button>
-              <button 
-                onClick={() => {
-                  if (activeProgramId === '') {
-                    const firstProg = data?.programs?.find(p => p.departmentId === activeDeptId)?.id || '';
-                    setActiveProgramId(firstProg);
-                  }
-                  setActiveModule('po_mapping');
-                }}
-                className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${activeProgramId !== '' && activeModule === 'po_mapping' ? 'bg-white text-indigo-950 shadow-xs border border-slate-200' : 'text-slate-600 hover:text-slate-900'}`}
-              >
-                PO Mapping
-              </button>
-              <button 
-                onClick={() => {
-                  if (activeProgramId === '') {
-                    const firstProg = data?.programs?.find(p => p.departmentId === activeDeptId)?.id || '';
-                    setActiveProgramId(firstProg);
-                  }
-                  setActiveModule('po_configure');
-                }}
-                className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${activeProgramId !== '' && activeModule === 'po_configure' ? 'bg-white text-indigo-950 shadow-xs border border-slate-200' : 'text-slate-600 hover:text-slate-900'}`}
-              >
-                Configure PO's
-              </button>
-              <button 
-                onClick={() => {
-                  setActiveModule('attainment_reports');
-                }}
-                className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${activeModule === 'attainment_reports' ? 'bg-indigo-600 text-white shadow-xs' : 'text-indigo-600 hover:text-indigo-900 bg-indigo-50/50 hover:bg-indigo-50'}`}
-              >
-                📊 GA Reports
-              </button>
-            </div>
+
 
             {/* Course Filter Search Bar inside the Quick toolbar */}
             {activeModule === 'allocation' && (
@@ -1336,52 +1315,15 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
         ) : (
           <div className="max-w-[1700px] mx-auto space-y-6">
 
-            {activeProgramId === '' ? (
-              <div className="max-w-4xl mx-auto space-y-6 py-1 animate-in fade-in duration-350">
-                
-                <div className="text-center select-none pt-2">
-                  <h1 className="text-2xl font-serif font-bold text-slate-900 tracking-tight">
-                    Departmental Vision &amp; Mission Charters
-                  </h1>
-                </div>
-
-                {/* Professional Academic-style Text blocks */}
-                <div className="space-y-6">
-                  {data.departments.filter(d => d.id === activeDeptId).map((dept) => {
-                    return (
-                      <div key={dept.id} className="bg-white border-2 border-slate-200 rounded-3xl p-8 shadow-sm relative overflow-hidden transition-all duration-200 text-left">
-                        {/* Minimal left side accent stripe */}
-                        <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-slate-800"></div>
-                        
-                        <div className="flex items-center justify-between border-b border-slate-200 pb-5 mb-6 pl-2">
-                          <div>
-                            <span className="text-xs font-sans font-extrabold tracking-wider text-indigo-650 uppercase">ACADEMIC DEPARTMENT SPECIFICATIONS</span>
-                            <h3 className="text-2xl font-extrabold font-sans text-slate-950 tracking-tight mt-1">
-                              {dept.name}
-                            </h3>
-                          </div>
-                        </div>
-
-                        <div className="space-y-6 pl-2 text-left">
-                          {/* Vision section */}
-                          <div className="space-y-2">
-                            <h4 className="text-base font-sans font-extrabold tracking-wide text-slate-950 uppercase border-l-4 border-indigo-600 pl-2.5">DEPARTMENT VISION</h4>
-                            <p className="text-slate-900 text-[16px] font-sans leading-relaxed italic pr-4 font-normal">
-                              "{dept.vision}"
-                            </p>
-                          </div>
-
-                          {/* Mission section */}
-                          <div className="space-y-2">
-                            <h4 className="text-base font-sans font-extrabold tracking-wide text-slate-950 uppercase border-l-4 border-indigo-600 pl-2.5">DEPARTMENT MISSION</h4>
-                            <p className="text-slate-900 text-[16px] font-sans leading-relaxed pr-4 font-normal">
-                              {dept.mission}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
+            {activeProgramId === '' && activeModule !== 'vision_mission' ? (
+              <div className="max-w-xl mx-auto py-16 px-8 text-center bg-white border border-slate-200 rounded-3xl shadow-sm animate-in fade-in duration-300">
+                <GraduationCap className="w-14 h-14 text-indigo-900/30 mx-auto mb-4" />
+                <h3 className="font-serif font-bold text-lg text-slate-900 mb-2">No Program Selected</h3>
+                <p className="text-slate-600 text-xs max-w-sm mx-auto leading-relaxed mb-5">
+                  Please select an academic program from the dropdown in the navigation bar to view and manage its OBE curriculum mappings.
+                </p>
+                <div className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-950 bg-indigo-50 border border-indigo-100/60 px-3.5 py-1.5 rounded-lg">
+                  <span>💡 Select a program above to get started</span>
                 </div>
               </div>
             ) : (
@@ -1681,7 +1623,47 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                           <span className="text-[10px] uppercase font-mono tracking-widest text-indigo-200 font-bold">PROGRAM SPECIFIC CHARTER</span>
                           <h3 className="font-serif font-bold text-lg">{activeProgram.name} ({activeProgram.code}) Vision &amp; Mission</h3>
                         </div>
-                        <GraduationCap className="w-8 h-8 opacity-40 text-white" />
+                        <div className="flex items-center gap-2">
+                          {isEditingVmInline ? (
+                            <>
+                              <button
+                                onClick={async () => {
+                                  await handleSaveProgramVisionMission();
+                                  setIsEditingVmInline(false);
+                                }}
+                                disabled={savingLoad}
+                                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm hover:scale-105"
+                              >
+                                {savingLoad ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                                <span>Save Changes</span>
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setEditProgramVision(activeProgram.vision || '');
+                                  setEditProgramMission(activeProgram.mission || '');
+                                  setIsEditingVmInline(false);
+                                }}
+                                className="px-3 py-1.5 bg-slate-700 hover:bg-slate-605 text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                                <span>Cancel</span>
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              onClick={() => {
+                                setEditProgramVision(activeProgram.vision || '');
+                                setEditProgramMission(activeProgram.mission || '');
+                                setIsEditingVmInline(true);
+                              }}
+                              className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white border border-white/20 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm hover:scale-105"
+                            >
+                              <Edit className="w-3.5 h-3.5" />
+                              <span>Edit Charter</span>
+                            </button>
+                          )}
+                          <GraduationCap className="w-8 h-8 opacity-40 text-white hidden sm:block ml-2" />
+                        </div>
                       </div>
 
                       <div className="p-6 md:p-8 space-y-8">
@@ -1694,7 +1676,7 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                             <h4 className="font-sans font-extrabold text-slate-950 text-base tracking-wide uppercase">PROGRAM VISION STATEMENT</h4>
                           </div>
                           
-                          {isConfiguring ? (
+                          {(isConfiguring || isEditingVmInline) ? (
                             <div className="space-y-2 pl-2">
                               <textarea
                                 value={editProgramVision}
@@ -1720,7 +1702,7 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                             <h4 className="font-sans font-extrabold text-slate-950 text-base tracking-wide uppercase">PROGRAM MISSION STATEMENT</h4>
                           </div>
 
-                          {isConfiguring ? (
+                          {(isConfiguring || isEditingVmInline) ? (
                             <div className="space-y-2 pl-2">
                               <textarea
                                 value={editProgramMission}
@@ -1739,16 +1721,29 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                         </div>
 
                         {/* Configuration Program Save Area */}
-                        {isConfiguring && (
-                           <div className="flex justify-end border-t border-indigo-100 pt-5">
-                            <button
-                              onClick={handleSaveProgramVisionMission}
-                              disabled={savingLoad}
-                              className="px-6 py-2.5 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center gap-2 shadow-md hover:shadow-lg hover:scale-105 active:scale-95 duration-100"
-                            >
-                              {savingLoad ? <Loader2 className="w-4 h-4 animate-spin" /> : '💾 SAVE PROGRAM CHARTER CHANGES'}
-                            </button>
-                          </div>
+                        {(isConfiguring || isEditingVmInline) && (
+                           <div className="flex justify-end border-t border-indigo-100 pt-5 gap-3">
+                             <button
+                               onClick={() => {
+                                 setEditProgramVision(activeProgram.vision || '');
+                                 setEditProgramMission(activeProgram.mission || '');
+                                 setIsEditingVmInline(false);
+                               }}
+                               className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition-all cursor-pointer"
+                             >
+                               Cancel
+                             </button>
+                             <button
+                               onClick={async () => {
+                                 await handleSaveProgramVisionMission();
+                                 setIsEditingVmInline(false);
+                               }}
+                               disabled={savingLoad}
+                               className="px-6 py-2.5 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center gap-2 shadow-md hover:shadow-lg hover:scale-105 active:scale-95 duration-100"
+                             >
+                               {savingLoad ? <Loader2 className="w-4 h-4 animate-spin" /> : '💾 SAVE PROGRAM CHARTER CHANGES'}
+                             </button>
+                           </div>
                         )}
 
                       </div>
@@ -1760,7 +1755,47 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                           <span className="text-[10px] uppercase font-mono tracking-widest text-indigo-200 font-bold">DEPARTMENT SPECIFIC CHARTER</span>
                           <h3 className="font-serif font-bold text-lg">{activeDepartment.name} Vision &amp; Mission</h3>
                         </div>
-                        <GraduationCap className="w-8 h-8 opacity-40 text-white" />
+                        <div className="flex items-center gap-2">
+                          {isEditingVmInline ? (
+                            <>
+                              <button
+                                onClick={async () => {
+                                  await handleSaveVisionMission();
+                                  setIsEditingVmInline(false);
+                                }}
+                                disabled={savingLoad}
+                                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm hover:scale-105"
+                              >
+                                {savingLoad ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                                <span>Save Changes</span>
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setEditVision(activeDepartment.vision || '');
+                                  setEditMission(activeDepartment.mission || '');
+                                  setIsEditingVmInline(false);
+                                }}
+                                className="px-3 py-1.5 bg-slate-700 hover:bg-slate-605 text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                                <span>Cancel</span>
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              onClick={() => {
+                                setEditVision(activeDepartment.vision || '');
+                                setEditMission(activeDepartment.mission || '');
+                                setIsEditingVmInline(true);
+                              }}
+                              className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white border border-white/20 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm hover:scale-105"
+                            >
+                              <Edit className="w-3.5 h-3.5" />
+                              <span>Edit Charter</span>
+                            </button>
+                          )}
+                          <GraduationCap className="w-8 h-8 opacity-40 text-white hidden sm:block ml-2" />
+                        </div>
                       </div>
 
                       <div className="p-6 md:p-8 space-y-8">
@@ -1773,7 +1808,7 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                             <h4 className="font-sans font-extrabold text-slate-950 text-base tracking-wide uppercase">DEPARTMENT VISION STATEMENT</h4>
                           </div>
                           
-                          {isConfiguring ? (
+                          {(isConfiguring || isEditingVmInline) ? (
                             <div className="space-y-2 pl-2">
                               <textarea
                                 value={editVision}
@@ -1799,7 +1834,7 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                             <h4 className="font-sans font-extrabold text-slate-950 text-base tracking-wide uppercase">DEPARTMENT MISSION STATEMENT</h4>
                           </div>
 
-                          {isConfiguring ? (
+                          {(isConfiguring || isEditingVmInline) ? (
                             <div className="space-y-2 pl-2">
                               <textarea
                                 value={editMission}
@@ -1818,16 +1853,29 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                         </div>
 
                         {/* Configuration Department Save Area */}
-                        {isConfiguring && (
-                           <div className="flex justify-end border-t border-indigo-100 pt-5">
-                            <button
-                              onClick={handleSaveVisionMission}
-                              disabled={savingLoad}
-                              className="px-6 py-2.5 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center gap-2 shadow-md hover:shadow-lg hover:scale-105 active:scale-95 duration-100"
-                            >
-                              {savingLoad ? <Loader2 className="w-4 h-4 animate-spin" /> : '💾 SAVE DEPARTMENT CHARTER CHANGES'}
-                            </button>
-                          </div>
+                        {(isConfiguring || isEditingVmInline) && (
+                           <div className="flex justify-end border-t border-indigo-100 pt-5 gap-3">
+                             <button
+                               onClick={() => {
+                                 setEditVision(activeDepartment.vision || '');
+                                 setEditMission(activeDepartment.mission || '');
+                                 setIsEditingVmInline(false);
+                               }}
+                               className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition-all cursor-pointer"
+                             >
+                               Cancel
+                             </button>
+                             <button
+                               onClick={async () => {
+                                 await handleSaveVisionMission();
+                                 setIsEditingVmInline(false);
+                               }}
+                               disabled={savingLoad}
+                               className="px-6 py-2.5 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center gap-2 shadow-md hover:shadow-lg hover:scale-105 active:scale-95 duration-100"
+                             >
+                               {savingLoad ? <Loader2 className="w-4 h-4 animate-spin" /> : '💾 SAVE DEPARTMENT CHARTER CHANGES'}
+                             </button>
+                           </div>
                         )}
 
                       </div>
@@ -1841,77 +1889,135 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
 
             {/* ----------------- MODULE VIEW 4: CONFIGURE PROGRAM OBJECTIVES ----------------- */}
             {activeModule === 'po_configure' && activeProgram && (
-              <div className="bg-white border border-slate-200 rounded-3xl shadow-xl overflow-hidden max-w-4xl mx-auto">
+              <div className="bg-white border border-slate-200 rounded-3xl shadow-xl overflow-hidden max-w-4xl mx-auto animate-in duration-200 fade-in-25">
                 
-                {/* Section Header */}
-                <div className="bg-slate-50 border-b border-slate-200 p-5 px-6">
-                  <h3 className="font-serif font-bold text-lg text-indigo-950">
-                    Configure Program Objectives (PO-1 to PO-4 Definitions)
-                  </h3>
-                  <p className="text-xs text-slate-700 font-sans mt-0.5">
-                    Modifies the primary program educational outcomes (PEO/POs) text. You must toggle "ACTIVATE CORE CONFIGURATION" at the top to unlock inputs.
-                  </p>
+                <div className="bg-indigo-900/90 text-white p-6 select-none flex items-center justify-between border-b border-indigo-800">
+                  <div>
+                    <span className="text-[10px] uppercase font-mono tracking-widest text-indigo-200 font-bold">PROGRAM OBJECTIVES</span>
+                    <h3 className="font-serif font-bold text-lg">{activeProgram.name} ({activeProgram.code}) Program Educational Objectives</h3>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {isEditingPoInline ? (
+                      <>
+                        <button
+                          onClick={async () => {
+                            await handleSavePOTexts();
+                            setIsEditingPoInline(false);
+                          }}
+                          disabled={savingLoad}
+                          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm hover:scale-105"
+                        >
+                          {savingLoad ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                          <span>Save Objectives</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            setEditPOs(JSON.parse(JSON.stringify(activeProgram.pos)));
+                            setIsEditingPoInline(false);
+                          }}
+                          className="px-3 py-1.5 bg-slate-700 hover:bg-slate-605 text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                          <span>Cancel</span>
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          setEditPOs(JSON.parse(JSON.stringify(activeProgram.pos)));
+                          setIsEditingPoInline(true);
+                        }}
+                        className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white border border-white/20 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm hover:scale-105"
+                      >
+                        <Edit className="w-3.5 h-3.5" />
+                        <span>Edit Objectives</span>
+                      </button>
+                    )}
+                    <GraduationCap className="w-8 h-8 opacity-40 text-white hidden sm:block ml-2" />
+                  </div>
                 </div>
 
-                <div className="p-6 space-y-6">
+                <div className="p-6 md:p-8 space-y-6">
                   {editPOs.map((po, idx) => (
-                    <div key={po.id} className="p-5 border border-slate-200 rounded-2xl bg-slate-50 flex flex-col md:flex-row gap-4 items-start shadow-xs">
+                    <div key={po.id} className="space-y-4 bg-slate-50 border border-slate-200 p-6 rounded-3xl shadow-xs text-left relative overflow-hidden">
+                      <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-indigo-500"></div>
                       
-                      {/* PO label */}
-                      <div className="flex items-center gap-2 shrink-0 md:w-[130px]">
-                        <span className="w-8 h-8 rounded-full bg-indigo-600 text-white flex items-center justify-center font-bold text-xs shrink-0 font-serif shadow-sm">
-                          {idx + 1}
-                        </span>
-                        <div>
-                          <strong className="text-indigo-950 font-serif block text-xs">OBJECTIVE {idx + 1}</strong>
-                          <span className="text-[9px] text-indigo-900/60 font-mono tracking-wider font-extrabold uppercase">{po.id}</span>
+                      {/* PO label & metadata */}
+                      <div className="flex items-center justify-between pl-2">
+                        <div className="flex items-center gap-2">
+                          <span className="w-7 h-7 rounded-full bg-indigo-650 text-white flex items-center justify-center font-bold text-xs shrink-0 font-serif shadow-sm">
+                            {idx + 1}
+                          </span>
+                          <div>
+                            <h4 className="font-sans font-extrabold text-slate-950 text-sm tracking-wide uppercase">PROGRAM EDUCATIONAL OBJECTIVE {idx + 1}</h4>
+                            <span className="text-[9px] text-indigo-900/60 font-mono tracking-wider font-extrabold uppercase">{po.id}</span>
+                          </div>
+                        </div>
+
+                        {/* Associated Attributes tag pill count */}
+                        <div className="flex items-center gap-1 bg-white border border-slate-200/60 px-2.5 py-1 rounded-full shadow-2xs">
+                          <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider font-sans">GAs Mapped:</span>
+                          <span className="text-xs text-indigo-750 font-mono font-bold">{po.mappedGAs.length}</span>
                         </div>
                       </div>
 
-                      {/* PO Editor */}
-                      <div className="flex-1 w-full">
-                        {isConfiguring ? (
+                      {/* PO statement */}
+                      {(isConfiguring || isEditingPoInline) ? (
+                        <div className="space-y-2 pl-2">
                           <textarea
                             value={po.text}
                             onChange={(e) => handlePOTextChange(idx, e.target.value)}
-                            rows={2}
-                            placeholder={`Define program objective PO${idx + 1}...`}
-                            className="w-full text-xs p-3 font-medium bg-white border border-indigo-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-slate-800"
+                            rows={3}
+                            className="w-full p-4 text-base bg-white border border-indigo-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 font-normal"
+                            placeholder={`Define program objective ${po.id}...`}
                           />
-                        ) : (
-                          <div className="p-3.5 bg-white/55 border border-[#e2e8f0]/40 rounded-xl font-medium text-xs leading-relaxed text-slate-800 italic select-all shadow-xs border border-indigo-100/20">
-                            "{po.text || 'Objective statement is not configured yet. Unlock Configuration to define.'}"
-                          </div>
-                        )}
-                        
-                        {/* Dynamic list of GAs associated with this PO */}
-                        <div className="mt-2.5 flex items-center gap-1.5 flex-wrap">
-                          <span className="text-[9.5px] font-mono text-indigo-950/60 font-bold uppercase tracking-wider">Associated Attributes:</span>
-                          {po.mappedGAs.map(gid => (
-                            <span key={gid} className="px-2 py-0.5 rounded bg-indigo-50 border border-indigo-200/50 font-mono font-bold text-[9px] text-indigo-950">
-                              {gid}
-                            </span>
-                          ))}
-                          {po.mappedGAs.length === 0 && (
-                            <span className="text-[10px] text-indigo-400 italic">No associated GAs mapped. Go to PO to GA Mapping sheet.</span>
-                          )}
+                          <p className="text-[10px] text-slate-400 italic font-sans">This will alter the objective definition across all curriculum matrices.</p>
                         </div>
+                      ) : (
+                        <p className="font-sans text-base leading-relaxed italic text-slate-900 pl-9 py-1 font-medium">
+                          "{po.text || '(Objective statement not configured yet. Edit Objectives to define.)'}"
+                        </p>
+                      )}
+
+                      {/* Dynamic list of GAs associated with this PO */}
+                      <div className="pl-9 flex items-center gap-1.5 flex-wrap">
+                        <span className="text-[9.5px] font-mono text-indigo-950/60 font-bold uppercase tracking-wider">Mapped Graduate Attributes:</span>
+                        {po.mappedGAs.map(gid => (
+                          <span key={gid} className="px-2 py-0.5 rounded bg-indigo-50 border border-indigo-200/50 font-mono font-bold text-[9px] text-indigo-950">
+                            {gid}
+                          </span>
+                        ))}
+                        {po.mappedGAs.length === 0 && (
+                          <span className="text-[10px] text-indigo-400 italic font-sans">No associated GAs mapped. Go to PO to GA Mapping sheet.</span>
+                        )}
                       </div>
 
                     </div>
                   ))}
 
-                  {/* Program Configuration Action Button */}
-                  {isConfiguring && (
-                    <div className="flex justify-end border-t border-indigo-100 pt-5">
-                      <button
-                        onClick={handleSavePOTexts}
-                        disabled={savingLoad}
-                        className="px-6 py-2.5 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition-colors disabled:opacity-50 flex items-center gap-2 shadow-md hover:shadow-lg hover:scale-105 active:scale-95 duration-100"
-                      >
-                        {savingLoad ? <Loader2 className="w-4 h-4 animate-spin" /> : '💾 REGISTER OBJECTIVES IN UNIVERSITY DB'}
-                      </button>
-                    </div>
+                  {/* Configuration Save Footer Area */}
+                  {(isConfiguring || isEditingPoInline) && (
+                     <div className="flex justify-end border-t border-indigo-100 pt-5 gap-3">
+                       <button
+                         onClick={() => {
+                           setEditPOs(JSON.parse(JSON.stringify(activeProgram.pos)));
+                           setIsEditingPoInline(false);
+                         }}
+                         className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition-all cursor-pointer"
+                       >
+                         Cancel
+                       </button>
+                       <button
+                         onClick={async () => {
+                           await handleSavePOTexts();
+                           setIsEditingPoInline(false);
+                         }}
+                         disabled={savingLoad}
+                         className="px-6 py-2.5 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center gap-2 shadow-md hover:shadow-lg hover:scale-105 active:scale-95 duration-100"
+                       >
+                         {savingLoad ? <Loader2 className="w-4 h-4 animate-spin" /> : '💾 SAVE PROGRAM OBJECTIVES CHANGES'}
+                       </button>
+                     </div>
                   )}
 
                 </div>

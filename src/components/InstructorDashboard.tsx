@@ -1044,12 +1044,17 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
           setCourses(normalized);
           setErrorMsg(null);
           
-          // Make sure an active course is selected if none currently chosen
+          // Make sure a valid active course is selected and exists in the freshly-loaded list
           const savedActive = localStorage.getItem('IQRA_OBE_INSTRUCTOR_ACTIVE_ID');
-          if (!savedActive || savedActive === 'course-1' || savedActive === 'course-2') {
+          const exists = normalized.some(c => c.id === savedActive);
+          if (!savedActive || savedActive === 'course-1' || savedActive === 'course-2' || !exists) {
             if (normalized.length > 0) {
               setActiveCourseId(normalized[0].id);
+            } else {
+              setActiveCourseId('');
             }
+          } else {
+            setActiveCourseId(savedActive);
           }
         }
       } catch (err: any) {
@@ -1177,13 +1182,21 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
     }
   };
 
-  useEffect(() => {
+   useEffect(() => {
+    if (loading) return;
     if (activeCourseId) {
-      fetchCurrentCourseCLOs(activeCourseId);
+      const exists = courses.some(c => c.id === activeCourseId);
+      if (courses.length > 0 && !exists) {
+        // Stale course ID, clear it or fall back
+        setActiveCourseId('');
+        setCourseCLOs([]);
+      } else {
+        fetchCurrentCourseCLOs(activeCourseId);
+      }
     } else {
       setCourseCLOs([]);
     }
-  }, [activeCourseId]);
+  }, [activeCourseId, courses, loading]);
 
   // Marksheet Report metadata states
   const [reportCampus, setReportCampus] = useState('Iqra University Chak Shahzad Campus Islamabad');

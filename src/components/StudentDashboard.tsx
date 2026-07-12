@@ -30,6 +30,25 @@ const normalizeRegNo = (reg: string) => {
   return reg.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
 };
 
+function naturalCompare(s1: string, s2: string): number {
+  const aParts = s1.split(/(\d+)/);
+  const bParts = s2.split(/(\d+)/);
+  const length = Math.min(aParts.length, bParts.length);
+  for (let i = 0; i < length; i++) {
+    const aPart = aParts[i];
+    const bPart = bParts[i];
+    if (aPart !== bPart) {
+      const aNum = parseInt(aPart, 10);
+      const bNum = parseInt(bPart, 10);
+      if (!isNaN(aNum) && !isNaN(bNum)) {
+        return aNum - bNum;
+      }
+      return aPart.localeCompare(bPart);
+    }
+  }
+  return aParts.length - bParts.length;
+}
+
 // Interfaces for local bindings and mapping data
 interface StudentCourseBinding {
   studentRegNo: string;
@@ -852,7 +871,7 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
   // Each GA is mapped to courses. We aggregate the student's aggregate marks in those courses.
   const gaAttainmentProfile = useMemo(() => {
     if (studentGA && Array.isArray(studentGA.attainments)) {
-      return studentGA.attainments.map((att: any) => ({
+      const list = studentGA.attainments.map((att: any) => ({
         id: att.gaId,
         name: att.gaTitle,
         description: att.gaDescription || `Competency and standard metrics for ${att.gaTitle}`,
@@ -860,9 +879,10 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
         contributingCount: att.contributingCourses?.length || 0,
         coursesList: (att.contributingCourses || []).map((c: any) => `${c.code} - ${c.title}`)
       }));
+      return [...list].sort((a, b) => naturalCompare(a.id, b.id));
     }
 
-    return programGAs.map(ga => {
+    const list = programGAs.map(ga => {
       // Find courses that are mapped to this GA
       const contributingCourses = enrolledCoursesWithGrades.filter(c => 
         c.mappedGAs.includes(ga.id)
@@ -890,6 +910,7 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
         coursesList: contributingCourses.map(c => `${c.code} - ${c.title}`)
       };
     });
+    return [...list].sort((a, b) => naturalCompare(a.id, b.id));
   }, [programGAs, enrolledCoursesWithGrades, activeRegNo, studentGA]);
 
   // Aggregate Course Learning Outcomes (CLO) for the selected filter course
