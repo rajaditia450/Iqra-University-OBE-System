@@ -31,7 +31,9 @@ import {
   Edit,
   Trash2,
   X,
-  Building
+  Building,
+  Cpu,
+  Server
 } from 'lucide-react';
 
 interface QADashboardProps {
@@ -107,6 +109,12 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
   const [students, setStudents] = useState<any[]>([]);
   const [instructorCourses, setInstructorCourses] = useState<any[]>([]);
   const [loadingReports, setLoadingReports] = useState<boolean>(false);
+
+  // Server-Side Batch GA Attainment Report States
+  const [selectedDataSource, setSelectedDataSource] = useState<'client' | 'server'>('server');
+  const [serverBatchReportData, setServerBatchReportData] = useState<any | null>(null);
+  const [loadingServerBatchReport, setLoadingServerBatchReport] = useState<boolean>(false);
+  const [serverBatchReportError, setServerBatchReportError] = useState<string | null>(null);
 
   // Semester GA Reports States
   const [semesterReportData, setSemesterReportData] = useState<any | null>(null);
@@ -414,6 +422,32 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
     loadSemesterReport();
   }, [activeModule, activeProgramId]);
 
+  // Lazy loading of Server-Side Batch GA Report
+  useEffect(() => {
+    if (activeModule !== 'attainment_reports' || selectedReportType !== 'plo' || selectedDataSource !== 'server' || !selectedReportBatch) return;
+
+    const loadServerBatchReport = async () => {
+      setLoadingServerBatchReport(true);
+      setServerBatchReportError(null);
+      try {
+        const programId = selectedReportProgramId === 'all' ? undefined : selectedReportProgramId;
+        const result = await apiService.getProgramGAAttainmentBatch(
+          selectedReportBatch,
+          activeDeptId,
+          programId
+        );
+        setServerBatchReportData(result);
+      } catch (err: any) {
+        console.error("Failed to load server-side batch GA report:", err);
+        setServerBatchReportError(err?.message || "Failed to load server-side batch GA report.");
+      } finally {
+        setLoadingServerBatchReport(false);
+      }
+    };
+
+    loadServerBatchReport();
+  }, [activeModule, selectedReportType, selectedDataSource, selectedReportBatch, selectedReportProgramId, activeDeptId]);
+
   // Helper to calculate student's GA score dynamically using mock/real structures
   const calculateStudentGAScore = (
     student: any,
@@ -440,10 +474,13 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
         const std = instCourse.students?.find((s: any) => s.regNo === student.regNo);
         if (std && std.marks) {
           let catSumTotal = 0;
+          let gradedCategoriesWeight = 0;
           
           instCourse.categories?.forEach((cat: any) => {
             if (cat.percentage > 0) {
               const existingUnits = instCourse.unitsData?.[cat.name] || [];
+              let hasCatMarks = false;
+              let catContribution = 0;
               
               for (let u = 1; u <= cat.units; u++) {
                 const matchingUnit = existingUnits.find((unit: any) => unit.unitNo === u);
@@ -452,11 +489,13 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                 const questions = matchingUnit?.questions || [];
                 
                 let unitObtained = 0;
+                let hasUnitMarks = false;
                 if (questions.length > 0) {
                   questions.forEach((q: any) => {
                     const qKey = `q-${cat.name}-${u}-${q.id}`;
                     if (std.marks?.[qKey] !== undefined) {
                       unitObtained += std.marks[qKey];
+                      hasUnitMarks = true;
                       hasAnyMarks = true;
                     }
                   });
@@ -464,22 +503,30 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                   const dKey = `${cat.name}-${u}`;
                   if (std.marks?.[dKey] !== undefined) {
                     unitObtained += std.marks[dKey];
+                    hasUnitMarks = true;
                     hasAnyMarks = true;
                   } else if (std.marks?.[cat.name] !== undefined && u === 1) {
                     unitObtained += std.marks[cat.name];
+                    hasUnitMarks = true;
                     hasAnyMarks = true;
                   }
                 }
 
-                if (totalMarks > 0) {
-                  catSumTotal += (unitObtained / totalMarks) * (unitWeightage / 100) * cat.percentage;
+                if (hasUnitMarks && totalMarks > 0) {
+                  catContribution += (unitObtained / totalMarks) * (unitWeightage / 100) * cat.percentage;
+                  hasCatMarks = true;
                 }
+              }
+
+              if (hasCatMarks) {
+                catSumTotal += catContribution;
+                gradedCategoriesWeight += cat.percentage;
               }
             }
           });
           
           if (hasAnyMarks) {
-            aggregate = catSumTotal;
+            aggregate = gradedCategoriesWeight > 0 ? (catSumTotal / gradedCategoriesWeight) * 100 : catSumTotal;
           }
         }
       }
@@ -489,8 +536,9 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
         coursesWithMarksCount++;
       }
     });
-
-    return coursesWithMarksCount > 0 ? totalAggregate / coursesWithMarksCount : null;
+    
+    // Divide by course count to calculate correct average percentage score across courses
+    return coursesWithMarksCount > 0 ? Math.round((totalAggregate / coursesWithMarksCount) * 10) / 10 : null;
   };
 
   // Sync selectedReportProgramId with activeProgramId
@@ -624,7 +672,7 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
   };
 
   // Compile report metrics based on current filters
-  const reportMetrics = useMemo(() => {
+  const clientReportMetrics = useMemo(() => {
     if (!data) return { gaMetrics: [], overallPassRate: 0, topGA: 'N/A', bottomGA: 'N/A', filteredStudents: [] };
 
     // 1. Get filtered students by batch and program
@@ -722,6 +770,113 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
       filteredStudents
     };
   }, [data, students, selectedReportProgramId, selectedReportBatch, instructorCourses, activeDeptId]);
+
+  // Adapts various possible API response shapes from server-side to match reportMetrics structure
+  const serverReportMetrics = useMemo(() => {
+    if (selectedDataSource !== 'server' || !serverBatchReportData) {
+      return null;
+    }
+
+    let gaMetrics: any[] = [];
+    let overallPassRate = 0;
+    let topGA = 'N/A';
+    let bottomGA = 'N/A';
+    let filteredStudents: any[] = [];
+
+    // Identify where the GA metrics array is nested (supports camelCase, snake_case, directly an array, or attributes)
+    let rawGaList: any[] = [];
+    if (Array.isArray(serverBatchReportData)) {
+      rawGaList = serverBatchReportData;
+    } else if (serverBatchReportData) {
+      rawGaList = serverBatchReportData.gaMetrics || 
+                  serverBatchReportData.ga_metrics || 
+                  serverBatchReportData.attributes || 
+                  serverBatchReportData.data || 
+                  [];
+    }
+
+    // Map each GA metric supporting both camelCase and snake_case fields
+    gaMetrics = rawGaList.map((item: any) => {
+      const id = item.id || item.code || item.gaId || item.ga_id || 'GA';
+      const name = item.name || item.title || item.gaName || item.ga_name || item.description || '';
+      const description = item.description || item.gaDescription || item.ga_description || '';
+      
+      const totalCount = typeof item.totalCount === 'number' ? item.totalCount :
+                         (typeof item.total_count === 'number' ? item.total_count :
+                         (typeof item.cohortSize === 'number' ? item.cohortSize :
+                         (typeof item.cohort_size === 'number' ? item.cohort_size : 0)));
+                         
+      const passedCount = typeof item.passedCount === 'number' ? item.passedCount :
+                          (typeof item.passed_count === 'number' ? item.passed_count : 0);
+                          
+      const failedCount = typeof item.failedCount === 'number' ? item.failedCount :
+                          (typeof item.failed_count === 'number' ? item.failed_count : 0);
+                          
+      const percentage = typeof item.percentage === 'number' ? item.percentage :
+                         (typeof item.attainmentPercentage === 'number' ? item.attainmentPercentage :
+                         (typeof item.attainment_percentage === 'number' ? item.attainment_percentage : 0));
+                         
+      return { id, name, description, totalCount, passedCount, failedCount, percentage };
+    });
+
+    // Extract other top-level properties supporting both camelCase and snake_case
+    if (serverBatchReportData && !Array.isArray(serverBatchReportData)) {
+      overallPassRate = typeof serverBatchReportData.overallPassRate === 'number' ? serverBatchReportData.overallPassRate :
+                        (typeof serverBatchReportData.overall_pass_rate === 'number' ? serverBatchReportData.overall_pass_rate : 0);
+                        
+      topGA = serverBatchReportData.topGA || serverBatchReportData.top_ga || 'N/A';
+      bottomGA = serverBatchReportData.bottomGA || serverBatchReportData.bottom_ga || 'N/A';
+      
+      filteredStudents = Array.isArray(serverBatchReportData.filteredStudents) ? serverBatchReportData.filteredStudents :
+                         (Array.isArray(serverBatchReportData.filtered_students) ? serverBatchReportData.filtered_students : []);
+    }
+
+    if (gaMetrics.length > 0) {
+      if (overallPassRate === 0) {
+        let totalAssessed = 0;
+        let totalPassed = 0;
+        gaMetrics.forEach(m => {
+          if (m.totalCount > 0) {
+            totalAssessed += m.totalCount;
+            totalPassed += m.passedCount || Math.round(m.totalCount * (m.percentage / 100));
+          }
+        });
+        overallPassRate = totalAssessed > 0 ? Math.round((totalPassed / totalAssessed) * 100) : 0;
+      }
+
+      if (topGA === 'N/A' || bottomGA === 'N/A') {
+        const assessed = gaMetrics.filter(m => m.totalCount > 0 || m.percentage > 0);
+        if (assessed.length > 0) {
+          const sorted = [...assessed].sort((a, b) => b.percentage - a.percentage);
+          topGA = `${sorted[0].id} (${sorted[0].percentage}%)`;
+          bottomGA = `${sorted[sorted.length - 1].id} (${sorted[sorted.length - 1].percentage}%)`;
+        }
+      }
+    }
+
+    if (filteredStudents.length === 0) {
+      const maxCohort = Math.max(...gaMetrics.map(m => m.totalCount), 0);
+      if (maxCohort > 0) {
+        filteredStudents = new Array(maxCohort).fill({});
+      }
+    }
+
+    return {
+      gaMetrics,
+      overallPassRate,
+      topGA,
+      bottomGA,
+      filteredStudents
+    };
+  }, [selectedDataSource, serverBatchReportData]);
+
+  // Combined metrics selector to make rendering clean and seamless
+  const reportMetrics = useMemo(() => {
+    if (selectedDataSource === 'server' && serverReportMetrics) {
+      return serverReportMetrics;
+    }
+    return clientReportMetrics;
+  }, [selectedDataSource, serverReportMetrics, clientReportMetrics]);
 
   // Filtered definitions of GAs matching selected program securely
   const filteredGAs = useMemo(() => {
@@ -2426,6 +2581,27 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                           </select>
                         </div>
                       )}
+
+                      {/* Compiler Engine Selector */}
+                      <div className="flex flex-col gap-1 shrink-0">
+                        <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Compiler Engine</label>
+                        <div className="flex bg-slate-100 p-1 rounded-xl shadow-inner border border-slate-200">
+                          <button
+                            onClick={() => setSelectedDataSource('client')}
+                            className={`px-3 py-1.5 text-[10px] font-black rounded-lg transition-all flex items-center gap-1 cursor-pointer ${selectedDataSource === 'client' ? 'bg-white text-indigo-950 shadow-xs' : 'text-slate-500 hover:text-slate-900'}`}
+                          >
+                            <Cpu className="w-3.5 h-3.5 text-indigo-650" />
+                            <span>Client</span>
+                          </button>
+                          <button
+                            onClick={() => setSelectedDataSource('server')}
+                            className={`px-3 py-1.5 text-[10px] font-black rounded-lg transition-all flex items-center gap-1 cursor-pointer ${selectedDataSource === 'server' ? 'bg-white text-indigo-950 shadow-xs' : 'text-slate-500 hover:text-slate-900'}`}
+                          >
+                            <Server className="w-3.5 h-3.5 text-indigo-650" />
+                            <span>Server</span>
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -2454,10 +2630,44 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                   </button>
                 </div>
 
-                {loadingReports ? (
+                {loadingReports || (selectedDataSource === 'server' && loadingServerBatchReport) ? (
                   <div className="bg-white border border-slate-200 rounded-3xl p-16 text-center space-y-4 shadow-xs">
                     <Loader2 className="w-10 h-10 text-indigo-600 animate-spin mx-auto" />
-                    <p className="text-xs text-slate-500 font-bold">Querying OBE and compiling Graduate Attribute scores...</p>
+                    <p className="text-xs text-slate-500 font-bold">
+                      {selectedDataSource === 'server' 
+                        ? 'Querying remote database and calculating live Graduate Attribute scores...' 
+                        : 'Querying OBE and compiling Graduate Attribute scores...'}
+                    </p>
+                  </div>
+                ) : selectedDataSource === 'server' && serverBatchReportError ? (
+                  <div className="bg-white border border-slate-200 rounded-3xl p-16 text-center space-y-4 shadow-xs">
+                    <AlertCircle className="w-12 h-12 text-rose-500 mx-auto" />
+                    <h4 className="text-sm font-bold text-slate-800">Failed to Compile Server GA Report</h4>
+                    <p className="text-xs text-rose-600 max-w-md mx-auto font-medium bg-rose-50 border border-rose-100 p-3 rounded-2xl">
+                      {serverBatchReportError}
+                    </p>
+                    <button
+                      onClick={async () => {
+                        setLoadingServerBatchReport(true);
+                        setServerBatchReportError(null);
+                        try {
+                          const programId = selectedReportProgramId === 'all' ? undefined : selectedReportProgramId;
+                          const result = await apiService.getProgramGAAttainmentBatch(
+                            selectedReportBatch,
+                            activeDeptId,
+                            programId
+                          );
+                          setServerBatchReportData(result);
+                        } catch (err: any) {
+                          setServerBatchReportError(err?.message || "Failed to load server-side batch GA report.");
+                        } finally {
+                          setLoadingServerBatchReport(false);
+                        }
+                      }}
+                      className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-colors cursor-pointer"
+                    >
+                      Retry Compiler Sync
+                    </button>
                   </div>
                 ) : reportMetrics.filteredStudents.length === 0 ? (
                   <div className="bg-white border border-slate-200 rounded-3xl p-16 text-center space-y-3 shadow-xs">

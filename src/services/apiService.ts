@@ -1534,6 +1534,24 @@ export const apiService = {
     return res.json();
   },
 
+  async getProgramGAAttainmentBatch(batch: string, departmentId: string, programId?: string) {
+    const params = new URLSearchParams({
+      batch: batch.toLowerCase(),
+      departmentId: departmentId,
+    });
+    if (programId) {
+      params.append('programId', programId.toLowerCase());
+    }
+    
+    const res = await fetchWithTimeout(
+      `${BASE_URL}/reports/batch-ga-attainment/?${params.toString()}`,
+      { headers: getHeaders() },
+      5000
+    );
+    if (!res.ok) throw new Error('Failed to fetch batch GA attainment');
+    return res.json();
+  },
+
   saveLocalStorageData(data: OBEData): void {
     saveLocalStorageData(data);
   }
