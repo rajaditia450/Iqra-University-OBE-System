@@ -1539,13 +1539,16 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
   }, [selectedCourse, instructorName]);
 
   const handlePrintDirect = () => {
-    try {
-      window.focus();
-      window.print();
-    } catch (e) {
-      console.error("Print failed:", e);
-      showNotification("The print dialog is blocked in this container preview. Please use the 'Download' button instead to get a PDF.");
-    }
+    setIsDirectPrinting(true);
+    setTimeout(() => {
+      try {
+        window.focus();
+        window.print();
+      } catch (e) {
+        console.error("Print failed:", e);
+        showNotification("The print dialog is blocked in this preview iframe. Please open the app in a new tab using the icon at the top right of the editor to print directly.");
+      }
+    }, 350);
   };
 
   const handleDownloadPDF = async () => {
@@ -3297,20 +3300,81 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
   // Render ONLY the marksheet document if pure print mode is triggered
   if (isDirectPrinting && selectedCourse) {
     return (
-      <div className="w-full min-h-screen bg-white text-black p-8 m-0 print:p-0">
-        <MarksheetDocument
-          course={selectedCourse}
-          campus={reportCampus}
-          semester={reportSemester}
-          section={reportSection}
-          offeredIn={reportOfferedIn}
-          session={reportSession}
-          instructor={reportInstructor}
-          dated={reportDated}
-          printDate={reportPrintDate}
-          isPrintView={true}
-          reportType={reportType}
-        />
+      <div className="w-full min-h-screen bg-slate-100 text-black flex flex-col m-0 p-0 antialiased font-sans">
+        {/* On-Screen Print Helper Top-Bar */}
+        <div className="print:hidden bg-slate-900 text-white px-6 py-4 flex flex-col md:flex-row items-center justify-between gap-4 shadow-md font-sans shrink-0 border-b border-slate-800">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-indigo-600 rounded-lg">
+              <Printer className="w-5 h-5 text-white animate-pulse" />
+            </div>
+            <div>
+              <h2 className="text-sm font-bold tracking-tight">IU OBE Mark Sheet Print Section</h2>
+              <p className="text-[10px] text-slate-400">
+                You are in the dedicated print view. Click "Print Now" to open the browser print dialog.
+              </p>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-2.5">
+            <button
+              onClick={() => {
+                try {
+                  window.focus();
+                  window.print();
+                } catch (e) {
+                  console.error("Print failed:", e);
+                }
+              }}
+              className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-4 py-2 rounded-lg shadow-sm transition-all cursor-pointer"
+            >
+              <Printer className="w-4 h-4" />
+              <span>Print Now</span>
+            </button>
+            <button
+              onClick={() => setIsDirectPrinting(false)}
+              className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs px-4 py-2 rounded-lg shadow-sm transition-all cursor-pointer border border-slate-700"
+            >
+              <X className="w-4 h-4" />
+              <span>Go Back to Dashboard</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Informative helper for Iframe Sandboxing */}
+        <div className="print:hidden bg-amber-50 border-b border-amber-200 text-amber-900 px-6 py-3 text-xs font-medium font-sans flex items-center justify-between gap-4">
+          <div className="flex items-center gap-2">
+            <span className="text-amber-500 font-bold">⚠️ Note:</span>
+            <span>
+              If the print dialog did not open automatically, browser sandboxing inside this preview panel may have blocked it.
+              To print, please click the <strong className="text-amber-950 font-black">"Open in new tab"</strong> icon at the very top-right of your screen, then click Print.
+            </span>
+          </div>
+          <button 
+            onClick={() => setIsDirectPrinting(false)} 
+            className="text-amber-800 hover:text-amber-950 underline cursor-pointer text-xs font-bold shrink-0"
+          >
+            Back to App
+          </button>
+        </div>
+
+        {/* The Actual Printable Marksheet Document Container */}
+        <div className="flex-1 bg-slate-100 overflow-y-auto p-4 md:p-8 print:p-0 print:bg-white print:overflow-visible">
+          <div className="max-w-[210mm] mx-auto bg-white shadow-xl rounded-xl border border-slate-200 p-8 print:p-0 print:shadow-none print:border-none print:max-w-none print:bg-white print:rounded-none">
+            <MarksheetDocument
+              course={selectedCourse}
+              campus={reportCampus}
+              semester={reportSemester}
+              section={reportSection}
+              offeredIn={reportOfferedIn}
+              session={reportSession}
+              instructor={reportInstructor}
+              dated={reportDated}
+              printDate={reportPrintDate}
+              isPrintView={true}
+              reportType={reportType}
+            />
+          </div>
+        </div>
       </div>
     );
   }
@@ -7107,25 +7171,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
         )}
       </AnimatePresence>
 
-      {/* SECURED PRINT ONLY HIDDEN MARKSHEET CONTAINER */}
-      {selectedCourse && createPortal(
-        <div id="marksheet-print-area" className="hidden print:block absolute left-0 top-0 w-full bg-white text-black p-0 m-0 print:m-0 print:p-0">
-          <MarksheetDocument
-            course={selectedCourse}
-            campus={reportCampus}
-            semester={reportSemester}
-            section={reportSection}
-            offeredIn={reportOfferedIn}
-            session={reportSession}
-            instructor={reportInstructor}
-            dated={reportDated}
-            printDate={reportPrintDate}
-            isPrintView={true}
-            reportType={reportType}
-          />
-        </div>,
-        document.body
-      )}
+
 
       <AnimatePresence>
         {notification && (
