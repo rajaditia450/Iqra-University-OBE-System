@@ -84,13 +84,26 @@ export default function MarksEntrySpreadsheet({
 
   // 3. Build dynamic leaf columns for all assessment units of the current category
   const unitLeafColumns = useMemo<LeafColumn[]>(() => {
-    if (!currentCategory) return [];
+    if (!currentCategory) {
+      console.log('[DEBUG MarksEntrySpreadsheet] No current category selected.');
+      return [];
+    }
     const cols: LeafColumn[] = [];
+    
+    console.log('[DEBUG MarksEntrySpreadsheet] Building unitLeafColumns:', {
+      courseId: selectedCourse.id,
+      courseCode: selectedCourse.code,
+      currentCategoryName: currentCategory.name,
+      unitsCount: currentCategory.units,
+      unitsData: selectedCourse.unitsData[currentCategory.name]
+    });
     
     // Loop through each unit configured
     for (let u = 1; u <= currentCategory.units; u++) {
       const matchingUnit = (selectedCourse.unitsData[currentCategory.name] || []).find(unit => unit.unitNo === u);
       const questions = matchingUnit?.questions || [];
+      
+      console.log(`[DEBUG MarksEntrySpreadsheet] Unit ${u}: matchingUnit found? ${!!matchingUnit}, questions length: ${questions.length}`);
       
       if (questions.length > 0) {
         questions.forEach((q, idx) => {

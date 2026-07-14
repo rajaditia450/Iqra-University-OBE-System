@@ -400,6 +400,13 @@ const getShortLabel = (catName: string, unitNo: number, totalUnits: number): str
 };
 
 const normalizeCourse = (course: InstructorCourse): InstructorCourse => {
+  console.log('[DEBUG normalizeCourse] Entering with course:', {
+    id: course.id,
+    code: course.code,
+    title: course.title,
+    obeQuestionsLength: (course.obeQuestions || (course as any).obe_questions || []).length,
+    unitsDataKeys: course.unitsData ? Object.keys(course.unitsData) : null
+  });
   let courseType: 'Theory' | 'Lab' = 'Theory';
   const code = String(course.code || '').trim().toUpperCase();
   const title = String(course.title || '').trim().toLowerCase();
@@ -530,6 +537,7 @@ const normalizeCourse = (course: InstructorCourse): InstructorCourse => {
     }
 
     updatedUnitsData[key] = unitsList;
+    console.log(`[DEBUG normalizeCourse] Normalized category ${key} with ${unitsList.length} units:`, unitsList.map(u => ({ unitNo: u.unitNo, questionsCount: u.questions.length })));
   });
 
   typeCats.forEach(initCat => {
@@ -581,10 +589,33 @@ const normalizeCourse = (course: InstructorCourse): InstructorCourse => {
   const rawObeMarks = course.obeMarks || (course as any).obe_marks || {};
   const rawStudents = course.students || (course as any).students || [];
   const normalizedStudents = rawStudents.map((s: any) => {
+    const regNo = s.regNo || s.reg_no || '';
+    const name = s.name || '';
+    const marks = { ...(s.marks || s.obtained_marks || s.obtainedMarks || {}) };
+
+    // Inject individual OBE question marks from rawObeMarks (from OBEStudentMark DB model)
+    const studentObeMarks = rawObeMarks[regNo] || {};
+    Object.entries(studentObeMarks).forEach(([qId, score]) => {
+      // Find the corresponding question metadata to reconstruct the exact frontend key:
+      // q-${categoryName}-${unitNo}-${questionId}
+      const matchingQ = normalizedObeQuestions.find(q => q.id === qId);
+      if (matchingQ) {
+        const key = `q-${matchingQ.categoryName}-${matchingQ.unitNo}-${qId}`;
+        marks[key] = Number(score);
+      } else {
+        // Fallback: search parsedObeQuestions
+        const fallbackQ = parsedObeQuestions.find(q => q.id === qId);
+        if (fallbackQ) {
+          const key = `q-${fallbackQ.categoryName}-${fallbackQ.unitNo}-${qId}`;
+          marks[key] = Number(score);
+        }
+      }
+    });
+
     return {
-      regNo: s.regNo || s.reg_no || '',
-      name: s.name || '',
-      marks: s.marks || s.obtained_marks || s.obtainedMarks || {}
+      regNo,
+      name,
+      marks
     };
   });
 
@@ -885,95 +916,118 @@ const MarksheetDocument = ({
       <div className="mt-4 no-print-break font-sans">
         <div className="overflow-x-auto">
           {reportType === 'award' ? (
-            <table className="w-full text-center border-collapse border border-black font-sans text-[10px]">
-              <thead>
-                <tr className="bg-slate-50 border-b border-black font-black text-[9px] text-slate-900 leading-tight">
-                  <th className="border-r border-black p-1 w-[4%] min-w-[28px] max-w-[35px] text-center">S.#</th>
-                  <th className="border-r border-black p-1 text-center w-[16%] min-w-[100px] max-w-[115px] whitespace-nowrap">Reg.No</th>
-                  <th className="border-r border-black p-1 text-left w-[24%] min-w-[150px] max-w-[180px]">Name of Student</th>
-                  <th className="border-r border-black p-1 w-[12%] text-center"></th>
-                  <th className="border-r border-black p-1 text-center w-[14%] min-w-[80px]">Degree</th>
-                  <th className="border-r border-black p-1 text-slate-900 font-bold w-[16%] min-w-[80px] text-center">Final Marks out of 100%</th>
-                  <th className="p-1 text-slate-900 font-bold w-[10%] min-w-[50px] text-center select-none">Grade</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-black/40 font-mono text-[10px]">
-                {studentTotalGrades.map((item, idx) => (
-                  <tr key={item.student.regNo} className="hover:bg-slate-50/20 text-slate-850">
-                    <td className="border-r border-black p-1 text-slate-400 text-[9px] font-sans text-center w-[4%] min-w-[28px] max-w-[35px]">{idx + 1}</td>
-                    <td className="border-r border-black p-1 text-center text-slate-905 font-bold text-[9.5px] uppercase font-mono tracking-tight whitespace-nowrap w-[16%] min-w-[100px] max-w-[115px]">{item.student.regNo}</td>
-                    <td className="border-r border-black p-1 text-left font-sans text-slate-900 font-bold uppercase text-[9.5px] w-[24%] min-w-[150px] max-w-[180px] break-words">{item.student.name}</td>
-                    <td className="border-r border-black p-1 w-[12%]"></td>
-                    <td className="border-r border-black p-1 text-center text-slate-800 font-semibold uppercase text-[9.5px] w-[14%] min-w-[80px] font-sans">{getDegreeDisplay(course)}</td>
-                    <td className="border-r border-black p-1 font-extrabold text-[#4f46e5] text-[10.5px] text-center w-[16%] min-w-[80px] font-sans">
-                      {Math.round(item.aggregate)}
-                    </td>
-                    <td className="p-1 font-black text-emerald-800 text-[11px] bg-emerald-50/5 text-center w-[10%] min-w-[50px] font-sans">{item.grade}</td>
+            <>
+              <table className="w-full text-center border-collapse border border-black font-sans text-[11px]">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-black font-black text-[10.5px] text-slate-900 leading-tight">
+                    <th className="border-r border-black p-1.5 w-[5%] min-w-[32px] max-w-[40px] text-center">S.#</th>
+                    <th className="border-r border-black p-1.5 text-center w-[18%] min-w-[100px] max-w-[120px] whitespace-nowrap">Reg.No</th>
+                    <th className="border-r border-black p-1.5 text-left w-[32%] min-w-[180px] max-w-[220px]">Name of Student</th>
+                    <th className="border-r border-black p-1.5 text-center w-[15%] min-w-[80px]">Degree</th>
+                    <th className="border-r border-black p-1.5 text-slate-900 font-bold w-[18%] min-w-[90px] text-center">Final Marks out of 100%</th>
+                    <th className="p-1.5 text-slate-900 font-bold w-[12%] min-w-[60px] text-center select-none">Grade</th>
                   </tr>
-                ))}
-                {/* Pad table with empty template rows just like in the reference image */}
-                {Array.from({ length: Math.max(0, 8 - course.students.length) }).map((_, emptyIdx) => {
-                  const displayIdx = course.students.length + emptyIdx + 1;
-                  return (
-                    <tr key={`empty-${emptyIdx}`} className="text-slate-850">
-                      <td className="border-r border-black p-1 text-slate-400 text-[9px] font-sans text-center w-[4%] min-w-[28px] max-w-[35px]">{displayIdx}</td>
-                      <td className="border-r border-black p-1 w-[16%] min-w-[100px] max-w-[115px]"></td>
-                      <td className="border-r border-black p-1 w-[24%] min-w-[150px] max-w-[180px]"></td>
-                      <td className="border-r border-black p-1 w-[12%]"></td>
-                      <td className="border-r border-black p-1 w-[14%] min-w-[80px]"></td>
-                      <td className="border-r border-black p-1 w-[16%] min-w-[80px]"></td>
-                      <td className="p-1 w-[10%] min-w-[50px]"></td>
+                </thead>
+                <tbody className="divide-y divide-black/40 font-mono text-[11px]">
+                  {studentTotalGrades.map((item, idx) => (
+                    <tr key={item.student.regNo} className="hover:bg-slate-50/20 text-slate-850">
+                      <td className="border-r border-black p-1.5 text-slate-450 text-[10px] font-sans text-center w-[5%] min-w-[32px] max-w-[40px]">{idx + 1}</td>
+                      <td className="border-r border-black p-1.5 text-center text-slate-905 font-bold text-[11px] uppercase font-mono tracking-tight whitespace-nowrap w-[18%] min-w-[100px] max-w-[120px]">{item.student.regNo}</td>
+                      <td className="border-r border-black p-1.5 text-left font-sans text-slate-900 font-bold uppercase text-[11px] w-[32%] min-w-[180px] max-w-[220px] break-words">{item.student.name}</td>
+                      <td className="border-r border-black p-1.5 text-center text-slate-800 font-semibold uppercase text-[11px] w-[15%] min-w-[80px] font-sans">{getDegreeDisplay(course)}</td>
+                      <td className="border-r border-black p-1.5 font-extrabold text-[#4f46e5] text-[12px] text-center w-[18%] min-w-[90px] font-sans">
+                        {Math.round(item.aggregate)}
+                      </td>
+                      <td className="p-1.5 font-black text-emerald-800 text-[12.5px] bg-emerald-50/5 text-center w-[12%] min-w-[60px] font-sans">{item.grade}</td>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                  ))}
+                  {/* Pad table with empty template rows just like in the reference image */}
+                  {Array.from({ length: Math.max(0, 8 - course.students.length) }).map((_, emptyIdx) => {
+                    const displayIdx = course.students.length + emptyIdx + 1;
+                    return (
+                      <tr key={`empty-${emptyIdx}`} className="text-slate-850">
+                        <td className="border-r border-black p-1.5 text-slate-450 text-[10px] font-sans text-center w-[5%] min-w-[32px] max-w-[40px]">{displayIdx}</td>
+                        <td className="border-r border-black p-1.5 w-[18%] min-w-[100px] max-w-[120px]"></td>
+                        <td className="border-r border-black p-1.5 w-[32%] min-w-[180px] max-w-[220px]"></td>
+                        <td className="border-r border-black p-1.5 w-[15%] min-w-[80px]"></td>
+                        <td className="border-r border-black p-1.5 w-[18%] min-w-[90px]"></td>
+                        <td className="p-1.5 w-[12%] min-w-[60px]"></td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+
+              {/* Grade count section */}
+              <div className="mt-6 max-w-[260px] no-print-break font-sans border border-black p-1 bg-white">
+                <table className="w-full border-collapse text-center text-[10.5px] font-sans">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-black font-black text-[9.5px] text-slate-900 leading-tight">
+                      <th className="border-r border-black p-1 text-center w-1/2">Grade</th>
+                      <th className="p-1 text-center w-1/2">No. of Student(s)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-black/30 font-mono text-[10.5px]">
+                    {gradingList.map(item => (
+                      <tr key={item.grade} className="text-slate-850">
+                        <td className="border-r border-black p-1 text-center font-sans font-bold">{item.grade}</td>
+                        <td className="p-1 text-center">{gradeCounts[item.grade] || 0}</td>
+                      </tr>
+                    ))}
+                    <tr className="bg-slate-50 border-t border-black font-sans font-black text-[10px] text-slate-900">
+                      <td className="border-r border-black p-1 text-center uppercase">Total Students</td>
+                      <td className="p-1 text-center font-mono">{course.students.length}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </>
           ) : reportType === 'combined' ? (
-            <table className="w-full text-center border-collapse border border-black font-sans text-[10px]">
+            <table className="w-full text-center border-collapse border border-black font-sans text-[11px]">
               <thead>
-                <tr className="bg-slate-50 border-b border-black font-black text-[9px] text-slate-900 leading-tight">
-                  <th className="border-r border-black p-1 w-[4%] min-w-[28px] max-w-[35px] text-center">Sr. No.</th>
-                  <th className="border-r border-black p-1 text-center w-[14%] min-w-[100px] max-w-[115px] whitespace-nowrap">Regn. No.</th>
-                  <th className="border-r border-black p-1 text-left w-[24%] min-w-[150px] max-w-[180px]">Name</th>
+                <tr className="bg-slate-50 border-b border-black font-black text-[10.5px] text-slate-900 leading-tight">
+                  <th className="border-r border-black p-1.5 w-[4%] min-w-[28px] max-w-[35px] text-center">Sr. No.</th>
+                  <th className="border-r border-black p-1.5 text-center w-[14%] min-w-[100px] max-w-[115px] whitespace-nowrap">Regn. No.</th>
+                  <th className="border-r border-black p-1.5 text-left w-[24%] min-w-[150px] max-w-[180px]">Name</th>
                   {activeCats.map((cat, cIdx) => (
-                    <th key={cIdx} className="border-r border-black p-1 font-bold text-center">
+                    <th key={cIdx} className="border-r border-black p-1.5 font-bold text-center">
                       <span className="block uppercase tracking-tight">{getShortCategoryLabel(cat.name)}</span>
                     </th>
                   ))}
-                  <th className="border-r border-black p-1 text-slate-900 font-bold w-[10%] min-w-[70px] text-center">Total Marks</th>
-                  <th className="p-1 text-slate-900 font-bold w-[6%] min-w-[40px] text-center select-none">Grade</th>
+                  <th className="border-r border-black p-1.5 text-slate-900 font-bold w-[10%] min-w-[70px] text-center">Total Marks</th>
+                  <th className="p-1.5 text-slate-900 font-bold w-[6%] min-w-[40px] text-center select-none">Grade</th>
                 </tr>
-                <tr className="bg-slate-50 border-b border-black font-black text-[9px] text-slate-900 leading-tight">
+                <tr className="bg-slate-50 border-b border-black font-black text-[9.5px] text-slate-900 leading-tight">
                   <th className="border-r border-black p-0.5"></th>
                   <th className="border-r border-black p-0.5"></th>
                   <th className="border-r border-black p-0.5"></th>
                   {activeCats.map((cat, cIdx) => (
-                    <th key={cIdx} className="border-r border-black p-0.5 font-bold text-center text-[8.5px]">
+                    <th key={cIdx} className="border-r border-black p-0.5 font-bold text-center text-[9px]">
                       {cat.percentage}
                     </th>
                   ))}
-                  <th className="border-r border-black p-0.5 text-slate-900 font-bold text-center text-[8.5px]">{totalMaxWeight}</th>
+                  <th className="border-r border-black p-0.5 text-slate-900 font-bold text-center text-[9px]">{totalMaxWeight}</th>
                   <th className="p-0.5 text-slate-900 font-bold text-center select-none"></th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-black/40 font-mono text-[10px]">
+              <tbody className="divide-y divide-black/40 font-mono text-[11px]">
                 {studentTotalGrades.map((item, idx) => (
                   <tr key={item.student.regNo} className="hover:bg-slate-50/20 text-slate-850">
-                    <td className="border-r border-black p-1 text-slate-400 text-[9px] font-sans text-center w-[4%] min-w-[28px] max-w-[35px]">{idx + 1}</td>
-                    <td className="border-r border-black p-1 text-center text-slate-905 font-bold text-[9.5px] uppercase font-mono tracking-tight whitespace-nowrap w-[14%] min-w-[100px] max-w-[115px]">{item.student.regNo}</td>
-                    <td className="border-r border-black p-1 text-left font-sans text-slate-900 font-bold uppercase text-[9.5px] w-[24%] min-w-[150px] max-w-[180px] break-words">{item.student.name}</td>
+                    <td className="border-r border-black p-1.5 text-slate-450 text-[10px] font-sans text-center w-[4%] min-w-[28px] max-w-[35px]">{idx + 1}</td>
+                    <td className="border-r border-black p-1.5 text-center text-slate-905 font-bold text-[11px] uppercase font-mono tracking-tight whitespace-nowrap w-[14%] min-w-[100px] max-w-[115px]">{item.student.regNo}</td>
+                    <td className="border-r border-black p-1.5 text-left font-sans text-slate-900 font-bold uppercase text-[11px] w-[24%] min-w-[150px] max-w-[180px] break-words">{item.student.name}</td>
                     {activeCats.map((cat, cIdx) => {
                       const val = item.categoryContributions[cat.name] || 0;
                       return (
-                        <td key={cIdx} className="border-r border-black p-1 text-[10px] text-center font-sans">
+                        <td key={cIdx} className="border-r border-black p-1.5 text-[11px] text-center font-sans">
                           {val.toFixed(2)}
                         </td>
                       );
                     })}
-                    <td className="border-r border-black p-1 font-extrabold text-[#4f46e5] text-[10.5px] text-center w-[10%] min-w-[70px] font-sans">
+                    <td className="border-r border-black p-1.5 font-extrabold text-[#4f46e5] text-[12px] text-center w-[10%] min-w-[70px] font-sans">
                       {item.aggregate.toFixed(2)}
                     </td>
-                    <td className="p-1 font-black text-emerald-800 text-[11px] bg-emerald-50/5 text-center w-[6%] min-w-[40px] font-sans">{item.grade}</td>
+                    <td className="p-1.5 font-black text-emerald-800 text-[12.5px] bg-emerald-50/5 text-center w-[6%] min-w-[40px] font-sans">{item.grade}</td>
                   </tr>
                 ))}
                 {/* Pad table with empty template rows just like in the reference image */}
@@ -981,54 +1035,54 @@ const MarksheetDocument = ({
                   const displayIdx = course.students.length + emptyIdx + 1;
                   return (
                     <tr key={`empty-${emptyIdx}`} className="text-slate-850">
-                      <td className="border-r border-black p-1 text-slate-400 text-[9px] font-sans text-center w-[4%] min-w-[28px] max-w-[35px]">{displayIdx}</td>
-                      <td className="border-r border-black p-1 w-[14%] min-w-[100px] max-w-[115px]"></td>
-                      <td className="border-r border-black p-1 w-[24%] min-w-[150px] max-w-[180px]"></td>
+                      <td className="border-r border-black p-1.5 text-slate-450 text-[10px] font-sans text-center w-[4%] min-w-[28px] max-w-[35px]">{displayIdx}</td>
+                      <td className="border-r border-black p-1.5 w-[14%] min-w-[100px] max-w-[115px]"></td>
+                      <td className="border-r border-black p-1.5 w-[24%] min-w-[150px] max-w-[180px]"></td>
                       {activeCats.map((_, cIdx) => (
-                        <td key={cIdx} className="border-r border-black p-1"></td>
+                        <td key={cIdx} className="border-r border-black p-1.5"></td>
                       ))}
-                      <td className="border-r border-black p-1 w-[10%] min-w-[70px]"></td>
-                      <td className="p-1 w-[6%] min-w-[40px]"></td>
+                      <td className="border-r border-black p-1.5 w-[10%] min-w-[70px]"></td>
+                      <td className="p-1.5 w-[6%] min-w-[40px]"></td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
           ) : (
-            <table className="w-full text-center border-collapse border border-black font-sans text-[10px]">
+            <table className="w-full text-center border-collapse border border-black font-sans text-[11px]">
               <thead>
-                <tr className="bg-slate-50 border-b border-black font-black text-[9px] text-slate-900 leading-tight">
-                  <th className="border-r border-black p-1 w-[4%] min-w-[28px] max-w-[35px] text-center">S.#</th>
-                  <th className="border-r border-black p-1 text-left w-[14%] min-w-[100px] max-w-[115px] whitespace-nowrap">Registration No</th>
-                  <th className="border-r border-black p-1 text-left w-[24%] min-w-[150px] max-w-[180px]">Student Name</th>
+                <tr className="bg-slate-50 border-b border-black font-black text-[10.5px] text-slate-900 leading-tight">
+                  <th className="border-r border-black p-1.5 w-[4%] min-w-[28px] max-w-[35px] text-center">S.#</th>
+                  <th className="border-r border-black p-1.5 text-left w-[14%] min-w-[100px] max-w-[115px] whitespace-nowrap">Registration No</th>
+                  <th className="border-r border-black p-1.5 text-left w-[24%] min-w-[150px] max-w-[180px]">Student Name</th>
                   {totalColumns.map((col, cIdx) => (
-                    <th key={cIdx} className="border-r border-black p-1 font-mono text-[9px] font-bold min-w-[32px] text-center">
+                    <th key={cIdx} className="border-r border-black p-1.5 font-mono text-[10px] font-bold min-w-[32px] text-center">
                       <span className="block font-bold uppercase tracking-tighter">{col.label}</span>
-                      <span className="text-[7.5px] text-slate-500 font-normal block mt-0.5">({col.maxMarks})</span>
+                      <span className="text-[8px] text-slate-500 font-normal block mt-0.5">({col.maxMarks})</span>
                     </th>
                   ))}
-                  <th className="border-r border-black p-1 text-indigo-805 font-bold w-[8%] min-w-[60px] text-center">Total Weightage</th>
-                  <th className="p-1 text-emerald-850 font-bold w-[6%] min-w-[40px] text-center bg-emerald-50/5 select-none">Grade</th>
+                  <th className="border-r border-black p-1.5 text-indigo-805 font-bold w-[8%] min-w-[60px] text-center">Total Weightage</th>
+                  <th className="p-1.5 text-emerald-850 font-bold w-[6%] min-w-[40px] text-center bg-emerald-50/5 select-none">Grade</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-black/40 font-mono text-[10px]">
+              <tbody className="divide-y divide-black/40 font-mono text-[11px]">
                 {studentTotalGrades.map((item, idx) => (
                   <tr key={item.student.regNo} className="hover:bg-slate-50/20 text-slate-850">
-                    <td className="border-r border-black p-1 text-slate-400 text-[9px] font-sans text-center w-[4%] min-w-[28px] max-w-[35px]">{idx + 1}</td>
-                    <td className="border-r border-black p-1 text-left text-slate-905 font-black text-[9.5px] uppercase font-mono tracking-tight whitespace-nowrap w-[14%] min-w-[100px] max-w-[115px]">{item.student.regNo}</td>
-                    <td className="border-r border-black p-1 text-left font-sans text-slate-900 font-bold uppercase text-[9.5px] w-[24%] min-w-[150px] max-w-[180px] break-words">{item.student.name}</td>
+                    <td className="border-r border-black p-1.5 text-slate-450 text-[10px] font-sans text-center w-[4%] min-w-[28px] max-w-[35px]">{idx + 1}</td>
+                    <td className="border-r border-black p-1.5 text-left text-slate-905 font-black text-[11px] uppercase font-mono tracking-tight whitespace-nowrap w-[14%] min-w-[100px] max-w-[115px]">{item.student.regNo}</td>
+                    <td className="border-r border-black p-1.5 text-left font-sans text-slate-900 font-bold uppercase text-[11px] w-[24%] min-w-[150px] max-w-[180px] break-words">{item.student.name}</td>
                     {totalColumns.map((col, cIdx) => {
                       const mark = getStudentMark(item.student, col.catName, col.unitNo, col.maxMarks, course.unitsData);
                       return (
-                        <td key={cIdx} className="border-r border-black p-1 text-[10px] text-center min-w-[32px]">
+                        <td key={cIdx} className="border-r border-black p-1.5 text-[11px] text-center min-w-[32px]">
                           {mark.toFixed(1)}
                         </td>
                       );
                     })}
-                    <td className="border-r border-black p-1 font-extrabold text-[#4f46e5] text-[10.5px] text-center w-[8%] min-w-[60px]">
+                    <td className="border-r border-black p-1.5 font-extrabold text-[#4f46e5] text-[12px] text-center w-[8%] min-w-[60px]">
                       {item.aggregate.toFixed(1)}
                     </td>
-                    <td className="p-1 font-black text-emerald-800 text-[11px] bg-emerald-50/5 text-center w-[6%] min-w-[40px]">{item.grade}</td>
+                    <td className="p-1.5 font-black text-emerald-800 text-[12.5px] bg-emerald-50/5 text-center w-[6%] min-w-[40px]">{item.grade}</td>
                   </tr>
                 ))}
                 {course.students.length === 0 && (
@@ -1217,13 +1271,27 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
 
   useEffect(() => {
     if (!loading) {
+      console.log('[DEBUG auto-save useEffect] courses state changed, local storing and syncing to backend:', courses.map(c => ({
+        id: c.id,
+        code: c.code,
+        obeQuestionsCount: (c.obeQuestions || []).length,
+        unitsDataKeys: c.unitsData ? Object.keys(c.unitsData) : null
+      })));
       localStorage.setItem('IQRA_OBE_INSTRUCTOR_COURSES', JSON.stringify(courses));
       if (isFirstLoadRef.current) {
+        console.log('[DEBUG auto-save useEffect] Skipping initial load save');
         isFirstLoadRef.current = false;
         return;
       }
-      apiService.saveInstructorCourses(courses).catch(err => {
-        console.warn("Failed to sync instructor courses to backend", err);
+      apiService.saveInstructorCourses(courses).then(res => {
+        console.log('[DEBUG auto-save useEffect] Backend sync success. Returned course list:', res ? res.map((c: any) => ({
+          id: c.id,
+          code: c.code,
+          obeQuestionsCount: (c.obeQuestions || []).length,
+          unitsDataKeys: c.unitsData ? Object.keys(c.unitsData) : null
+        })) : null);
+      }).catch(err => {
+        console.warn("[DEBUG auto-save useEffect] Failed to sync instructor courses to backend", err);
       });
     }
   }, [courses, loading]);
@@ -1471,24 +1539,13 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
   }, [selectedCourse, instructorName]);
 
   const handlePrintDirect = () => {
-    // Set direct print view state to transiently unmount everything except the pristine mark sheet layout
-    setIsDirectPrinting(true);
-    
-    // Allow state change to fully render, reflow and focus prior to print dialog freezing the main thread
-    setTimeout(() => {
-      try {
-        window.focus();
-        window.print();
-      } catch (e) {
-        console.error("Print failed:", e);
-        showNotification("The print dialog is blocked in this container preview. Please use the 'Download' button instead to get a PDF.");
-      }
-      
-      // Instantly restore normal applet layout in a secondary frame context
-      setTimeout(() => {
-        setIsDirectPrinting(false);
-      }, 600);
-    }, 250);
+    try {
+      window.focus();
+      window.print();
+    } catch (e) {
+      console.error("Print failed:", e);
+      showNotification("The print dialog is blocked in this container preview. Please use the 'Download' button instead to get a PDF.");
+    }
   };
 
   const handleDownloadPDF = async () => {
@@ -1539,9 +1596,9 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
     }));
 
     try {
-      // Temporarily expand the element to a wide landscape-friendly layout
-      // This completely untangles column flows and ensures no elements, formulas, or marks are hidden
-      element.style.width = '1280px';
+      // Temporarily set the element to a standard crisp A4 portrait width (800px)
+      // This preserves exact typography and proportions without squishing or down-scaling elements to microscopic sizes in the resulting PDF.
+      element.style.width = '800px';
       element.style.maxWidth = 'none';
       element.style.minHeight = 'auto';
       element.style.boxShadow = 'none';
@@ -1557,7 +1614,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
 
       originalTables.forEach(item => {
         item.el.style.width = '100%';
-        item.el.style.tableLayout = 'auto'; // Forces browser to layout and size columns dynamically
+        // Keep original table layout structure to prevent column distortion
       });
 
       // Force layout calculation refresh
@@ -1577,8 +1634,8 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
       const pageHeight = 297; // A4 portrait height in mm
       const imgWidth = 210; // A4 portrait width in mm
       
-      const widthInPx = element.offsetWidth || 1280;
-      const heightInPx = element.offsetHeight || 1605;
+      const widthInPx = element.offsetWidth || 800;
+      const heightInPx = element.offsetHeight || 1130;
       const imgHeight = (heightInPx * imgWidth) / widthInPx; // scales naturally to preserve original aspect ratio
 
       let heightLeft = imgHeight;
@@ -2356,9 +2413,18 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
     mappedCLOs: string[]
   ) => {
     if (!selectedCourse) return;
+    console.log('[DEBUG handleAddInlineQuestion] Entering with args:', {
+      categoryName,
+      unitNo,
+      questionName,
+      marks,
+      mappedCLOs,
+      selectedCourseId: selectedCourse.id,
+      selectedCourseCode: selectedCourse.code
+    });
     setCourses(prev =>
       prev.map(c => {
-        if (c.code === selectedCourse.code) {
+        if (c.id === selectedCourse.id) {
           const updatedUnitsData = { ...c.unitsData };
           const existingUnits = updatedUnitsData[categoryName] || [];
           
@@ -2438,9 +2504,14 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
 
   const handleClearInlineQuestions = (categoryName: string, unitNo: number) => {
     if (!selectedCourse) return;
+    console.log('[DEBUG handleClearInlineQuestions] Entering with args:', {
+      categoryName,
+      unitNo,
+      selectedCourseId: selectedCourse.id
+    });
     setCourses(prev =>
       prev.map(c => {
-        if (c.code === selectedCourse.code) {
+        if (c.id === selectedCourse.id) {
           const updatedUnitsData = { ...c.unitsData };
           const existingUnits = updatedUnitsData[categoryName] || [];
           const updatedUnitsList = existingUnits.map(u => {
@@ -2475,9 +2546,15 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
 
   const handleWizardPartition = (categoryName: string, unitNo: number, numQuestions: number) => {
     if (!selectedCourse || numQuestions <= 0) return;
+    console.log('[DEBUG handleWizardPartition] Entering with args:', {
+      categoryName,
+      unitNo,
+      numQuestions,
+      selectedCourseId: selectedCourse.id
+    });
     setCourses(prev =>
       prev.map(c => {
-        if (c.code === selectedCourse.code) {
+        if (c.id === selectedCourse.id) {
           const updatedUnitsData = { ...c.unitsData };
           const existingUnits = updatedUnitsData[categoryName] || [];
           let unitItem = existingUnits.find(u => u.unitNo === unitNo);
@@ -2741,10 +2818,40 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
           [unitEditingCategory]: tempUnits
         };
 
+        // Sync with top-level obeQuestions
+        const otherObeQuestions = (c.obeQuestions || []).filter(
+          q => q.categoryName !== unitEditingCategory
+        );
+
+        const newObeQuestions: any[] = [];
+        tempUnits.forEach(u => {
+          if (u.questions && u.questions.length > 0) {
+            u.questions.forEach(q => {
+              newObeQuestions.push({
+                id: q.id,
+                categoryName: unitEditingCategory,
+                unitNo: u.unitNo,
+                questionName: q.name,
+                maxMarks: q.maxMarks,
+                mappedCLOs: q.mappedCLOs || []
+              });
+            });
+          }
+        });
+
+        const updatedObeQuestions = [...otherObeQuestions, ...newObeQuestions];
+
+        console.log('[DEBUG handleSaveUnitSettings] Syncing obeQuestions:', {
+          category: unitEditingCategory,
+          newQuestionsCount: newObeQuestions.length,
+          totalQuestionsCount: updatedObeQuestions.length
+        });
+
         return {
           ...c,
           categories: copyCats,
-          unitsData: copyUnitsData
+          unitsData: copyUnitsData,
+          obeQuestions: updatedObeQuestions
         };
       }
       return c;
@@ -3880,18 +3987,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
             )}
             {/* TAB: GRADING SYSTEM SETUP */}
             {activeTab === 'grading-system' && selectedCourse && (
-              <div id="grading-system-view" className="space-y-6 animate-fadeIn">
-                <div className="bg-[#f8fafc] border-b border-slate-200 pb-4">
-                  <span className="text-[10px] text-indigo-600 font-extrabold uppercase tracking-widest bg-indigo-50 px-2 py-0.5 rounded border border-indigo-150">Grading Configuration</span>
-                  <h3 className="text-base font-extrabold text-slate-900 mt-1 flex items-center gap-1.5 font-sans">
-                    <Award className="w-4 h-4 text-indigo-600" />
-                    Course Grading System Setup
-                  </h3>
-                  <p className="text-xs text-slate-600 mt-1">
-                    Configure and select the active evaluation scheme. Select a standard ready-made template or build a customized grading structure below.
-                  </p>
-                </div>
-
+              <div id="grading-system-view" className="space-y-4 animate-fadeIn">
                 <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 p-3.5 rounded-xl">
                   <span className="text-xs font-bold text-slate-550 font-sans">Evaluated Selection for {selectedCourse.code}:</span>
                   <span className="px-3 py-1 bg-indigo-600 text-white text-xs font-black rounded-lg uppercase tracking-wider font-sans">
@@ -4945,9 +5041,11 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                                                             }
                                                             return unitItem;
                                                           });
+                                                          const nextObeQs = (c.obeQuestions || []).filter(item => item.id !== q.id);
                                                           return {
                                                             ...c,
-                                                            unitsData: { ...c.unitsData, [curCat]: nextU }
+                                                            unitsData: { ...c.unitsData, [curCat]: nextU },
+                                                            obeQuestions: nextObeQs
                                                           };
                                                         }
                                                         return c;
@@ -6913,44 +7011,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                 <div className="w-full lg:w-80 lg:shrink-0 bg-white border-b lg:border-b-0 lg:border-r border-slate-200 p-5 overflow-y-auto space-y-4">
                   <h4 className="text-[11px] font-black uppercase text-slate-500 tracking-widest border-b border-slate-150 pb-1.5">Configure Transcripts</h4>
                   
-                  <div>
-                    <label className="block text-[10px] text-slate-650 font-bold uppercase mb-1.5 font-mono">Report Layout</label>
-                    <div className="grid grid-cols-3 gap-1 p-0.5 bg-slate-100 rounded-lg border border-slate-200">
-                      <button
-                        type="button"
-                        onClick={() => setReportType('standard')}
-                        className={`py-1.5 px-1 text-center rounded-md font-bold text-[9.5px] transition-all cursor-pointer ${
-                          reportType === 'standard'
-                            ? 'bg-white text-emerald-900 shadow-xs border border-emerald-100'
-                            : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
-                        }`}
-                      >
-                        Standard
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setReportType('combined')}
-                        className={`py-1.5 px-1 text-center rounded-md font-bold text-[9.5px] transition-all cursor-pointer ${
-                          reportType === 'combined'
-                            ? 'bg-white text-blue-900 shadow-xs border border-blue-100'
-                            : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
-                        }`}
-                      >
-                        Combined
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setReportType('award')}
-                        className={`py-1.5 px-1 text-center rounded-md font-bold text-[9.5px] transition-all cursor-pointer ${
-                          reportType === 'award'
-                            ? 'bg-white text-violet-900 shadow-xs border border-violet-100'
-                            : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
-                        }`}
-                      >
-                        Award List
-                      </button>
-                    </div>
-                  </div>
+
 
                   <div className="space-y-3">
                     <div>

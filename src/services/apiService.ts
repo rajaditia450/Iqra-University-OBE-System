@@ -1077,6 +1077,10 @@ export const apiService = {
     localStorage.setItem('IQRA_OBE_INSTRUCTOR_COURSES', JSON.stringify(courses));
     try {
       const mappedCourses = courses.map(mapInstructorCourseToBackend);
+      console.log('[DEBUG apiService.saveInstructorCourses] Sending payload to Django backend:', {
+        url: `${BASE_URL}/instructor/courses/`,
+        payload: { courses: mappedCourses }
+      });
       const response = await fetchWithTimeout(`${BASE_URL}/instructor/courses/`, {
         method: 'POST',
         headers: getHeaders(),
@@ -1098,6 +1102,7 @@ export const apiService = {
       }
 
       const data = await response.json();
+      console.log('[DEBUG apiService.saveInstructorCourses] Received response from server:', data);
       if (Array.isArray(data)) return data;
       return data.courses || courses;
     } catch (err) {
