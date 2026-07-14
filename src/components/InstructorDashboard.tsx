@@ -456,73 +456,80 @@ const normalizeCourse = (course: InstructorCourse): InstructorCourse => {
   const rawUnitsData = course.unitsData || (course as any).units_data || {};
   const updatedUnitsData: Record<string, UnitItem[]> = {};
 
-  Object.keys(rawUnitsData).forEach(key => {
-    if (!allowedNames.includes(key)) {
-      return;
-    }
-    const unitsList = rawUnitsData[key];
-    if (Array.isArray(unitsList)) {
-      updatedUnitsData[key] = unitsList.map((u: any) => {
-        const unitNo = u.unitNo !== undefined ? u.unitNo : (u.unit_no !== undefined ? u.unit_no : 1);
-        const passing = u.passing !== undefined ? u.passing : (u.passing_marks !== undefined ? u.passing_marks : 5);
-        const totalMarks = u.totalMarks !== undefined ? u.totalMarks : (u.total_marks !== undefined ? u.total_marks : 10);
-        const weightage = u.weightage !== undefined ? u.weightage : 0;
-        const mappedCLOs = u.mappedCLOs || u.mapped_clos || u.mappedClos || [];
-        
-        let rawQs = u.questions || u.unit_questions || [];
-        
-        // Robust Fallback: if rawQs is empty, but parsedObeQuestions contains questions for this category and unit, populate them!
-        if ((!rawQs || rawQs.length === 0) && parsedObeQuestions.length > 0) {
-          const matchingObeQs = parsedObeQuestions.filter(
-            (oq: any) => oq.categoryName === key && oq.unitNo === unitNo
-          );
-          if (matchingObeQs.length > 0) {
-            rawQs = matchingObeQs.map((oq: any) => ({
-              id: oq.id,
-              name: oq.questionName,
-              maxMarks: oq.maxMarks,
-              mappedCLOs: oq.mappedCLOs
-            }));
-          }
+  updatedCategories.forEach(cat => {
+    const key = cat.name;
+    const numUnits = cat.units || 0;
+    const rawList = rawUnitsData[key] || [];
+    const unitsList: UnitItem[] = [];
+
+    for (let uNo = 1; uNo <= numUnits; uNo++) {
+      // Find matching raw unit if any
+      const rawUnit = Array.isArray(rawList) ? rawList.find((ru: any) => {
+        const rNo = ru.unitNo !== undefined ? ru.unitNo : (ru.unit_no !== undefined ? ru.unit_no : 1);
+        return rNo === uNo;
+      }) : null;
+
+      const unitNo = uNo;
+      const passing = rawUnit?.passing !== undefined ? rawUnit.passing : (rawUnit?.passing_marks !== undefined ? rawUnit.passing_marks : 5);
+      const totalMarks = rawUnit?.totalMarks !== undefined ? rawUnit.totalMarks : (rawUnit?.total_marks !== undefined ? rawUnit.total_marks : 10);
+      const weightage = rawUnit?.weightage !== undefined ? rawUnit.weightage : (numUnits > 0 ? parseFloat((100 / numUnits).toFixed(1)) : 0);
+      const mappedCLOs = rawUnit?.mappedCLOs || rawUnit?.mapped_clos || rawUnit?.mappedClos || [];
+
+      let rawQs = rawUnit?.questions || rawUnit?.unit_questions || [];
+
+      // Robust Fallback: if rawQs is empty, but parsedObeQuestions contains questions for this category and unit, populate them!
+      if ((!rawQs || rawQs.length === 0) && parsedObeQuestions.length > 0) {
+        const matchingObeQs = parsedObeQuestions.filter(
+          (oq: any) => oq.categoryName === key && oq.unitNo === unitNo
+        );
+        if (matchingObeQs.length > 0) {
+          rawQs = matchingObeQs.map((oq: any) => ({
+            id: oq.id,
+            name: oq.questionName,
+            maxMarks: oq.maxMarks,
+            mappedCLOs: oq.mappedCLOs
+          }));
         }
+      }
 
-        const questions = (rawQs || []).map((q: any) => {
-          const qCLOs = q.mappedCLOs || q.mapped_clos || q.mappedClos || [];
-          return {
-            id: q.id || '',
-            name: q.name || q.questionName || q.question_name || '',
-            maxMarks: q.maxMarks !== undefined ? q.maxMarks : (q.max_marks !== undefined ? q.max_marks : 10),
-            mappedCLOs: qCLOs.length > 0 ? [qCLOs[0]] : []
-          };
-        });
-
-        const isPresentation = key.toLowerCase().includes('presentation');
-        const formattedQuestions = questions.map((q: any) => {
-          if (isPresentation && (q.name.toLowerCase().startsWith('question') || q.name.toLowerCase().startsWith('q'))) {
-            const match = q.name.match(/\d+$/);
-            const numStr = match ? match[0] : '';
-            return {
-              ...q,
-              name: numStr ? `Module ${numStr}` : 'Module'
-            };
-          }
-          return q;
-        });
-
-        const finalUnitMappedCLOs = formattedQuestions.length > 0
-          ? [...new Set(formattedQuestions.flatMap(q => q.mappedCLOs))].sort()
-          : (mappedCLOs.length > 0 ? [mappedCLOs[0]] : []);
-
+      const questions = (rawQs || []).map((q: any) => {
+        const qCLOs = q.mappedCLOs || q.mapped_clos || q.mappedClos || [];
         return {
-          unitNo,
-          passing,
-          totalMarks,
-          weightage,
-          mappedCLOs: finalUnitMappedCLOs,
-          questions: formattedQuestions
+          id: q.id || '',
+          name: q.name || q.questionName || q.question_name || '',
+          maxMarks: q.maxMarks !== undefined ? q.maxMarks : (q.max_marks !== undefined ? q.max_marks : 10),
+          mappedCLOs: qCLOs.length > 0 ? [qCLOs[0]] : []
         };
       });
+
+      const isPresentation = key.toLowerCase().includes('presentation');
+      const formattedQuestions = questions.map((q: any) => {
+        if (isPresentation && (q.name.toLowerCase().startsWith('question') || q.name.toLowerCase().startsWith('q'))) {
+          const match = q.name.match(/\d+$/);
+          const numStr = match ? match[0] : '';
+          return {
+            ...q,
+            name: numStr ? `Module ${numStr}` : 'Module'
+          };
+        }
+        return q;
+      });
+
+      const finalUnitMappedCLOs = formattedQuestions.length > 0
+        ? [...new Set(formattedQuestions.flatMap(q => q.mappedCLOs))].sort()
+        : (mappedCLOs.length > 0 ? [mappedCLOs[0]] : ['CLO-1']);
+
+      unitsList.push({
+        unitNo,
+        passing,
+        totalMarks,
+        weightage,
+        mappedCLOs: finalUnitMappedCLOs,
+        questions: formattedQuestions
+      });
     }
+
+    updatedUnitsData[key] = unitsList;
   });
 
   typeCats.forEach(initCat => {
@@ -2068,9 +2075,39 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
           ...copyMarks[regNo],
           [qId]: value
         };
+
+        // Also keep student marks (standard & aggregate) in sync for direct Excel entry
+        const question = (c.obeQuestions || []).find(q => q.id === qId);
+        let updatedStudents = c.students;
+        if (question) {
+          const { categoryName, unitNo } = question;
+          updatedStudents = c.students.map(std => {
+            if (std.regNo === regNo) {
+              const nextMarks = { ...(std.marks || {}) };
+              const qKey = `q-${categoryName}-${unitNo}-${qId}`;
+              nextMarks[qKey] = value;
+
+              // Recompute aggregated unit total
+              const existingUnits = c.unitsData[categoryName] || [];
+              const unit = existingUnits.find(u => u.unitNo === unitNo);
+              if (unit && unit.questions && unit.questions.length > 0) {
+                const uTotal = unit.questions.reduce((sum, q) => {
+                  const k = `q-${categoryName}-${unitNo}-${q.id}`;
+                  const score = q.id === qId ? value : (nextMarks[k] ?? 0);
+                  return sum + score;
+                }, 0);
+                nextMarks[`${categoryName}-${unitNo}`] = uTotal;
+              }
+              return { ...std, marks: nextMarks };
+            }
+            return std;
+          });
+        }
+
         return {
           ...c,
-          obeMarks: copyMarks
+          obeMarks: copyMarks,
+          students: updatedStudents
         };
       }
       return c;
@@ -2108,9 +2145,20 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
           return std;
         });
 
+        // Also keep obeMarks in perfect sync so backend always gets question-wise marks inside obeMarks
+        const copyMarks = { ...(c.obeMarks || {}) };
+        if (!copyMarks[regNo]) {
+          copyMarks[regNo] = {};
+        }
+        copyMarks[regNo] = {
+          ...copyMarks[regNo],
+          [qId]: value
+        };
+
         return {
           ...c,
-          students: updatedStudents
+          students: updatedStudents,
+          obeMarks: copyMarks
         };
       }
       return c;
