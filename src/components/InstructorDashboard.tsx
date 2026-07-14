@@ -1130,12 +1130,38 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
   const [cloFormMappedGA, setCloFormMappedGA] = useState<string>('GA-1');
   const [cloFormOrder, setCloFormOrder] = useState<number>(1);
 
+  // Keep track of edited descriptions and GA mappings for CLOs
+  const [cloEdits, setCloEdits] = useState<Record<string, { description: string; mappedGA: string | null }>>({});
+
   // Synchronize numCLOs whenever selectedCourse changes or courseCLOs loads
   useEffect(() => {
     if (selectedCourse) {
       setNumCLOs(selectedCourse.cloCount || courseCLOs.length || 4);
     }
   }, [selectedCourse, courseCLOs.length]);
+
+  // Sync edits state with existing course CLOs and selected numCLOs
+  useEffect(() => {
+    const edits: Record<string, { description: string; mappedGA: string | null }> = {};
+    for (let i = 1; i <= numCLOs; i++) {
+      const code = `CLO-${i}`;
+      const existing = courseCLOs.find(c => c.code === code);
+      edits[code] = {
+        description: existing?.description || '',
+        mappedGA: existing?.mappedGA || existing?.mapped_ga || null
+      };
+    }
+    setCloEdits(edits);
+  }, [numCLOs, courseCLOs]);
+
+  // Compute available GAs for the selected course's department
+  const availableGAs = useMemo(() => {
+    if (!obeData?.gas || !selectedCourse) return [];
+    const filtered = obeData.gas.filter(ga => 
+      ga.departmentId?.toLowerCase() === selectedCourse.departmentId?.toLowerCase()
+    );
+    return filtered.length > 0 ? filtered : obeData.gas;
+  }, [obeData?.gas, selectedCourse]);
 
   const handleAssignCLOsCount = async (targetCount: number) => {
     if (!selectedCourse) return;
@@ -1150,13 +1176,105 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
         return c;
       }));
 
-      // 2. Clear out any database course CLO rows so it falls back to the dynamic placeholders
-      setCourseCLOs([]);
+      // 2. Automatically create default placeholder database records for CLOs up to targetCount
+      const savePromises = Array.from({ length: targetCount }, async (_, idx) => {
+        const i = idx + 1;
+        const code = `CLO-${i}`;
+        const existing = courseCLOs.find(c => c.code === code);
+        const payload = {
+          code,
+          description: existing?.description || `Course Learning Outcome ${i}`,
+          mappedGA: existing?.mappedGA || existing?.mapped_ga || null,
+          mapped_ga: existing?.mappedGA || existing?.mapped_ga || null,
+          order: i
+        };
 
-      showNotification(`Successfully configured ${targetCount} Course Learning Outcomes (CLOs) for this course.`);
-    } catch (err) {
+        if (existing && existing.id) {
+          return apiService.updateCourseCLO(selectedCourse.id, existing.id, payload);
+        } else {
+          return apiService.createCourseCLO(selectedCourse.id, payload);
+        }
+      });
+
+      // Delete any extra CLOs
+      const deletePromises = courseCLOs
+        .filter(c => {
+          const match = c.code.match(/CLO-(\d+)/);
+          if (match) {
+            const index = parseInt(match[1]);
+            return index > targetCount;
+          }
+          return false;
+        })
+        .map(c => apiService.deleteCourseCLO(selectedCourse.id, c.id));
+
+      await Promise.all([...savePromises, ...deletePromises]);
+      await fetchCurrentCourseCLOs(selectedCourse.id);
+
+      showNotification(`Successfully configured ${targetCount} Course Learning Outcomes (CLOs) for this course.`, 'success');
+    } catch (err: any) {
       console.error(err);
-      showNotification("Failed to configure CLO count. Please try again.");
+      showNotification(`Failed to configure CLO count: ${err.message || err}`);
+    } finally {
+      setLoadingCLOs(false);
+    }
+  };
+
+  const handleSaveAllCLOs = async () => {
+    if (!selectedCourse) return;
+    setLoadingCLOs(true);
+    try {
+      // 1. Update course cloCount locally in state.
+      setCourses(prev => prev.map(c => {
+        if (c.id === selectedCourse.id) {
+          return { ...c, cloCount: numCLOs };
+        }
+        return c;
+      }));
+
+      // 2. Save/update all CLOs from 1 to numCLOs
+      const savePromises = Array.from({ length: numCLOs }, async (_, idx) => {
+        const i = idx + 1;
+        const code = `CLO-${i}`;
+        const editData = cloEdits[code] || { description: '', mappedGA: null };
+        const existing = courseCLOs.find(c => c.code === code);
+
+        const payload = {
+          code,
+          description: editData.description || `Course Learning Outcome ${i}`,
+          mappedGA: editData.mappedGA,
+          mapped_ga: editData.mappedGA,
+          order: i
+        };
+
+        if (existing && existing.id) {
+          return apiService.updateCourseCLO(selectedCourse.id, existing.id, payload);
+        } else {
+          return apiService.createCourseCLO(selectedCourse.id, payload);
+        }
+      });
+
+      // 3. Delete any extra CLOs in DB that are higher than numCLOs
+      const deletePromises = courseCLOs
+        .filter(c => {
+          const match = c.code.match(/CLO-(\d+)/);
+          if (match) {
+            const index = parseInt(match[1]);
+            return index > numCLOs;
+          }
+          return false;
+        })
+        .map(c => apiService.deleteCourseCLO(selectedCourse.id, c.id));
+
+      await Promise.all([...savePromises, ...deletePromises]);
+
+      // 4. Re-fetch current course CLOs from the server
+      await fetchCurrentCourseCLOs(selectedCourse.id);
+
+      showNotification(`Successfully saved ${numCLOs} CLO descriptions and GA mappings.`, 'success');
+    } catch (err: any) {
+      console.error(err);
+      showNotification(`Failed to save CLO mappings: ${err.message || err}`);
     } finally {
       setLoadingCLOs(false);
     }
@@ -2899,7 +3017,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                 className={getNavbarItemClass(openMenu === 'edit-items')}
               >
                 <Edit3 className="w-3.5 h-3.5" />
-                <span>CLO Mapping</span>
+                <span>Assessments</span>
                 <ChevronDown className="w-3 h-3 opacity-60" />
               </button>
               {openMenu === 'edit-items' && selectedCourse && (
@@ -3355,18 +3473,23 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                         handleOpenUnitEditor={handleOpenUnitEditor}
                       />
                     )}
-            {/* TAB: CLO SPECIFICATION */}            {activeTab === "clo" && selectedCourse && (
-              <div id="clo-setup-view" className="space-y-6 animate-fadeIn font-sans">
-                <div className="max-w-xl mx-auto bg-slate-50/50 border border-slate-200 rounded-xl p-5 space-y-4 font-sans">
+            {/* TAB: CLO SPECIFICATION */}
+            {activeTab === "clo" && selectedCourse && (
+              <div id="clo-setup-view" className="space-y-6 animate-fadeIn font-sans max-w-4xl mx-auto">
+                {/* 1. Enter CLO count card */}
+                <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-4 font-sans shadow-2xs">
                   <div className="border-b border-slate-200 pb-2">
                     <h4 className="text-sm font-bold text-slate-900 flex items-center gap-1.5 font-sans">
                       <Sliders className="w-4 h-4 text-indigo-600" />
-                      Enter Number of CLOs
+                      Set Number of Course Learning Outcomes (CLOs)
                     </h4>
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      Determine how many distinct learning outcomes this course evaluates. Changing the count will dynamically adjust the list below.
+                    </p>
                   </div>
 
-                  <div className="space-y-4">
-                    <div>
+                  <div className="flex flex-col sm:flex-row gap-3 items-end">
+                    <div className="flex-1">
                       <label className="block text-[10px] uppercase font-extrabold text-slate-500 mb-1.5">Number of CLOs</label>
                       <select
                         value={numCLOs}
@@ -3382,14 +3505,110 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                     <button
                       onClick={() => handleAssignCLOsCount(numCLOs)}
                       disabled={loadingCLOs}
-                      className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg transition-colors shadow-xs cursor-pointer flex items-center justify-center gap-1.5"
+                      className="py-2.5 px-4 bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 disabled:opacity-50 text-xs font-bold rounded-lg transition-colors shadow-2xs cursor-pointer flex items-center justify-center gap-1.5 shrink-0"
+                    >
+                      {loadingCLOs ? (
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Sliders className="w-3.5 h-3.5" />
+                      )}
+                      Initialize Placeholders
+                    </button>
+                  </div>
+                </div>
+
+                {/* 2. Detailed CLO to GA Mapping Card */}
+                <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs">
+                  <div className="border-b border-slate-200 bg-slate-50/50 px-5 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                    <div>
+                      <h4 className="text-sm font-bold text-slate-900 font-sans">
+                        CLO Descriptions & Graduate Attribute (GA) Mappings
+                      </h4>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        Define human-readable descriptions and map each individual CLO to its corresponding Graduate Attribute (one-to-one mapping).
+                      </p>
+                    </div>
+                    <span className="px-2.5 py-0.5 bg-indigo-50 border border-indigo-150 text-indigo-700 text-[10px] font-extrabold rounded-full self-start sm:self-center">
+                      {numCLOs} CLO{numCLOs > 1 ? 's' : ''} Defined
+                    </span>
+                  </div>
+
+                  <div className="divide-y divide-slate-100 p-5 space-y-5">
+                    {Array.from({ length: numCLOs }, (_, idx) => {
+                      const i = idx + 1;
+                      const code = `CLO-${i}`;
+                      const edit = cloEdits[code] || { description: '', mappedGA: null };
+
+                      return (
+                        <div key={code} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-start pt-5 first:pt-0">
+                          {/* CLO Code Badge */}
+                          <div className="md:col-span-2 flex items-center gap-2 mt-2">
+                            <span className="px-3 py-1 bg-indigo-600 text-white text-xs font-black rounded-lg uppercase tracking-wider font-mono">
+                              {code}
+                            </span>
+                          </div>
+
+                          {/* CLO Description Text Area */}
+                          <div className="md:col-span-6">
+                            <label className="block text-[10px] uppercase font-extrabold text-slate-400 mb-1">
+                              Learning Outcome Description
+                            </label>
+                            <textarea
+                              rows={2}
+                              value={edit.description}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setCloEdits(prev => ({
+                                  ...prev,
+                                  [code]: { ...prev[code], description: val }
+                                }));
+                              }}
+                              placeholder={`e.g. Design and evaluate solutions for complex computing problems...`}
+                              className="bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-medium text-slate-950 w-full outline-none focus:ring-1 focus:ring-indigo-500 placeholder:text-slate-400"
+                            />
+                          </div>
+
+                          {/* Mapped GA Dropdown Selection */}
+                          <div className="md:col-span-4">
+                            <label className="block text-[10px] uppercase font-extrabold text-slate-400 mb-1">
+                              Associate Graduate Attribute (GA)
+                            </label>
+                            <select
+                              value={edit.mappedGA || ''}
+                              onChange={(e) => {
+                                const val = e.target.value || null;
+                                setCloEdits(prev => ({
+                                  ...prev,
+                                  [code]: { ...prev[code], mappedGA: val }
+                                }));
+                              }}
+                              className="bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold text-slate-950 w-full outline-none focus:ring-1 focus:ring-indigo-500"
+                            >
+                              <option value="" className="text-slate-400 font-normal">-- Unmapped / No GA --</option>
+                              {availableGAs.map(ga => (
+                                <option key={ga.id} value={ga.id} className="text-slate-800 font-bold font-mono text-xs">
+                                  {ga.id} - {ga.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="bg-slate-50 border-t border-slate-200 px-5 py-4 flex items-center justify-end">
+                    <button
+                      onClick={handleSaveAllCLOs}
+                      disabled={loadingCLOs}
+                      className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white text-xs font-bold rounded-lg transition-colors shadow-xs cursor-pointer flex items-center gap-1.5"
                     >
                       {loadingCLOs ? (
                         <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                       ) : (
                         <Save className="w-3.5 h-3.5" />
                       )}
-                      Apply & Assign CLOs
+                      Save CLO Mappings & GA Associations
                     </button>
                   </div>
                 </div>
