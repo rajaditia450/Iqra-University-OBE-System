@@ -420,7 +420,8 @@ const normalizeCourse = (course: InstructorCourse): InstructorCourse => {
 
   const allowedNames = courseType === 'Lab' ? LAB_CATEGORY_NAMES : THEORY_CATEGORY_NAMES;
 
-  let updatedCategories = (course.categories || []).filter(c => 
+  const rawCategories = course.categories || (course as any).categories || [];
+  let updatedCategories = rawCategories.filter((c: any) => 
     c.name !== 'Sessionals' && 
     c.name !== 'Sessional' &&
     allowedNames.includes(c.name)
@@ -438,36 +439,54 @@ const normalizeCourse = (course: InstructorCourse): InstructorCourse => {
   const catOrder = typeCats.map(c => c.name);
   updatedCategories.sort((a, b) => catOrder.indexOf(a.name) - catOrder.indexOf(b.name));
 
-  const updatedUnitsData = { ...(course.unitsData || {}) };
-  delete updatedUnitsData['Sessionals'];
-  delete updatedUnitsData['Sessional'];
+  // Extract unitsData supporting both camelCase and snake_case from python backend
+  const rawUnitsData = course.unitsData || (course as any).units_data || {};
+  const updatedUnitsData: Record<string, UnitItem[]> = {};
 
-  // Clean up any keys in unitsData that are NOT allowed for this type
-  Object.keys(updatedUnitsData).forEach(key => {
+  Object.keys(rawUnitsData).forEach(key => {
     if (!allowedNames.includes(key)) {
-      delete updatedUnitsData[key];
       return;
     }
-    const isPresentation = key.toLowerCase().includes('presentation');
-    if (updatedUnitsData[key]) {
-      updatedUnitsData[key] = updatedUnitsData[key].map(u => {
-        if (u.questions && u.questions.length > 0) {
+    const unitsList = rawUnitsData[key];
+    if (Array.isArray(unitsList)) {
+      updatedUnitsData[key] = unitsList.map((u: any) => {
+        const unitNo = u.unitNo !== undefined ? u.unitNo : (u.unit_no !== undefined ? u.unit_no : 1);
+        const passing = u.passing !== undefined ? u.passing : (u.passing_marks !== undefined ? u.passing_marks : 5);
+        const totalMarks = u.totalMarks !== undefined ? u.totalMarks : (u.total_marks !== undefined ? u.total_marks : 10);
+        const weightage = u.weightage !== undefined ? u.weightage : 0;
+        const mappedCLOs = u.mappedCLOs || u.mapped_clos || u.mappedClos || [];
+        
+        const rawQs = u.questions || u.unit_questions || [];
+        const questions = (rawQs || []).map((q: any) => {
           return {
-            ...u,
-            questions: u.questions.map(q => {
-              if (isPresentation && (q.name.toLowerCase().startsWith('question') || q.name.toLowerCase().startsWith('q'))) {
-                const match = q.name.match(/\d+$/);
-                const numStr = match ? match[0] : '';
-                return {
-                  ...q,
-                  name: numStr ? `Module ${numStr}` : 'Module'
-                };
-              }
-              return q;
-            })
+            id: q.id || '',
+            name: q.name || q.questionName || q.question_name || '',
+            maxMarks: q.maxMarks !== undefined ? q.maxMarks : (q.max_marks !== undefined ? q.max_marks : 10),
+            mappedCLOs: q.mappedCLOs || q.mapped_clos || q.mappedClos || []
           };
-        }
-        return u;
+        });
+
+        const isPresentation = key.toLowerCase().includes('presentation');
+        const formattedQuestions = questions.map((q: any) => {
+          if (isPresentation && (q.name.toLowerCase().startsWith('question') || q.name.toLowerCase().startsWith('q'))) {
+            const match = q.name.match(/\d+$/);
+            const numStr = match ? match[0] : '';
+            return {
+              ...q,
+              name: numStr ? `Module ${numStr}` : 'Module'
+            };
+          }
+          return q;
+        });
+
+        return {
+          unitNo,
+          passing,
+          totalMarks,
+          weightage,
+          mappedCLOs,
+          questions: formattedQuestions
+        };
       });
     }
   });
@@ -478,11 +497,56 @@ const normalizeCourse = (course: InstructorCourse): InstructorCourse => {
     }
   });
 
+  // Extract other database fields from both camelCase and snake_case format
+  const departmentId = course.departmentId || (course as any).department_id || (course as any).department || '';
+  const departmentName = course.departmentName || (course as any).department_name || '';
+  const programId = course.programId || (course as any).program_id || (course as any).program || '';
+  const programName = course.programName || (course as any).program_name || '';
+  const creditHours = course.creditHours !== undefined ? course.creditHours : ((course as any).credit_hours !== undefined ? (course as any).credit_hours : 3);
+  const cloCount = course.cloCount !== undefined ? course.cloCount : ((course as any).clo_count !== undefined ? (course as any).clo_count : 4);
+  const academicYear = course.academicYear || (course as any).academic_year || '';
+  const selectedGradingSystem = course.selectedGradingSystem || (course as any).selected_grading_system || '';
+  const customGradingSystem = course.customGradingSystem || (course as any).custom_grading_system || [];
+  
+  const rawObeQuestions = course.obeQuestions || (course as any).obe_questions || [];
+  const normalizedObeQuestions = rawObeQuestions.map((q: any) => {
+    return {
+      id: q.id || '',
+      categoryName: q.categoryName || q.category_name || '',
+      unitNo: q.unitNo !== undefined ? q.unitNo : (q.unit_no !== undefined ? q.unit_no : 1),
+      questionName: q.questionName || q.question_name || q.name || '',
+      maxMarks: q.maxMarks !== undefined ? q.maxMarks : (q.max_marks !== undefined ? q.max_marks : 10),
+      mappedCLOs: q.mappedCLOs || q.mapped_clos || q.mappedClos || []
+    };
+  });
+
+  const rawObeMarks = course.obeMarks || (course as any).obe_marks || {};
+  const rawStudents = course.students || (course as any).students || [];
+  const normalizedStudents = rawStudents.map((s: any) => {
+    return {
+      regNo: s.regNo || s.reg_no || '',
+      name: s.name || '',
+      marks: s.marks || s.obtained_marks || s.obtainedMarks || {}
+    };
+  });
+
   return {
     ...course,
     courseType,
+    departmentId,
+    departmentName,
+    programId,
+    programName,
+    creditHours,
+    cloCount,
+    academicYear,
+    selectedGradingSystem,
+    customGradingSystem,
     categories: updatedCategories,
     unitsData: updatedUnitsData,
+    obeQuestions: normalizedObeQuestions,
+    obeMarks: rawObeMarks,
+    students: normalizedStudents
   };
 };
 

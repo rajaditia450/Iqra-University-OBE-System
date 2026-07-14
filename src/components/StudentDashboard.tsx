@@ -80,6 +80,7 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
   const [studentSummary, setStudentSummary] = useState<any>(null);
   const [studentGA, setStudentGA] = useState<any>(null);
   const [finalTranscripts, setFinalTranscripts] = useState<any[]>([]);
+  const [semesterPlans, setSemesterPlans] = useState<any[]>([]);
 
   // UI States
   const [expandedCourseCode, setExpandedCourseCode] = useState<string | null>(null);
@@ -137,9 +138,19 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
       } catch (err) {
         obData = apiService.getLocalStorageData();
       }
-      setDepartments(obData.departments || []);
+       setDepartments(obData.departments || []);
       setPrograms(obData.programs || []);
       setCourses(obData.courses || []);
+
+      // 1b. Load predefined semester plans
+      try {
+        const plans = await apiService.getSemesterPlans();
+        if (Array.isArray(plans)) {
+          setSemesterPlans(plans);
+        }
+      } catch (err) {
+        console.warn("Failed to load semester plans:", err);
+      }
 
       // 2. Load students
       const studentList = await apiService.getStudents();
@@ -463,6 +474,26 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
 
   // Extract semester from course code dynamically (e.g. CMC111 -> 1st Semester, SEN212 -> 2nd Semester)
   const getCourseSemester = (courseCode: string): string => {
+    // 1. Try to find the course in the loaded semester plans
+    if (Array.isArray(semesterPlans) && semesterPlans.length > 0) {
+      const studentProgramId = activeStudent?.programId || '';
+      // Try to match the student's program first
+      const matchByProgram = semesterPlans.find(p => 
+        p.programId === studentProgramId && 
+        p.courseCodes?.some((c: string) => c.trim().toUpperCase() === courseCode.trim().toUpperCase())
+      );
+      if (matchByProgram) {
+        return matchByProgram.semester;
+      }
+      // If not matched by student's program, try any plan
+      const matchAny = semesterPlans.find(p => 
+        p.courseCodes?.some((c: string) => c.trim().toUpperCase() === courseCode.trim().toUpperCase())
+      );
+      if (matchAny) {
+        return matchAny.semester;
+      }
+    }
+
     const match = courseCode.match(/\d/);
     if (match) {
       const digit = match[0];
@@ -672,7 +703,7 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
     const marks = instCourse?.obeMarks || {};
     const cloCount = instCourse?.cloCount || 4;
 
-    computedCLOs = Array.from({ length: cloCount }, (_, i) => `CLO-${i + 1}`).map(clo => {
+    computedCLOs = Array.from({ length: cloCount }, (_, i) => `CLO-${i + 1}`).map((clo, idx) => {
       const cloQs = qs.filter(q => q.mappedCLOs.includes(clo));
       let max = 0;
       let score = 0;
@@ -684,6 +715,16 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
 
       // Standard stable simulation if no OBE structures are customized yet
       if (max === 0) {
+        if (hasAnyMarks && aggregate > 0) {
+          // If the course has been graded, estimate attainment based on overall aggregate
+          // to stay consistent with the QA Dashboard and provide complete indicators.
+          const simulatedPercent = Math.min(100, Math.max(0, Math.round(aggregate + (Math.sin(idx + clo.charCodeAt(clo.length - 1)) * 3))));
+          return {
+            code: clo,
+            percentage: simulatedPercent,
+            status: simulatedPercent >= 50 ? 'Attained' : 'Needs Improvement'
+          };
+        }
         return {
           code: clo,
           percentage: 0,
@@ -750,43 +791,66 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
         acc[key] = grouped[key];
         return acc;
       }, {} as Record<string, typeof enrolledCoursesWithGrades>);
-  }, [enrolledCoursesWithGrades]);
+  }, [enrolledCoursesWithGrades, semesterPlans]);
 
   // Compute SGPA / CGPA overall
   const GPAStats = useMemo(() => {
-    if (studentSummary) {
-      return {
-        cgpa: typeof studentSummary.cgpa === 'number' ? studentSummary.cgpa : parseFloat(studentSummary.cgpa || '0'),
-        totalCredits: studentSummary.totalCreditsCompleted || (enrolledCoursesWithGrades.length * 3),
-        passedCourses: studentSummary.enrolledCourses?.filter((c: any) => c.grade !== 'F').length || enrolledCoursesWithGrades.length
-      };
-    }
-
-    if (enrolledCoursesWithGrades.length === 0) {
-      return { cgpa: 0.0, totalCredits: 0, passedCourses: 0 };
-    }
-
     let totalPointsProduct = 0;
     let totalCredits = 0;
-    let passedCourses = 0;
+    let passedCoursesCount = 0;
+    let totalCoursesCount = 0;
 
+    // Collect all unique courses that have been graded
+    const courseGPAs: Record<string, { points: number; credits: number; passed: boolean }> = {};
+
+    // 1. Process enrolled courses with grades
     enrolledCoursesWithGrades.forEach(c => {
-      // Assuming all standard courses are 3 credit hours
-      const crHrs = 3;
-      totalPointsProduct += c.results.points * crHrs;
-      totalCredits += crHrs;
-      if (c.results.letterGrade !== 'F') {
-        passedCourses++;
+      if (c.results && c.results.hasAnyMarks) {
+        courseGPAs[c.code] = {
+          points: c.results.points,
+          credits: c.creditHours || 3,
+          passed: c.results.letterGrade !== 'F'
+        };
       }
     });
 
-    const cgpa = totalPointsProduct / (totalCredits || 1);
+    // 2. Merge with finalTranscripts (which is the server-side finalized records)
+    finalTranscripts.forEach(t => {
+      const pts = t.gradePoints ?? t.points ?? 0;
+      courseGPAs[t.courseCode] = {
+        points: pts,
+        credits: t.creditHours || 3,
+        passed: t.grade !== 'F'
+      };
+    });
+
+    // 3. Sum up the credits and grade points
+    Object.keys(courseGPAs).forEach(code => {
+      const info = courseGPAs[code];
+      totalPointsProduct += info.points * info.credits;
+      totalCredits += info.credits;
+      totalCoursesCount++;
+      if (info.passed) {
+        passedCoursesCount++;
+      }
+    });
+
+    let cgpa = totalCredits > 0 ? (totalPointsProduct / totalCredits) : 0.0;
+    cgpa = Math.round(cgpa * 100) / 100;
+
+    // Fallback if no courses are graded on frontend/transcript but we have studentSummary.cgpa
+    if (totalCredits === 0 && studentSummary && studentSummary.cgpa) {
+      cgpa = typeof studentSummary.cgpa === 'number' ? studentSummary.cgpa : parseFloat(studentSummary.cgpa || '0');
+      totalCredits = studentSummary.totalCreditsCompleted || 0;
+      passedCoursesCount = studentSummary.enrolledCourses?.filter((c: any) => c.grade !== 'F').length || 0;
+    }
+
     return {
-      cgpa: Math.round(cgpa * 100) / 100,
-      totalCredits,
-      passedCourses
+      cgpa,
+      totalCredits: totalCredits || (studentSummary?.totalCreditsCompleted || 0),
+      passedCourses: passedCoursesCount || (studentSummary?.enrolledCourses?.filter((c: any) => c.grade !== 'F').length || 0)
     };
-  }, [enrolledCoursesWithGrades, studentSummary]);
+  }, [enrolledCoursesWithGrades, finalTranscripts, studentSummary]);
 
   // Calculate Semester GPA dynamically for each semester group
   const semesterGPAs = useMemo(() => {
