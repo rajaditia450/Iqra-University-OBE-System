@@ -98,7 +98,7 @@ export default function MarksEntrySpreadsheet({
             id: `q-${currentCategory.name}-${u}-${q.id}`,
             name: q.name || `Question ${idx + 1}`,
             maxMarks: q.maxMarks || 0,
-            mappedCLOs: q.mappedCLOs || [],
+            mappedCLOs: (q.mappedCLOs && q.mappedCLOs.length > 0) ? [q.mappedCLOs[0]] : [],
             type: 'question',
             unitNo: u,
             qId: q.id
@@ -109,7 +109,7 @@ export default function MarksEntrySpreadsheet({
           id: `direct-${currentCategory.name}-${u}`,
           name: 'Direct Marks Score',
           maxMarks: matchingUnit ? matchingUnit.totalMarks : 10,
-          mappedCLOs: matchingUnit?.mappedCLOs || ['CLO-1'],
+          mappedCLOs: (matchingUnit?.mappedCLOs && matchingUnit.mappedCLOs.length > 0) ? [matchingUnit.mappedCLOs[0]] : ['CLO-1'],
           type: 'direct',
           unitNo: u
         });

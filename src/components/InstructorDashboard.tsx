@@ -439,6 +439,19 @@ const normalizeCourse = (course: InstructorCourse): InstructorCourse => {
   const catOrder = typeCats.map(c => c.name);
   updatedCategories.sort((a, b) => catOrder.indexOf(a.name) - catOrder.indexOf(b.name));
 
+  // Extract and normalize obeQuestions first so we can use it to populate unitsData if needed
+  const rawObeQuestions = course.obeQuestions || (course as any).obe_questions || [];
+  const parsedObeQuestions = rawObeQuestions.map((q: any) => {
+    return {
+      id: q.id || '',
+      categoryName: q.categoryName || q.category_name || '',
+      unitNo: q.unitNo !== undefined ? q.unitNo : (q.unit_no !== undefined ? q.unit_no : 1),
+      questionName: q.questionName || q.question_name || q.name || '',
+      maxMarks: q.maxMarks !== undefined ? q.maxMarks : (q.max_marks !== undefined ? q.max_marks : 10),
+      mappedCLOs: q.mappedCLOs || q.mapped_clos || q.mappedClos || []
+    };
+  });
+
   // Extract unitsData supporting both camelCase and snake_case from python backend
   const rawUnitsData = course.unitsData || (course as any).units_data || {};
   const updatedUnitsData: Record<string, UnitItem[]> = {};
@@ -456,13 +469,30 @@ const normalizeCourse = (course: InstructorCourse): InstructorCourse => {
         const weightage = u.weightage !== undefined ? u.weightage : 0;
         const mappedCLOs = u.mappedCLOs || u.mapped_clos || u.mappedClos || [];
         
-        const rawQs = u.questions || u.unit_questions || [];
+        let rawQs = u.questions || u.unit_questions || [];
+        
+        // Robust Fallback: if rawQs is empty, but parsedObeQuestions contains questions for this category and unit, populate them!
+        if ((!rawQs || rawQs.length === 0) && parsedObeQuestions.length > 0) {
+          const matchingObeQs = parsedObeQuestions.filter(
+            (oq: any) => oq.categoryName === key && oq.unitNo === unitNo
+          );
+          if (matchingObeQs.length > 0) {
+            rawQs = matchingObeQs.map((oq: any) => ({
+              id: oq.id,
+              name: oq.questionName,
+              maxMarks: oq.maxMarks,
+              mappedCLOs: oq.mappedCLOs
+            }));
+          }
+        }
+
         const questions = (rawQs || []).map((q: any) => {
+          const qCLOs = q.mappedCLOs || q.mapped_clos || q.mappedClos || [];
           return {
             id: q.id || '',
             name: q.name || q.questionName || q.question_name || '',
             maxMarks: q.maxMarks !== undefined ? q.maxMarks : (q.max_marks !== undefined ? q.max_marks : 10),
-            mappedCLOs: q.mappedCLOs || q.mapped_clos || q.mappedClos || []
+            mappedCLOs: qCLOs.length > 0 ? [qCLOs[0]] : []
           };
         });
 
@@ -479,12 +509,16 @@ const normalizeCourse = (course: InstructorCourse): InstructorCourse => {
           return q;
         });
 
+        const finalUnitMappedCLOs = formattedQuestions.length > 0
+          ? [...new Set(formattedQuestions.flatMap(q => q.mappedCLOs))].sort()
+          : (mappedCLOs.length > 0 ? [mappedCLOs[0]] : []);
+
         return {
           unitNo,
           passing,
           totalMarks,
           weightage,
-          mappedCLOs,
+          mappedCLOs: finalUnitMappedCLOs,
           questions: formattedQuestions
         };
       });
@@ -494,6 +528,35 @@ const normalizeCourse = (course: InstructorCourse): InstructorCourse => {
   typeCats.forEach(initCat => {
     if (!updatedUnitsData[initCat.name]) {
       updatedUnitsData[initCat.name] = [];
+    }
+  });
+
+  // Re-sync and collect all questions from updatedUnitsData to build a master synced list of normalizedObeQuestions
+  const collectedQuestionsFromUnits: any[] = [];
+  Object.keys(updatedUnitsData).forEach(catName => {
+    const units = updatedUnitsData[catName] || [];
+    units.forEach(u => {
+      const qList = u.questions || [];
+      qList.forEach(q => {
+        collectedQuestionsFromUnits.push({
+          id: q.id,
+          categoryName: catName,
+          unitNo: u.unitNo,
+          questionName: q.name,
+          maxMarks: q.maxMarks,
+          mappedCLOs: q.mappedCLOs || []
+        });
+      });
+    });
+  });
+
+  const normalizedObeQuestions = [...collectedQuestionsFromUnits];
+  parsedObeQuestions.forEach(pq => {
+    const alreadyCollected = normalizedObeQuestions.some(
+      fq => fq.id === pq.id || (fq.categoryName === pq.categoryName && fq.unitNo === pq.unitNo && fq.questionName === pq.questionName)
+    );
+    if (!alreadyCollected) {
+      normalizedObeQuestions.push(pq);
     }
   });
 
@@ -507,18 +570,6 @@ const normalizeCourse = (course: InstructorCourse): InstructorCourse => {
   const academicYear = course.academicYear || (course as any).academic_year || '';
   const selectedGradingSystem = course.selectedGradingSystem || (course as any).selected_grading_system || '';
   const customGradingSystem = course.customGradingSystem || (course as any).custom_grading_system || [];
-  
-  const rawObeQuestions = course.obeQuestions || (course as any).obe_questions || [];
-  const normalizedObeQuestions = rawObeQuestions.map((q: any) => {
-    return {
-      id: q.id || '',
-      categoryName: q.categoryName || q.category_name || '',
-      unitNo: q.unitNo !== undefined ? q.unitNo : (q.unit_no !== undefined ? q.unit_no : 1),
-      questionName: q.questionName || q.question_name || q.name || '',
-      maxMarks: q.maxMarks !== undefined ? q.maxMarks : (q.max_marks !== undefined ? q.max_marks : 10),
-      mappedCLOs: q.mappedCLOs || q.mapped_clos || q.mappedClos || []
-    };
-  });
 
   const rawObeMarks = course.obeMarks || (course as any).obe_marks || {};
   const rawStudents = course.students || (course as any).students || [];
@@ -1903,9 +1954,51 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
 
     setCourses(prev => prev.map(c => {
       if (c.id === selectedCourse.id) {
+        // Also update unitsData's questions for this category and unit to keep them in perfect sync
+        const updatedUnitsData = { ...c.unitsData };
+        const existingUnits = updatedUnitsData[catName] || [];
+        let unitItem = existingUnits.find(u => u.unitNo === uNo);
+        if (!unitItem) {
+          unitItem = {
+            unitNo: uNo,
+            passing: Math.ceil(maxM * 0.5),
+            totalMarks: maxM,
+            weightage: 100 / (c.categories.find(cat => cat.name === catName)?.units || 1),
+            mappedCLOs: qClos,
+            questions: []
+          };
+        }
+        
+        const unitQs = updatedQuestions
+          .filter(q => q.categoryName === catName && q.unitNo === uNo)
+          .map(q => ({
+            id: q.id,
+            name: q.questionName,
+            maxMarks: q.maxMarks,
+            mappedCLOs: q.mappedCLOs
+          }));
+          
+        const newTotalMarks = unitQs.reduce((sum, q) => sum + (q.maxMarks || 0), 0);
+        const allMappedCLOs = [...new Set(unitQs.flatMap(q => q.mappedCLOs || []))].sort();
+
+        const updatedUnitItem = {
+          ...unitItem,
+          questions: unitQs,
+          totalMarks: newTotalMarks > 0 ? newTotalMarks : unitItem.totalMarks,
+          mappedCLOs: allMappedCLOs
+        };
+
+        const updatedUnitsList = existingUnits.map(u => u.unitNo === uNo ? updatedUnitItem : u);
+        if (!existingUnits.some(u => u.unitNo === uNo)) {
+          updatedUnitsList.push(updatedUnitItem);
+        }
+        
+        updatedUnitsData[catName] = updatedUnitsList;
+
         return {
           ...c,
-          obeQuestions: updatedQuestions
+          obeQuestions: updatedQuestions,
+          unitsData: updatedUnitsData
         };
       }
       return c;
@@ -1918,6 +2011,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
     if (!selectedCourse) return;
     if (!confirm("Are you sure you want to delete this OBE question? Student marks entered for this question will also be removed permanently.")) return;
 
+    const questionToDelete = (selectedCourse.obeQuestions || []).find(q => q.id === qId);
     const updatedQuestions = (selectedCourse.obeQuestions || []).filter(q => q.id !== qId);
     
     const updatedMarks = { ...(selectedCourse.obeMarks || {}) };
@@ -1929,10 +2023,32 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
 
     setCourses(prev => prev.map(c => {
       if (c.id === selectedCourse.id) {
+        const updatedUnitsData = { ...c.unitsData };
+        if (questionToDelete) {
+          const { categoryName, unitNo } = questionToDelete;
+          const existingUnits = updatedUnitsData[categoryName] || [];
+          const updatedUnitsList = existingUnits.map(u => {
+            if (u.unitNo === unitNo) {
+              const remainingQs = (u.questions || []).filter(q => q.id !== qId);
+              const newTotalMarks = remainingQs.reduce((sum, q) => sum + (q.maxMarks || 0), 0);
+              const allMappedCLOs = [...new Set(remainingQs.flatMap(q => q.mappedCLOs || []))].sort();
+              return {
+                ...u,
+                questions: remainingQs,
+                totalMarks: newTotalMarks > 0 ? newTotalMarks : u.totalMarks,
+                mappedCLOs: allMappedCLOs
+              };
+            }
+            return u;
+          });
+          updatedUnitsData[categoryName] = updatedUnitsList;
+        }
+
         return {
           ...c,
           obeQuestions: updatedQuestions,
-          obeMarks: updatedMarks
+          obeMarks: updatedMarks,
+          unitsData: updatedUnitsData
         };
       }
       return c;
@@ -2244,12 +2360,27 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
             updatedUnitsList.push(updatedUnitItem);
           }
 
+          // Sync with top-level obeQuestions
+          const otherObeQuestions = (c.obeQuestions || []).filter(
+            q => !(q.categoryName === categoryName && q.unitNo === unitNo)
+          );
+          const syncObeQs = newQuestionsList.map(q => ({
+            id: q.id,
+            categoryName: categoryName,
+            unitNo: unitNo,
+            questionName: q.name,
+            maxMarks: q.maxMarks,
+            mappedCLOs: q.mappedCLOs
+          }));
+          const updatedObeQuestions = [...otherObeQuestions, ...syncObeQs];
+
           return {
             ...c,
             unitsData: {
               ...c.unitsData,
               [categoryName]: updatedUnitsList
-            }
+            },
+            obeQuestions: updatedObeQuestions
           };
         }
         return c;
@@ -2275,12 +2406,18 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
             return u;
           });
 
+          // Sync with top-level obeQuestions
+          const updatedObeQuestions = (c.obeQuestions || []).filter(
+            q => !(q.categoryName === categoryName && q.unitNo === unitNo)
+          );
+
           return {
             ...c,
             unitsData: {
               ...c.unitsData,
               [categoryName]: updatedUnitsList
-            }
+            },
+            obeQuestions: updatedObeQuestions
           };
         }
         return c;
@@ -2335,12 +2472,27 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
             updatedUnitsList.push(updatedUnitItem);
           }
 
+          // Sync with top-level obeQuestions
+          const otherObeQuestions = (c.obeQuestions || []).filter(
+            q => !(q.categoryName === categoryName && q.unitNo === unitNo)
+          );
+          const syncObeQs = newQuestionsList.map(q => ({
+            id: q.id,
+            categoryName: categoryName,
+            unitNo: unitNo,
+            questionName: q.name,
+            maxMarks: q.maxMarks,
+            mappedCLOs: q.mappedCLOs
+          }));
+          const updatedObeQuestions = [...otherObeQuestions, ...syncObeQs];
+
           return {
             ...c,
             unitsData: {
               ...c.unitsData,
               [categoryName]: updatedUnitsList
-            }
+            },
+            obeQuestions: updatedObeQuestions
           };
         }
         return c;
@@ -4800,10 +4952,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                                                       key={clo}
                                                       type="button"
                                                       onClick={() => {
-                                                        setInlineQMappedCLOs(prev => {
-                                                          if (prev.includes(clo)) return prev.filter(c => c !== clo);
-                                                          return [...prev, clo];
-                                                        });
+                                                        setInlineQMappedCLOs([clo]);
                                                       }}
                                                       className={`px-2 py-0.5 text-[10px] font-black font-mono rounded-lg transition-all border ${
                                                         isSelected
@@ -5322,7 +5471,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                         {/* CLO MAPPING CHECKBOXES */}
                         <div className="space-y-2">
                           <label className="block text-[11px] font-bold text-slate-700 tracking-wide uppercase font-sans">
-                            Map to CLOs (Tick Boxes)
+                            Map to CLO (Select One)
                           </label>
                           <div className="grid grid-cols-2 gap-2 text-slate-800 font-sans">
                             {Array.from({ length: selectedCourse.cloCount || 4 }, (_, i) => `CLO-${i + 1}`).map(clo => {
@@ -5333,16 +5482,13 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                                   className={`flex items-center gap-2 p-2 px-2.5 border rounded-lg cursor-pointer text-xs font-semibold select-none transition-all ${checked ? 'border-indigo-300 bg-indigo-50/50 text-indigo-950 font-bold' : 'border-slate-200 bg-white hover:bg-slate-50'}`}
                                 >
                                   <input
-                                    type="checkbox"
+                                    type="radio"
+                                    name="obe-question-clo-radio"
                                     checked={checked}
                                     onChange={() => {
-                                      if (checked) {
-                                        setQClos(prev => prev.filter(c => c !== clo));
-                                      } else {
-                                        setQClos(prev => [...prev, clo]);
-                                      }
+                                      setQClos([clo]);
                                     }}
-                                    className="accent-indigo-600 rounded text-indigo-600 shrink-0 cursor-pointer text-xs"
+                                    className="accent-indigo-600 rounded-full text-indigo-600 shrink-0 cursor-pointer text-xs"
                                   />
                                   <span>{clo}</span>
                                 </label>
@@ -6155,12 +6301,52 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
 
                         <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
                           {!tempUnits[selectedUnitIndex].questions || tempUnits[selectedUnitIndex].questions!.length === 0 ? (
-                            <div className="text-center py-6 border border-dashed border-slate-200 rounded-xl bg-white/50">
-                              <Sliders className="w-6 h-6 text-slate-350 mx-auto opacity-75 animate-pulse" />
-                              <p className="text-[11.5px] font-bold text-slate-500 mt-2">No {pluralLabel.toLowerCase()} added yet</p>
-                              <p className="text-[10px] text-slate-450 mt-0.5 px-4">
-                                Click the <strong className="text-indigo-600">Add {singularLabel}</strong> button above to start partition and map each part of this assessment dynamically to different CLOs.
-                              </p>
+                            <div className="text-center py-6 px-4 border border-dashed border-slate-200 rounded-xl bg-white shadow-2xs space-y-4">
+                              <div className="max-w-xs mx-auto space-y-1.5">
+                                <Sliders className="w-5 h-5 text-slate-350 mx-auto opacity-75" />
+                                <p className="text-[11.5px] font-bold text-slate-700">Direct Entry Mode (No {pluralLabel.toLowerCase()})</p>
+                                <p className="text-[10px] text-slate-450 leading-relaxed font-sans">
+                                  You are entering a single aggregate score for this unit. Map this entire unit to a Course Learning Outcome (CLO) below:
+                                </p>
+                              </div>
+
+                              <div className="max-w-xs mx-auto text-left space-y-1">
+                                <label className="block text-[9.5px] text-slate-500 font-mono font-black uppercase tracking-wider">
+                                  Mapped CLO for Unit
+                                </label>
+                                <select
+                                  id="direct-unit-clo-selector"
+                                  value={tempUnits[selectedUnitIndex].mappedCLOs && tempUnits[selectedUnitIndex].mappedCLOs.length > 0 ? tempUnits[selectedUnitIndex].mappedCLOs[0] : ""}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    const nextCLOs = val ? [val] : [];
+                                    setTempUnits(prev => {
+                                      const copy = [...prev];
+                                      if (copy[selectedUnitIndex]) {
+                                        copy[selectedUnitIndex] = {
+                                          ...copy[selectedUnitIndex],
+                                          mappedCLOs: nextCLOs
+                                        };
+                                      }
+                                      return copy;
+                                    });
+                                  }}
+                                  className="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-800 font-sans font-bold focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none cursor-pointer"
+                                >
+                                  <option value="" className="text-slate-400 font-semibold">-- Select CLO --</option>
+                                  {Array.from({ length: selectedCourse.cloCount || 4 }, (_, i) => `CLO-${i + 1}`).map(clo => (
+                                    <option key={clo} value={clo} className="text-slate-850 font-bold font-mono">
+                                      {clo}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+
+                              <div className="border-t border-slate-100 pt-3 max-w-xs mx-auto text-center font-sans">
+                                <p className="text-[9.5px] text-slate-400">
+                                  Need a question-by-question breakdown? Click the <strong className="text-indigo-600 font-bold">Add {singularLabel}</strong> button on the top right to switch to partitioned mode.
+                                </p>
+                              </div>
                             </div>
                           ) : (
                             tempUnits[selectedUnitIndex].questions!.map((q, qIdx) => {

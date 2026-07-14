@@ -659,6 +659,92 @@ const normalizeCourse = (c: any): Course => {
   };
 };
 
+const mapInstructorCourseToBackend = (c: InstructorCourse): any => {
+  // Map obeQuestions to both camelCase and snake_case
+  const mappedObeQuestions = (c.obeQuestions || []).map((q: any) => ({
+    id: q.id,
+    categoryName: q.categoryName,
+    category_name: q.categoryName,
+    unitNo: q.unitNo,
+    unit_no: q.unitNo,
+    questionName: q.questionName,
+    question_name: q.questionName,
+    name: q.questionName,
+    maxMarks: q.maxMarks,
+    max_marks: q.maxMarks,
+    mappedCLOs: q.mappedCLOs || [],
+    mapped_clos: q.mappedCLOs || []
+  }));
+
+  // Map unitsData to both camelCase and snake_case
+  const mappedUnitsData: Record<string, any[]> = {};
+  if (c.unitsData) {
+    Object.keys(c.unitsData).forEach(key => {
+      const unitsList = c.unitsData[key];
+      if (Array.isArray(unitsList)) {
+        mappedUnitsData[key] = unitsList.map((u: any) => {
+          const mappedQuestions = (u.questions || []).map((q: any) => ({
+            id: q.id,
+            name: q.name,
+            questionName: q.name,
+            question_name: q.name,
+            maxMarks: q.maxMarks,
+            max_marks: q.maxMarks,
+            mappedCLOs: q.mappedCLOs || [],
+            mapped_clos: q.mappedCLOs || []
+          }));
+
+          return {
+            unitNo: u.unitNo,
+            unit_no: u.unitNo,
+            passing: u.passing,
+            passing_marks: u.passing,
+            totalMarks: u.totalMarks,
+            total_marks: u.totalMarks,
+            weightage: u.weightage,
+            mappedCLOs: u.mappedCLOs || [],
+            mapped_clos: u.mappedCLOs || [],
+            questions: mappedQuestions,
+            unit_questions: mappedQuestions
+          };
+        });
+      }
+    });
+  }
+
+  // Map students to both camelCase and snake_case
+  const mappedStudents = (c.students || []).map((s: any) => ({
+    regNo: s.regNo,
+    reg_no: s.regNo,
+    name: s.name,
+    marks: s.marks || {},
+    obtained_marks: s.marks || {}
+  }));
+
+  return {
+    ...c,
+    academic_year: c.academicYear,
+    academicYear: c.academicYear,
+    department_id: c.departmentId,
+    departmentId: c.departmentId,
+    program_id: c.programId,
+    programId: c.programId,
+    clo_count: c.cloCount,
+    cloCount: c.cloCount,
+    selected_grading_system: c.selectedGradingSystem,
+    selectedGradingSystem: c.selectedGradingSystem,
+    custom_grading_system: c.customGradingSystem || [],
+    customGradingSystem: c.customGradingSystem || [],
+    obe_questions: mappedObeQuestions,
+    obeQuestions: mappedObeQuestions,
+    units_data: mappedUnitsData,
+    unitsData: mappedUnitsData,
+    obe_marks: c.obeMarks || {},
+    obeMarks: c.obeMarks || {},
+    students: mappedStudents
+  };
+};
+
 const mapCourseToBackend = (c: Course): any => {
   return {
     id: c.id,
@@ -990,10 +1076,11 @@ export const apiService = {
     // Save to local storage first for resilient fallback
     localStorage.setItem('IQRA_OBE_INSTRUCTOR_COURSES', JSON.stringify(courses));
     try {
+      const mappedCourses = courses.map(mapInstructorCourseToBackend);
       const response = await fetchWithTimeout(`${BASE_URL}/instructor/courses/`, {
         method: 'POST',
         headers: getHeaders(),
-        body: JSON.stringify({ courses }),
+        body: JSON.stringify({ courses: mappedCourses }),
       }, 8000);
 
       if (response.status === 207) {
