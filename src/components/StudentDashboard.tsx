@@ -30,6 +30,93 @@ const normalizeRegNo = (reg: string) => {
   return reg.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
 };
 
+const getFuzzyStudentMark = (marks: Record<string, number> | undefined, catName: string, unitNo: number, questionId?: string): number => {
+  if (!marks) return 0;
+  
+  if (questionId) {
+    const qIdStr = String(questionId).trim().toLowerCase();
+    
+    // 1. Direct exact match
+    if (marks[questionId] !== undefined) return Number(marks[questionId]);
+    
+    // 2. Case-insensitive match
+    for (const k of Object.keys(marks)) {
+      if (k.toLowerCase() === qIdStr) return Number(marks[k]);
+    }
+    
+    // 3. Search for keys ending with the question ID or matching a prefix
+    for (const k of Object.keys(marks)) {
+      const kLower = k.toLowerCase();
+      if (kLower.endsWith(`-${qIdStr}`) || kLower === `q-${qIdStr}` || kLower.includes(`-${qIdStr}-`) || kLower.includes(`_${qIdStr}`)) {
+        return Number(marks[k]);
+      }
+    }
+    
+    // 4. Normalization comparison
+    const cleanQId = qIdStr.replace(/[^a-z0-9]/g, '');
+    for (const k of Object.keys(marks)) {
+      const cleanK = k.toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (cleanK === cleanQId || cleanK.includes(cleanQId) || cleanQId.includes(cleanK)) {
+        return Number(marks[k]);
+      }
+    }
+  }
+
+  const catLower = catName.toLowerCase();
+  
+  const directPatterns = [
+    `${catName}-${unitNo}`,
+    `${catName} - ${unitNo}`,
+    `${catName}_${unitNo}`,
+    `${catName} Unit ${unitNo}`,
+    `${catName} — Unit ${unitNo}`,
+    `${catName} - Unit ${unitNo}`,
+  ];
+  
+  let singularCat = catName;
+  if (catLower.endsWith('s')) singularCat = catName.slice(0, -1);
+  else if (catLower === 'quizzes') singularCat = 'Quiz';
+  
+  if (singularCat !== catName) {
+    directPatterns.push(
+      `${singularCat}-${unitNo}`,
+      `${singularCat} - ${unitNo}`,
+      `${singularCat}_${unitNo}`,
+      `${singularCat} Unit ${unitNo}`,
+      `${singularCat} — Unit ${unitNo}`,
+      `${singularCat} - Unit ${unitNo}`
+    );
+  }
+  
+  for (const pattern of directPatterns) {
+    const patLower = pattern.toLowerCase();
+    for (const k of Object.keys(marks)) {
+      if (k.toLowerCase() === patLower) {
+        return Number(marks[k]);
+      }
+    }
+  }
+  
+  const cleanCat = catLower.replace(/[^a-z0-9]/g, '');
+  const cleanSingularCat = singularCat.toLowerCase().replace(/[^a-z0-9]/g, '');
+  
+  for (const k of Object.keys(marks)) {
+    const cleanK = k.toLowerCase().replace(/[^a-z0-9]/g, '');
+    
+    if (cleanK === `${cleanCat}${unitNo}` || cleanK === `${cleanSingularCat}${unitNo}`) {
+      return Number(marks[k]);
+    }
+    if (cleanK === `${cleanCat}unit${unitNo}` || cleanK === `${cleanSingularCat}unit${unitNo}`) {
+      return Number(marks[k]);
+    }
+    if ((cleanK.includes(cleanCat) || cleanK.includes(cleanSingularCat)) && cleanK.endsWith(String(unitNo))) {
+      return Number(marks[k]);
+    }
+  }
+  
+  return 0;
+};
+
 function naturalCompare(s1: string, s2: string): number {
   const aParts = s1.split(/(\d+)/);
   const bParts = s2.split(/(\d+)/);
@@ -573,8 +660,24 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
           
           if (!unitObj.questions || unitObj.questions.length === 0) {
             const matchingQuestions = obeQuestions.filter((q: any) => {
-              const qCat = q.categoryName || q.category_name || '';
-              const qUnit = q.unitNo || q.unit_no || 1;
+              let qCat = q.categoryName || q.category_name || '';
+              let qUnit = q.unitNo || q.unit_no || null;
+              
+              if (!qCat && String(q.id).startsWith('q-')) {
+                const parts = String(q.id).split('-');
+                if (parts.length >= 4) {
+                  qCat = parts[1];
+                  qUnit = Number(parts[2]);
+                } else if (parts.length === 3) {
+                  qCat = parts[1];
+                  qUnit = 1;
+                }
+              }
+              
+              if (qUnit === null || isNaN(Number(qUnit))) {
+                qUnit = 1;
+              }
+              
               return matchCategoryName(qCat, cat.name) && Number(qUnit) === u;
             });
             
@@ -618,13 +721,11 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
           
           if (unit.questions && unit.questions.length > 0) {
             unit.questions.forEach((q: any) => {
-              const mark = getObeMark(instCourse, stdRegNo, q.id);
+              const mark = getFuzzyStudentMark(std.marks, cat.name, unit.unitNo, q.id);
               unitObtained += mark;
             });
           } else {
-            const dKey1 = `${cat.name}-${unit.unitNo}`;
-            const dKey2 = `${cat.name.toLowerCase()}-${unit.unitNo}`;
-            const directMark = std.marks?.[dKey1] ?? std.marks?.[dKey2] ?? 0;
+            const directMark = getFuzzyStudentMark(std.marks, cat.name, unit.unitNo);
             unitObtained += directMark;
           }
           
@@ -878,11 +979,9 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
         list.forEach(ass => {
           let obtainedMark = 0;
           if (ass.questionId) {
-            obtainedMark = getObeMark(instCourse, stdRegNo, ass.questionId);
+            obtainedMark = getFuzzyStudentMark(std.marks, ass.categoryName, ass.unitNo, ass.questionId);
           } else {
-            const dKey1 = `${ass.categoryName}-${ass.unitNo}`;
-            const dKey2 = `${ass.categoryName.toLowerCase()}-${ass.unitNo}`;
-            obtainedMark = std.marks?.[dKey1] ?? std.marks?.[dKey2] ?? 0;
+            obtainedMark = getFuzzyStudentMark(std.marks, ass.categoryName, ass.unitNo);
           }
           const pct = ass.maxMarks > 0 ? (obtainedMark / ass.maxMarks) : 0;
           const weightedScore = pct * ass.relativeWeight;
@@ -1203,21 +1302,34 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
     categoriesList.forEach(cat => {
       let categoryObtainedSum = 0;
       let categoryMaxMarksSum = 0;
-      const existingUnits = instCourse.unitsData[cat.name] || [];
+      
+      const matchCategoryNameLocal = (cat1: string, cat2: string): boolean => {
+        const c1 = String(cat1 || '').trim().toLowerCase();
+        const c2 = String(cat2 || '').trim().toLowerCase();
+        if (c1 === c2) return true;
+        if ((c1.startsWith('final') && c2.startsWith('final')) || (c1.includes('final') && c2.includes('final'))) return true;
+        if ((c1.startsWith('mid') && c2.startsWith('mid')) || (c1.includes('mid') && c2.includes('mid'))) return true;
+        if ((c1.startsWith('quiz') && c2.startsWith('quiz')) || (c1.includes('quiz') && c2.includes('quiz'))) return true;
+        if ((c1.startsWith('assign') && c2.startsWith('assign')) || (c1.includes('assign') && c2.includes('assign'))) return true;
+        return false;
+      };
+
+      const existingKey = Object.keys(instCourse.unitsData || {}).find(k => matchCategoryNameLocal(k, cat.name));
+      const existingUnits = existingKey ? instCourse.unitsData[existingKey] || [] : [];
       
       if (cat.units > 0) {
         for (let u = 1; u <= cat.units; u++) {
-          const matchingUnit = existingUnits.find(unit => unit.unitNo === u);
+          const matchingUnit = existingUnits.find((unit: any) => (unit.unitNo === u || unit.unit_no === u));
           const questions = matchingUnit?.questions || [];
           
           if (questions.length > 0) {
-            questions.forEach(q => {
-              categoryMaxMarksSum += q.maxMarks || 0;
-              const qKey = `q-${cat.name}-${u}-${q.id}`;
-              categoryObtainedSum += std.marks?.[qKey] ?? 0;
+            questions.forEach((q: any) => {
+              categoryMaxMarksSum += q.maxMarks || q.max_marks || 0;
+              categoryObtainedSum += getFuzzyStudentMark(std.marks, cat.name, u, q.id);
             });
           } else {
-            let totalMarks = matchingUnit ? matchingUnit.totalMarks : 0;
+            const directMark = getFuzzyStudentMark(std.marks, cat.name, u);
+            let totalMarks = matchingUnit ? (matchingUnit.totalMarks || matchingUnit.total_marks || 0) : 0;
             if (!totalMarks) {
               const catNameLower = cat.name.toLowerCase();
               if (catNameLower.includes('mid term') || catNameLower.includes('midterm') || catNameLower.includes('mid-term')) {
@@ -1227,8 +1339,6 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
               } else if (catNameLower.includes('presentation')) {
                 totalMarks = 10;
               } else {
-                const dKey = `${cat.name}-${u}`;
-                const directMark = std.marks?.[dKey] ?? 0;
                 if (directMark > 40) totalMarks = 50;
                 else if (directMark > 30) totalMarks = 40;
                 else if (directMark > 20) totalMarks = 30;
@@ -1237,8 +1347,7 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
               }
             }
             categoryMaxMarksSum += totalMarks;
-            const dKey = `${cat.name}-${u}`;
-            categoryObtainedSum += std.marks?.[dKey] ?? 0;
+            categoryObtainedSum += directMark;
           }
         }
       }
