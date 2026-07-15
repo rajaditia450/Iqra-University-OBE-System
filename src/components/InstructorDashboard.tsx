@@ -1358,12 +1358,68 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
     setCloEdits(edits);
   }, [numCLOs, courseCLOs]);
 
-  // Compute available GAs for the selected course's department
+  // Compute available GAs for the selected course's department and program
   const availableGAs = useMemo(() => {
     if (!obeData?.gas || !selectedCourse) return [];
-    const filtered = obeData.gas.filter(ga => 
+    
+    // First, filter by department
+    let filtered = obeData.gas.filter(ga => 
       ga.departmentId?.toLowerCase() === selectedCourse.departmentId?.toLowerCase()
     );
+
+    // If the course belongs to a specific program (e.g. BSCS, BSAI, BSSE, BBA, etc.)
+    const courseProgramId = (selectedCourse.programId || '').toLowerCase();
+    const courseProgramName = (selectedCourse.programName || '').toLowerCase();
+    
+    // Extract target program code (e.g. 'bscs', 'bsai', 'bsse', 'bba', 'bscy')
+    let targetProgram = '';
+    if (courseProgramId) {
+      targetProgram = courseProgramId;
+    } else if (courseProgramName.includes('computer science') || courseProgramName.includes('bscs')) {
+      targetProgram = 'bscs';
+    } else if (courseProgramName.includes('artificial intelligence') || courseProgramName.includes('bsai')) {
+      targetProgram = 'bsai';
+    } else if (courseProgramName.includes('software engineering') || courseProgramName.includes('bsse')) {
+      targetProgram = 'bsse';
+    } else if (courseProgramName.includes('cyber security') || courseProgramName.includes('bscy')) {
+      targetProgram = 'bscy';
+    } else if (courseProgramName.includes('business') || courseProgramName.includes('bba')) {
+      targetProgram = 'bba';
+    }
+
+    if (targetProgram) {
+      // Filter GAs that match this programId or whose ID contains the program name (like "BSCS", "BSAI", etc.)
+      const programFiltered = filtered.filter(ga => {
+        const gaIdLower = (ga.id || '').toLowerCase();
+        const gaProgLower = (ga.programId || ga.program_id || '').toLowerCase();
+        
+        // Match by ga.programId / ga.program_id
+        if (gaProgLower && gaProgLower === targetProgram) {
+          return true;
+        }
+        // Match by ID suffix or containment (e.g. gaId is "GA-1-BSCS" or contains "-bscs")
+        if (gaIdLower.includes(`-${targetProgram}`) || gaIdLower.endsWith(targetProgram)) {
+          return true;
+        }
+        
+        // If the GA doesn't have any program suffix/id at all, keep it as a general GA
+        const hasAnyProgramSuffix = gaIdLower.includes('-bscs') || 
+                                    gaIdLower.includes('-bsai') || 
+                                    gaIdLower.includes('-bsse') || 
+                                    gaIdLower.includes('-bscy') ||
+                                    gaIdLower.includes('-bba');
+        if (!hasAnyProgramSuffix && !gaProgLower) {
+          return true;
+        }
+        
+        return false;
+      });
+      
+      if (programFiltered.length > 0) {
+        return programFiltered;
+      }
+    }
+    
     return filtered.length > 0 ? filtered : obeData.gas;
   }, [obeData?.gas, selectedCourse]);
 

@@ -22,7 +22,7 @@ import {
   ClipboardCheck,
   FileText
 } from 'lucide-react';
-import { Student, Course, Program, Department, InstructorCourse } from '../types';
+import { Student, Course, Program, Department, InstructorCourse, GA } from '../types';
 import { apiService } from '../services/apiService';
 
 const normalizeRegNo = (reg: string) => {
@@ -68,6 +68,7 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
   const [departments, setDepartments] = useState<Department[]>([]);
   const [programs, setPrograms] = useState<Program[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
+  const [gas, setGas] = useState<GA[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [studentBindings, setStudentBindings] = useState<StudentCourseBinding[]>([]);
   const [instructorCourses, setInstructorCourses] = useState<InstructorCourse[]>([]);
@@ -141,6 +142,7 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
        setDepartments(obData.departments || []);
       setPrograms(obData.programs || []);
       setCourses(obData.courses || []);
+      setGas(obData.gas || []);
 
       // 1b. Load predefined semester plans
       try {
@@ -229,105 +231,49 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
             const loadedDepts = obData.departments || [];
             const loadedProgs = obData.programs || [];
 
-            const localSavedCoursesStr = localStorage.getItem('IQRA_OBE_INSTRUCTOR_COURSES');
-            const localSavedCourses: InstructorCourse[] = localSavedCoursesStr ? JSON.parse(localSavedCoursesStr) : [];
+            console.log("[STUDENT_MARKS_DEBUG] studentCourses loaded from backend:", studentCourses);
+            console.log("[STUDENT_MARKS_DEBUG] Active registration number:", regToUse);
 
             mappedInstructorCourses = studentCourses.map((sc: any) => {
-              const matchingLocalCourse = localSavedCourses.find((lc: any) => lc.code.trim().toLowerCase() === sc.code.trim().toLowerCase());
+              const codeStr = String(sc.code || '').trim().toUpperCase();
+              const titleStr = String(sc.title || '').trim().toLowerCase();
 
-              const codeStr = String(sc.code || matchingLocalCourse?.code || '').trim().toUpperCase();
-              const titleStr = String(sc.title || matchingLocalCourse?.title || '').trim().toLowerCase();
-              const isLab = sc.courseType === 'Lab' || sc.course_subtype === 'Lab' || matchingLocalCourse?.courseType === 'Lab' || codeStr.endsWith('L') || titleStr.includes('lab');
+              // Clean, non-fake mapping: use what the backend actually returns
+              const standardCategories = sc.categories || [];
+              const standardUnitsData = sc.unitsData || {};
 
-              const standardCategories = matchingLocalCourse?.categories || sc.categories || (isLab ? [
-                { name: "Mid Term", percentage: 20, units: 1 },
-                { name: "Final", percentage: 30, units: 1 },
-                { name: "Lab Reports", percentage: 10, units: 3 },
-                { name: "Lab Performance", percentage: 10, units: 3 },
-                { name: "Viva", percentage: 5, units: 1 },
-                { name: "Assignments", percentage: 5, units: 3 },
-                { name: "Quizzes", percentage: 5, units: 3 },
-                { name: "Open Ended Lab", percentage: 5, units: 1 },
-                { name: "Other Activities", percentage: 5, units: 1 },
-                { name: "Project", percentage: 5, units: 1 }
-              ] : [
-                { name: "Assignments", percentage: 15, units: 3 },
-                { name: "Quizzes", percentage: 10, units: 3 },
-                { name: "Class Participation", percentage: 5, units: 1 },
-                { name: "Class Project", percentage: 15, units: 1 },
-                { name: "Presentation", percentage: 5, units: 1 },
-                { name: "Mid Term", percentage: 20, units: 1 },
-                { name: "Final", percentage: 30, units: 1 }
-              ]);
-
-              const standardUnitsData = matchingLocalCourse?.unitsData || sc.unitsData || (isLab ? {
-                "Mid Term": [{ unitNo: 1, passing: 15, totalMarks: 30, weightage: 100 }],
-                "Final": [{ unitNo: 1, passing: 20, totalMarks: 40, weightage: 100 }],
-                "Lab Reports": [
-                  { unitNo: 1, passing: 5, totalMarks: 10, weightage: 33.3 },
-                  { unitNo: 2, passing: 5, totalMarks: 10, weightage: 33.3 },
-                  { unitNo: 3, passing: 5, totalMarks: 10, weightage: 33.4 }
-                ],
-                "Lab Performance": [
-                  { unitNo: 1, passing: 5, totalMarks: 10, weightage: 33.3 },
-                  { unitNo: 2, passing: 5, totalMarks: 10, weightage: 33.3 },
-                  { unitNo: 3, passing: 5, totalMarks: 10, weightage: 33.4 }
-                ],
-                "Viva": [{ unitNo: 1, passing: 5, totalMarks: 10, weightage: 100 }],
-                "Assignments": [
-                  { unitNo: 1, passing: 5, totalMarks: 10, weightage: 33.3 },
-                  { unitNo: 2, passing: 5, totalMarks: 10, weightage: 33.3 },
-                  { unitNo: 3, passing: 5, totalMarks: 10, weightage: 33.4 }
-                ],
-                "Quizzes": [
-                  { unitNo: 1, passing: 5, totalMarks: 10, weightage: 33.3 },
-                  { unitNo: 2, passing: 5, totalMarks: 10, weightage: 33.3 },
-                  { unitNo: 3, passing: 5, totalMarks: 10, weightage: 33.4 }
-                ],
-                "Open Ended Lab": [{ unitNo: 1, passing: 5, totalMarks: 10, weightage: 100 }],
-                "Other Activities": [{ unitNo: 1, passing: 5, totalMarks: 10, weightage: 100 }],
-                "Project": [{ unitNo: 1, passing: 15, totalMarks: 30, weightage: 100 }]
-              } : {
-                "Assignments": [
-                  { unitNo: 1, passing: 5, totalMarks: 10, weightage: 33.3 },
-                  { unitNo: 2, passing: 5, totalMarks: 10, weightage: 33.3 },
-                  { unitNo: 3, passing: 5, totalMarks: 10, weightage: 33.4 }
-                ],
-                "Quizzes": [
-                  { unitNo: 1, passing: 5, totalMarks: 10, weightage: 33.3 },
-                  { unitNo: 2, passing: 5, totalMarks: 10, weightage: 33.3 },
-                  { unitNo: 3, passing: 5, totalMarks: 10, weightage: 33.4 }
-                ],
-                "Class Participation": [{ unitNo: 1, passing: 5, totalMarks: 10, weightage: 100 }],
-                "Class Project": [{ unitNo: 1, passing: 15, totalMarks: 30, weightage: 100 }],
-                "Presentation": [{ unitNo: 1, passing: 5, totalMarks: 10, weightage: 100 }],
-                "Mid Term": [{ unitNo: 1, passing: 15, totalMarks: 30, weightage: 100 }],
-                "Final": [{ unitNo: 1, passing: 20, totalMarks: 40, weightage: 100 }]
-              });
-
-              const pId = sc.programId || matchingLocalCourse?.programId || matchingStudent?.programId || 'bscs';
+              const pId = sc.programId || sc.program_id || matchingStudent?.programId || 'bscs';
               const prog = loadedProgs.find((p: any) => p.id === pId);
               const pName = prog ? prog.name : 'Bachelor of Science in Computer Science (BSCS)';
               
-              const dId = sc.departmentId || matchingLocalCourse?.departmentId || prog?.departmentId || matchingStudent?.departmentId || 'computing';
+              const dId = sc.departmentId || sc.department_id || prog?.departmentId || matchingStudent?.departmentId || 'computing';
               const dept = loadedDepts.find((d: any) => d.id === dId);
               const dName = dept ? dept.name : 'Department of Computing and Technology';
 
-              const matchingLocalStudent = matchingLocalCourse?.students?.find((s: any) => normalizeRegNo(s.regNo) === normalizeRegNo(regToUse));
-              const studentMarksToUse = matchingLocalStudent?.marks || sc.studentMarks || {};
+              const studentMarksToUse = sc.studentMarks || {};
+              const obeMarksToUse = sc.obeMarks || {};
 
-              const matchingLocalOBEMarkKey = matchingLocalCourse?.obeMarks ? Object.keys(matchingLocalCourse.obeMarks).find(k => normalizeRegNo(k) === normalizeRegNo(regToUse)) : null;
-              const obeMarksToUse = matchingLocalOBEMarkKey ? matchingLocalCourse.obeMarks[matchingLocalOBEMarkKey] : (sc.obeMarks || {});
+              console.log(`[STUDENT_MARKS_DEBUG] Course ${codeStr} - "${sc.title}" details mapped from backend:`, {
+                id: sc.id,
+                code: sc.code,
+                title: sc.title,
+                studentMarks: studentMarksToUse,
+                obeMarks: obeMarksToUse,
+                categories: standardCategories,
+                unitsData: standardUnitsData,
+                obeQuestions: sc.obeQuestions,
+                selectedGradingSystem: sc.selectedGradingSystem
+              });
 
               return {
-                id: sc.id || matchingLocalCourse?.id || `course-assigned-${sc.code}`,
+                id: sc.id || `course-assigned-${sc.code}`,
                 code: sc.code,
-                title: sc.title || matchingLocalCourse?.title || '',
+                title: sc.title || '',
                 departmentId: dId,
                 departmentName: dName,
                 programId: pId,
                 programName: pName,
-                creditHours: sc.creditHours || matchingLocalCourse?.creditHours || 3,
+                creditHours: sc.creditHours || 3,
                 categories: standardCategories,
                 unitsData: standardUnitsData,
                 students: [
@@ -337,110 +283,20 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
                     marks: studentMarksToUse
                   }
                 ],
-                obeQuestions: sc.obeQuestions || matchingLocalCourse?.obeQuestions || [],
+                obeQuestions: sc.obeQuestions || [],
                 obeMarks: {
                   [regToUse]: obeMarksToUse
                 },
-                selectedGradingSystem: matchingLocalCourse?.selectedGradingSystem || sc.selectedGradingSystem || 'ready1'
+                selectedGradingSystem: sc.selectedGradingSystem || 'ready1'
               };
             });
-
-            // Merge any local saved courses that have this student but are not in the backend response
-            localSavedCourses.forEach((lc: any) => {
-              const studentEnrolled = lc.students?.some((s: any) => normalizeRegNo(s.regNo) === normalizeRegNo(regToUse));
-              const alreadyMapped = mappedInstructorCourses.some((mic: any) => mic.code.trim().toLowerCase() === lc.code.trim().toLowerCase());
-              if (studentEnrolled && !alreadyMapped) {
-                const standardCategories = lc.categories || [
-                  { name: "Assignments", percentage: 15, units: 3 },
-                  { name: "Quizzes", percentage: 10, units: 3 },
-                  { name: "Class Participation", percentage: 5, units: 1 },
-                  { name: "Class Project", percentage: 15, units: 1 },
-                  { name: "Presentation", percentage: 5, units: 1 },
-                  { name: "Mid Term", percentage: 20, units: 1 },
-                  { name: "Final", percentage: 30, units: 1 }
-                ];
-                const standardUnitsData = lc.unitsData || {
-                  "Assignments": [
-                    { unitNo: 1, passing: 5, totalMarks: 10, weightage: 33.3 },
-                    { unitNo: 2, passing: 5, totalMarks: 10, weightage: 33.3 },
-                    { unitNo: 3, passing: 5, totalMarks: 10, weightage: 33.4 }
-                  ],
-                  "Quizzes": [
-                    { unitNo: 1, passing: 5, totalMarks: 10, weightage: 33.3 },
-                    { unitNo: 2, passing: 5, totalMarks: 10, weightage: 33.3 },
-                    { unitNo: 3, passing: 5, totalMarks: 10, weightage: 33.4 }
-                  ],
-                  "Class Participation": [{ unitNo: 1, passing: 5, totalMarks: 10, weightage: 100 }],
-                  "Class Project": [{ unitNo: 1, passing: 15, totalMarks: 30, weightage: 100 }],
-                  "Presentation": [{ unitNo: 1, passing: 5, totalMarks: 10, weightage: 100 }],
-                  "Mid Term": [{ unitNo: 1, passing: 15, totalMarks: 30, weightage: 100 }],
-                  "Final": [{ unitNo: 1, passing: 20, totalMarks: 40, weightage: 100 }]
-                };
-
-                const pId = lc.programId || matchingStudent?.programId || 'bscs';
-                const prog = loadedProgs.find((p: any) => p.id === pId);
-                const pName = prog ? prog.name : 'Bachelor of Science in Computer Science (BSCS)';
-                
-                const dId = lc.departmentId || prog?.departmentId || matchingStudent?.departmentId || 'computing';
-                const dept = loadedDepts.find((d: any) => d.id === dId);
-                const dName = dept ? dept.name : 'Department of Computing and Technology';
-
-                const matchingLocalStudent = lc.students?.find((s: any) => normalizeRegNo(s.regNo) === normalizeRegNo(regToUse));
-                const studentMarksToUse = matchingLocalStudent?.marks || {};
-
-                const matchingLocalOBEMarkKey = lc.obeMarks ? Object.keys(lc.obeMarks).find(k => normalizeRegNo(k) === normalizeRegNo(regToUse)) : null;
-                const obeMarksToUse = matchingLocalOBEMarkKey ? lc.obeMarks[matchingLocalOBEMarkKey] : {};
-
-                mappedInstructorCourses.push({
-                  id: lc.id || `course-assigned-${lc.code}`,
-                  code: lc.code,
-                  title: lc.title || '',
-                  departmentId: dId,
-                  departmentName: dName,
-                  programId: pId,
-                  programName: pName,
-                  creditHours: lc.creditHours || 3,
-                  categories: standardCategories,
-                  unitsData: standardUnitsData,
-                  students: [
-                    {
-                      regNo: regToUse,
-                      name: matchingStudent ? matchingStudent.name : 'Logged-In Student',
-                      marks: studentMarksToUse
-                    }
-                  ],
-                  obeQuestions: lc.obeQuestions || [],
-                  obeMarks: {
-                    [regToUse]: obeMarksToUse
-                  },
-                  selectedGradingSystem: lc.selectedGradingSystem || 'ready1'
-                });
-
-                // Also bind this student dynamically
-                setStudentBindings(prev => {
-                  if (prev.some(b => normalizeRegNo(b.studentRegNo) === normalizeRegNo(regToUse) && b.courseCode === lc.code)) return prev;
-                  return [...prev, { studentRegNo: regToUse, courseCode: lc.code }];
-                });
-              }
-            });
           } else {
-            const instCourses = apiService.getLocalInstructorCourses();
-            mappedInstructorCourses = instCourses || [];
+            console.warn("[STUDENT_MARKS_DEBUG] studentCourses from API is not an array:", studentCourses);
+            mappedInstructorCourses = [];
           }
         } catch (apiErr) {
-          console.warn("Failed to fetch student courses from backend, falling back to local storage.", apiErr);
-          const instCourses = apiService.getLocalInstructorCourses();
-          const regToUse = matchingStudent ? matchingStudent.regNo : activeRegNo;
-          instCourses.forEach(lc => {
-            const studentEnrolled = lc.students?.some((s: any) => normalizeRegNo(s.regNo) === normalizeRegNo(regToUse));
-            if (studentEnrolled) {
-              setStudentBindings(prev => {
-                if (prev.some(b => normalizeRegNo(b.studentRegNo) === normalizeRegNo(regToUse) && b.courseCode === lc.code)) return prev;
-                return [...prev, { studentRegNo: regToUse, courseCode: lc.code }];
-              });
-            }
-          });
-          mappedInstructorCourses = instCourses || [];
+          console.error("[STUDENT_MARKS_DEBUG] Error loading student courses from backend:", apiErr);
+          mappedInstructorCourses = [];
         }
         setInstructorCourses(mappedInstructorCourses);
       } catch (err) {
@@ -540,12 +396,19 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
     return 0;
   };
 
-  // Helper to retrieve stable, realistic grades/attainments based on the student's registration ID
-  // This guarantees high-fidelity, complete visuals for all courses instead of all empty tables.
+  // Helper to retrieve realistic grades/attainments based on the student's registration ID and backend responses
   const computeStudentCourseResult = (stdRegNo: string, courseCode: string) => {
     // Look up if there is an Instructor Course with these marks
     const instCourse = instructorCourses.find(ic => ic.code === courseCode);
     const std = instCourse?.students.find(s => normalizeRegNo(s.regNo) === normalizeRegNo(stdRegNo));
+
+    console.log(`[STUDENT_MARKS_DEBUG] Calculating results for Student: "${stdRegNo}", Course: "${courseCode}"`);
+    if (!instCourse) {
+      console.warn(`[STUDENT_MARKS_DEBUG] No matching course structure found for "${courseCode}" in instructorCourses.`);
+    }
+    if (!std) {
+      console.warn(`[STUDENT_MARKS_DEBUG] No matching student record found for "${stdRegNo}" inside course "${courseCode}".`);
+    }
 
     let aggregate = 0;
     let hasAnyMarks = false;
@@ -555,8 +418,11 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
       const activeCats = instCourse.categories.filter(c => c.percentage > 0);
       let totalAggregate = 0;
       
+      console.log(`[STUDENT_MARKS_DEBUG] Active categories to calculate:`, activeCats.map(c => `${c.name} (${c.percentage}%)`));
+
       activeCats.forEach(cat => {
         const existingUnits = instCourse.unitsData[cat.name] || [];
+        console.log(`[STUDENT_MARKS_DEBUG] Category "${cat.name}" units count: ${cat.units}`);
         
         if (cat.units > 0) {
           for (let u = 1; u <= cat.units; u++) {
@@ -569,21 +435,30 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
             if (questions.length > 0) {
               questions.forEach(q => {
                 const qKey = `q-${cat.name}-${u}-${q.id}`;
-                unitObtained += std.marks?.[qKey] ?? 0;
+                const localMark = std.marks?.[qKey];
+                const backendMark = instCourse?.obeMarks?.[stdRegNo]?.[q.id];
+                const finalMark = localMark !== undefined ? localMark : (backendMark !== undefined ? backendMark : 0);
+                unitObtained += finalMark;
+                console.log(`[STUDENT_MARKS_DEBUG]   - Question "${q.questionName}" (ID: ${q.id}) score: ${finalMark} (local: ${localMark}, backend: ${backendMark})`);
               });
             } else {
               const dKey = `${cat.name}-${u}`;
-              unitObtained += std.marks?.[dKey] ?? 0;
+              const directMark = std.marks?.[dKey] ?? 0;
+              unitObtained += directMark;
+              console.log(`[STUDENT_MARKS_DEBUG]   - Direct Unit "${dKey}" score: ${directMark}`);
             }
 
             if (totalMarks > 0) {
-              totalAggregate += (unitObtained / totalMarks) * (unitWeightage / 100) * cat.percentage;
+              const contribution = (unitObtained / totalMarks) * (unitWeightage / 100) * cat.percentage;
+              totalAggregate += contribution;
+              console.log(`[STUDENT_MARKS_DEBUG]   - Unit ${cat.name} #${u} total: ${unitObtained} / ${totalMarks} (weightage: ${unitWeightage}%, cat %: ${cat.percentage}%). Contribution: ${contribution.toFixed(2)}%`);
             }
 
             if (std.marks && (
               std.marks[`${cat.name}-${u}`] !== undefined || 
               std.marks[cat.name] !== undefined ||
-              Object.keys(std.marks).some(k => k.startsWith(`q-${cat.name}-${u}-`))
+              Object.keys(std.marks).some(k => k.startsWith(`q-${cat.name}-${u}-`)) ||
+              (instCourse?.obeMarks?.[stdRegNo] && Object.keys(instCourse.obeMarks[stdRegNo]).length > 0)
             )) {
               hasAnyMarks = true;
             }
@@ -596,7 +471,7 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
       }
     }
 
-    // Fallback/Stable pseudo-random generation based on registration number & course code for other registered courses
+    // No fake pseudo-random simulations or fallbacks
     if (!hasAnyMarks) {
       aggregate = 0;
     }
@@ -688,7 +563,6 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
           }
         }
       } else {
-        // Fallback
         if (aggregate >= 88) { letterGrade = 'A'; points = 4.0; }
         else if (aggregate >= 81) { letterGrade = 'B+'; points = 3.5; }
         else if (aggregate >= 74) { letterGrade = 'B'; points = 3.0; }
@@ -698,7 +572,7 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
       }
     }
 
-    // CLO Performance Calculations
+    // CLO Performance Calculations (Genuine, No Mock Simulations)
     const qs = instCourse?.obeQuestions || [];
     const marks = instCourse?.obeMarks || {};
     const cloCount = instCourse?.cloCount || 4;
@@ -713,18 +587,8 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
         score += marks[stdRegNo]?.[q.id] ?? 0;
       });
 
-      // Standard stable simulation if no OBE structures are customized yet
       if (max === 0) {
-        if (hasAnyMarks && aggregate > 0) {
-          // If the course has been graded, estimate attainment based on overall aggregate
-          // to stay consistent with the QA Dashboard and provide complete indicators.
-          const simulatedPercent = Math.min(100, Math.max(0, Math.round(aggregate + (Math.sin(idx + clo.charCodeAt(clo.length - 1)) * 3))));
-          return {
-            code: clo,
-            percentage: simulatedPercent,
-            status: simulatedPercent >= 50 ? 'Attained' : 'Needs Improvement'
-          };
-        }
+        console.log(`[STUDENT_MARKS_DEBUG]   - ${clo} has 0 assessment questions. Score: 0/0 (Not Assessed).`);
         return {
           code: clo,
           percentage: 0,
@@ -733,12 +597,15 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
       }
 
       const pct = max > 0 ? (score / max) * 100 : 0;
+      console.log(`[STUDENT_MARKS_DEBUG]   - ${clo} assessment total: ${score} / ${max} = ${pct.toFixed(1)}%`);
       return {
         code: clo,
         percentage: pct,
         status: pct >= 50 ? 'Attained' : 'Needs Improvement'
       };
     });
+
+    console.log(`[STUDENT_MARKS_DEBUG] Final computed aggregate for ${courseCode}: ${aggregate.toFixed(2)}% (Grade: ${letterGrade}, GP: ${points})`);
 
     return {
       aggregate,
@@ -906,28 +773,17 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
     }
   }, [coursesBySemester]);
 
-  // Filter GAs (Graduate Attributes) associated with the student's program (or standard 10)
+  // Filter GAs (Graduate Attributes) associated with the student's program/department
   const programGAs = useMemo(() => {
-    if (!activeStudent) return [];
+    if (!activeStudent || gas.length === 0) return [];
     
-    // Filter programs' custom GAs or fallback to standard ones
-    const codeUpper = (activeProgram?.code || 'CS').toUpperCase();
+    // Filter by the student's department
+    const studentDeptId = (activeStudent.departmentId || 'computing').toLowerCase();
+    const filtered = gas.filter(g => (g.departmentId || '').toLowerCase() === studentDeptId);
     
-    const allGAs = [
-      { id: `GA-${codeUpper}-1`, name: 'Academic Grounding', description: 'Deep comprehension of fundamental computing principles, lifecycle models, and technical algorithms.' },
-      { id: `GA-${codeUpper}-2`, name: 'Problem Analysis', description: 'Skill to identify, analyze, organize, validate, and solve complex software and database challenges.' },
-      { id: `GA-${codeUpper}-3`, name: 'Design/Development of Solutions', description: 'Mastery in designing sustainable components, architectural layers, and clean software blueprints.' },
-      { id: `GA-${codeUpper}-4`, name: 'Investigation / Research', description: 'Ability to conduct validation studies, analyze performance datasets, and draw conclusions.' },
-      { id: `GA-${codeUpper}-5`, name: 'Modern Tool Usage', description: 'Competency in leveraging Git, CI/CD pipelines, virtualization fabrics, and database systems.' },
-      { id: `GA-${codeUpper}-6`, name: 'The Engineer & Society', description: 'Assessing the safety, cultural, cyber security, and legal impacts of technology deployments.' },
-      { id: `GA-${codeUpper}-7`, name: 'Environment & Sustainability', description: 'Understanding the impact of software structures on environment, power limits, and scaling constraints.' },
-      { id: `GA-${codeUpper}-8`, name: 'Professional Ethics', description: 'Uphold software standards, legal compliance, copyright protection, and data privacy principles.' },
-      { id: `GA-${codeUpper}-9`, name: 'Individual & Team Work', description: 'Function effectively as an agile team member or lead inside diverse collaborative teams.' },
-      { id: `GA-${codeUpper}-10`, name: 'Continuous Life-Long Learning', description: 'Commitment to independent learning, research adaptation, and professional career growth.' }
-    ];
-
-    return allGAs;
-  }, [activeStudent, activeProgram]);
+    console.log("[STUDENT_MARKS_DEBUG] Filtered programGAs for department", studentDeptId, ":", filtered);
+    return filtered;
+  }, [activeStudent, gas]);
 
   // Compute Graduate Attribute (GA) Attainment scores dynamically
   // Each GA is mapped to courses. We aggregate the student's aggregate marks in those courses.
