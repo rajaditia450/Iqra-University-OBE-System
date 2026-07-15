@@ -1160,6 +1160,10 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
   };
 
   const [activeCourseId, setActiveCourseId] = useState<string>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const paramCourseId = params.get('courseId');
+    if (paramCourseId) return paramCourseId;
+
     const saved = localStorage.getItem('IQRA_OBE_INSTRUCTOR_ACTIVE_ID');
     if (saved === 'course-1' || saved === 'course-2') return '';
     if (saved) return saved;
@@ -1222,16 +1226,23 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
           setErrorMsg(null);
           
           // Make sure a valid active course is selected and exists in the freshly-loaded list
-          const savedActive = localStorage.getItem('IQRA_OBE_INSTRUCTOR_ACTIVE_ID');
-          const exists = normalized.some(c => c.id === savedActive);
-          if (!savedActive || savedActive === 'course-1' || savedActive === 'course-2' || !exists) {
-            if (normalized.length > 0) {
-              setActiveCourseId(normalized[0].id);
-            } else {
-              setActiveCourseId('');
-            }
+          const urlParams = new URLSearchParams(window.location.search);
+          const paramCourseId = urlParams.get('courseId');
+          
+          if (paramCourseId && normalized.some(c => c.id === paramCourseId)) {
+            setActiveCourseId(paramCourseId);
           } else {
-            setActiveCourseId(savedActive);
+            const savedActive = localStorage.getItem('IQRA_OBE_INSTRUCTOR_ACTIVE_ID');
+            const exists = normalized.some(c => c.id === savedActive);
+            if (!savedActive || savedActive === 'course-1' || savedActive === 'course-2' || !exists) {
+              if (normalized.length > 0) {
+                setActiveCourseId(normalized[0].id);
+              } else {
+                setActiveCourseId('');
+              }
+            } else {
+              setActiveCourseId(savedActive);
+            }
           }
         }
       } catch (err: any) {
@@ -1305,7 +1316,10 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
   const [courseToDeleteId, setCourseToDeleteId] = useState<string | null>(null);
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [activeModal, setActiveModal] = useState<'about' | 'help' | 'marksheet-report' | null>(null);
-  const [isDirectPrinting, setIsDirectPrinting] = useState(false);
+  const [isDirectPrinting, setIsDirectPrinting] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('print') === 'true';
+  });
 
   // Dynamic API CLOs states
   const [courseCLOs, setCourseCLOs] = useState<any[]>([]);
@@ -1508,22 +1522,56 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
   }, [activeCourseId, courses, loading]);
 
   // Marksheet Report metadata states
-  const [reportCampus, setReportCampus] = useState('Iqra University Chak Shahzad Campus Islamabad');
-  const [reportType, setReportType] = useState<'standard' | 'combined'>('standard');
-  const [reportSemester, setReportSemester] = useState('SPRING 2026');
-  const [reportSection, setReportSection] = useState('A');
-  const [reportOfferedIn, setReportOfferedIn] = useState('Morning');
-  const [reportSession, setReportSession] = useState('B.Sc Computer Science (Fall-Morning)');
-  const [reportInstructor, setReportInstructor] = useState('Prof. Dr. Jameel Ahmed');
-  const [reportDated, setReportDated] = useState('');
+  const [reportCampus, setReportCampus] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('campus') || 'Iqra University Chak Shahzad Campus Islamabad';
+  });
+  const [reportType, setReportType] = useState<'standard' | 'combined' | 'award'>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const rt = params.get('reportType');
+    if (rt === 'combined') return 'combined';
+    if (rt === 'award') return 'award';
+    return 'standard';
+  });
+  const [reportSemester, setReportSemester] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('semester') || 'SPRING 2026';
+  });
+  const [reportSection, setReportSection] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('section') || 'A';
+  });
+  const [reportOfferedIn, setReportOfferedIn] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('offeredIn') || 'Morning';
+  });
+  const [reportSession, setReportSession] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('session') || 'B.Sc Computer Science (Fall-Morning)';
+  });
+  const [reportInstructor, setReportInstructor] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('instructor') || 'Prof. Dr. Jameel Ahmed';
+  });
+  const [reportDated, setReportDated] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('dated') || '';
+  });
   const [reportPrintDate, setReportPrintDate] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    const d = params.get('printDate');
+    if (d) return d;
     const today = new Date();
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     return `${today.getDate()}-${months[today.getMonth()]}-${today.getFullYear()}`;
   });
 
-  // Automatically sync report details when course context shifts
+  // Automatically sync report details when course context shifts, unless overridden by direct URL printing
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('print') === 'true') {
+      return;
+    }
     if (selectedCourse) {
       if (selectedCourse.programName) {
         setReportSession(`B.Sc ${selectedCourse.programName} (Fall-Morning)`);
@@ -1538,17 +1586,58 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
     }
   }, [selectedCourse, instructorName]);
 
+  // Automatic print trigger on tab loading if print=true query param is present
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('print') === 'true' && selectedCourse) {
+      const timer = setTimeout(() => {
+        try {
+          window.focus();
+          window.print();
+        } catch (e) {
+          console.error("Print failed:", e);
+        }
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [selectedCourse]);
+
   const handlePrintDirect = () => {
-    setIsDirectPrinting(true);
-    setTimeout(() => {
-      try {
-        window.focus();
-        window.print();
-      } catch (e) {
-        console.error("Print failed:", e);
-        showNotification("The print dialog is blocked in this preview iframe. Please open the app in a new tab using the icon at the top right of the editor to print directly.");
-      }
-    }, 350);
+    if (!selectedCourse) return;
+
+    // Construct query parameters
+    const params = new URLSearchParams();
+    params.set('print', 'true');
+    params.set('courseId', selectedCourse.id);
+    params.set('reportType', reportType);
+    params.set('campus', reportCampus);
+    params.set('semester', reportSemester);
+    params.set('section', reportSection);
+    params.set('offeredIn', reportOfferedIn);
+    params.set('session', reportSession);
+    params.set('instructor', reportInstructor);
+    params.set('dated', reportDated);
+    params.set('printDate', reportPrintDate);
+
+    const url = `${window.location.origin}${window.location.pathname}?${params.toString()}`;
+
+    // Open in a new tab to bypass iframe sandboxing and guarantee perfect printable aspect ratio
+    const printTab = window.open(url, '_blank');
+    if (printTab) {
+      showNotification("Opening dedicated print page in a new tab to bypass browser sandboxing...", "info");
+    } else {
+      // If popup blocker blocked it, fallback to showing in-app print view and attempt print
+      setIsDirectPrinting(true);
+      showNotification("Popup blocked! Opening print view in dashboard. For best results, allow popups or open the app in a new tab first.", "info");
+      setTimeout(() => {
+        try {
+          window.focus();
+          window.print();
+        } catch (e) {
+          console.error("Print failed:", e);
+        }
+      }, 500);
+    }
   };
 
   const handleDownloadPDF = async () => {
@@ -3300,62 +3389,15 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
   // Render ONLY the marksheet document if pure print mode is triggered
   if (isDirectPrinting && selectedCourse) {
     return (
-      <div className="w-full min-h-screen bg-slate-100 text-black flex flex-col m-0 p-0 antialiased font-sans">
-        {/* On-Screen Print Helper Top-Bar */}
-        <div className="print:hidden bg-slate-900 text-white px-6 py-4 flex flex-col md:flex-row items-center justify-between gap-4 shadow-md font-sans shrink-0 border-b border-slate-800">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-indigo-600 rounded-lg">
-              <Printer className="w-5 h-5 text-white animate-pulse" />
-            </div>
-            <div>
-              <h2 className="text-sm font-bold tracking-tight">IU OBE Mark Sheet Print Section</h2>
-              <p className="text-[10px] text-slate-400">
-                You are in the dedicated print view. Click "Print Now" to open the browser print dialog.
-              </p>
-            </div>
-          </div>
-          
-          <div className="flex items-center gap-2.5">
-            <button
-              onClick={() => {
-                try {
-                  window.focus();
-                  window.print();
-                } catch (e) {
-                  console.error("Print failed:", e);
-                }
-              }}
-              className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-4 py-2 rounded-lg shadow-sm transition-all cursor-pointer"
-            >
-              <Printer className="w-4 h-4" />
-              <span>Print Now</span>
-            </button>
-            <button
-              onClick={() => setIsDirectPrinting(false)}
-              className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs px-4 py-2 rounded-lg shadow-sm transition-all cursor-pointer border border-slate-700"
-            >
-              <X className="w-4 h-4" />
-              <span>Go Back to Dashboard</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Informative helper for Iframe Sandboxing */}
-        <div className="print:hidden bg-amber-50 border-b border-amber-200 text-amber-900 px-6 py-3 text-xs font-medium font-sans flex items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <span className="text-amber-500 font-bold">⚠️ Note:</span>
-            <span>
-              If the print dialog did not open automatically, browser sandboxing inside this preview panel may have blocked it.
-              To print, please click the <strong className="text-amber-950 font-black">"Open in new tab"</strong> icon at the very top-right of your screen, then click Print.
-            </span>
-          </div>
-          <button 
-            onClick={() => setIsDirectPrinting(false)} 
-            className="text-amber-800 hover:text-amber-950 underline cursor-pointer text-xs font-bold shrink-0"
-          >
-            Back to App
-          </button>
-        </div>
+      <div className="relative w-full min-h-screen bg-slate-100 text-black flex flex-col m-0 p-0 antialiased font-sans print:bg-white print:overflow-visible">
+        {/* Floating Return Button - completely out of the way, print:hidden */}
+        <button
+          onClick={() => setIsDirectPrinting(false)}
+          className="print:hidden fixed top-4 left-4 z-50 flex items-center justify-center p-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-full shadow-lg border border-slate-700/50 transition-all cursor-pointer group"
+          title="Go Back to Dashboard"
+        >
+          <X className="w-5 h-5 transition-transform group-hover:scale-110" />
+        </button>
 
         {/* The Actual Printable Marksheet Document Container */}
         <div className="flex-1 bg-slate-100 overflow-y-auto p-4 md:p-8 print:p-0 print:bg-white print:overflow-visible">
