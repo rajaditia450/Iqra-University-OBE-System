@@ -734,7 +734,7 @@ const MarksheetDocument = ({
   dated: string;
   printDate: string;
   isPrintView: boolean;
-  reportType?: 'standard' | 'combined' | 'award';
+  reportType?: 'standard' | 'combined' | 'award' | 'clo';
 }) => {
   const activeSystem = course.selectedGradingSystem || 'ready1';
   let gradingList: { grade: string; min: number; label: string }[] = [];
@@ -852,6 +852,115 @@ const MarksheetDocument = ({
         unitNo: u,
         label: getShortLabel(cat.name, u, cat.units),
         maxMarks: totalMarks
+      });
+    }
+  });
+
+  // CLO-Based Result Calculations
+  const cloCount = course.cloCount || 4;
+  const cloCodes = Array.from({ length: cloCount }, (_, i) => `CLO-${i + 1}`);
+
+  interface CLOAssessment {
+    id: string;
+    label: string;
+    categoryName: string;
+    unitNo: number;
+    questionId?: string;
+    maxMarks: number;
+    contrib: number;
+    passing: number;
+    relativeWeight: number;
+  }
+
+  const cloAssessments: Record<string, CLOAssessment[]> = {};
+  cloCodes.forEach(code => {
+    cloAssessments[code] = [];
+  });
+
+  activeCats.forEach(cat => {
+    const units = course.unitsData[cat.name] || [];
+    units.forEach(unit => {
+      const unitWeightage = unit.weightage ?? (cat.units > 0 ? (100 / cat.units) : 0);
+      const unitPassing = unit.passing ?? (unit.totalMarks * 0.5);
+
+      if (unit.questions && unit.questions.length > 0) {
+        unit.questions.forEach(q => {
+          const qCLOs = q.mappedCLOs || [];
+          qCLOs.forEach(cloCode => {
+            const normalizedCLO = String(cloCode).trim().toUpperCase();
+            if (cloAssessments[normalizedCLO]) {
+              const catShort = getShortLabel(cat.name, unit.unitNo, cat.units);
+              let cleanQName = q.name || '';
+              if (cleanQName.toLowerCase().startsWith('question')) {
+                cleanQName = 'Q' + cleanQName.substring(8).trim();
+              }
+              const label = cleanQName ? `${catShort}-${cleanQName}` : catShort;
+              const contrib = (q.maxMarks / unit.totalMarks) * (unitWeightage / 100) * cat.percentage;
+              cloAssessments[normalizedCLO].push({
+                id: `q-${cat.name}-${unit.unitNo}-${q.id}`,
+                label: label,
+                categoryName: cat.name,
+                unitNo: unit.unitNo,
+                questionId: q.id,
+                maxMarks: q.maxMarks,
+                contrib: contrib,
+                passing: q.maxMarks * (unitPassing / unit.totalMarks),
+                relativeWeight: 0
+              });
+            }
+          });
+        });
+      } else {
+        const unitCLOs = unit.mappedCLOs || [];
+        unitCLOs.forEach(cloCode => {
+          const normalizedCLO = String(cloCode).trim().toUpperCase();
+          if (cloAssessments[normalizedCLO]) {
+            const label = getShortLabel(cat.name, unit.unitNo, cat.units);
+            const contrib = (unitWeightage / 100) * cat.percentage;
+            cloAssessments[normalizedCLO].push({
+              id: `${cat.name}-${unit.unitNo}`,
+              label: label,
+              categoryName: cat.name,
+              unitNo: unit.unitNo,
+              maxMarks: unit.totalMarks,
+              contrib: contrib,
+              passing: unitPassing,
+              relativeWeight: 0
+            });
+          }
+        });
+      }
+    });
+  });
+
+  // Calculate relative weights for each CLO
+  cloCodes.forEach(code => {
+    const list = cloAssessments[code];
+    const totalCLOContrib = list.reduce((sum, ass) => sum + ass.contrib, 0);
+
+    if (totalCLOContrib > 0) {
+      list.forEach(ass => {
+        ass.relativeWeight = (ass.contrib / totalCLOContrib) * 100;
+      });
+    } else if (list.length > 0) {
+      list.forEach(ass => {
+        ass.relativeWeight = 100 / list.length;
+      });
+    }
+
+    // Round nicely so they sum to exactly 100%
+    if (list.length > 0) {
+      const roundedWeights = list.map(ass => Math.round(ass.relativeWeight));
+      const roundedSum = roundedWeights.reduce((s, w) => s + w, 0);
+      if (roundedSum !== 100) {
+        const maxVal = Math.max(...roundedWeights);
+        const maxIdx = roundedWeights.indexOf(maxVal);
+        if (maxIdx !== -1) {
+          roundedWeights[maxIdx] += (100 - roundedSum);
+        }
+      }
+      list.forEach((ass, idx) => {
+        ass.relativeWeight = roundedWeights[idx];
       });
     }
   });
@@ -1043,6 +1152,184 @@ const MarksheetDocument = ({
                       ))}
                       <td className="border-r border-black p-1.5 w-[10%] min-w-[70px]"></td>
                       <td className="p-1.5 w-[6%] min-w-[40px]"></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          ) : reportType === 'clo' ? (
+            <table className="w-full text-center border-collapse border border-black font-sans text-[10px]">
+              <thead>
+                {/* ROW 1: Header / CLO Names with Passing Threshold */}
+                <tr className="bg-slate-50 border-b border-black font-black text-[10px] text-slate-900 leading-tight">
+                  <th colSpan={3} className="border-r border-black p-1.5 text-center font-bold">
+                    Assessment (Passing Threshold)
+                  </th>
+                  {cloCodes.map((code) => {
+                    const list = cloAssessments[code] || [];
+                    // Calculate passing percentage
+                    let passingPctSum = 0;
+                    let countWithPassing = 0;
+                    list.forEach(ass => {
+                      passingPctSum += ((ass.passing ?? (ass.maxMarks * 0.5)) / ass.maxMarks) * 100;
+                      countWithPassing++;
+                    });
+                    const cloPassingThreshold = countWithPassing > 0 ? Math.round(passingPctSum / countWithPassing) : 50;
+                    return (
+                      <th
+                        key={code}
+                        colSpan={list.length + 1}
+                        className="border-r border-black p-1.5 text-center font-bold uppercase tracking-tight"
+                      >
+                        {code}({cloPassingThreshold}%)
+                      </th>
+                    );
+                  })}
+                </tr>
+
+                {/* ROW 2: Column Names */}
+                <tr className="bg-slate-50 border-b border-black font-black text-[9.5px] text-slate-900 leading-tight">
+                  <th className="border-r border-black p-1 w-[4%] text-center">S/N</th>
+                  <th className="border-r border-black p-1 w-[12%] text-center">Roll No.</th>
+                  <th className="border-r border-black p-1 text-left w-[20%]">Student Name</th>
+                  {cloCodes.map(code => {
+                    const list = cloAssessments[code] || [];
+                    return (
+                      <React.Fragment key={`cols-${code}`}>
+                        {list.map((ass, aIdx) => (
+                          <th
+                            key={`${code}-col-${aIdx}`}
+                            className="border-r border-black p-1 font-mono text-[9px] text-center font-bold"
+                          >
+                            {ass.label}
+                          </th>
+                        ))}
+                        <th className="border-r border-black p-1 font-sans text-center font-bold bg-slate-100/50">
+                          Total
+                        </th>
+                      </React.Fragment>
+                    );
+                  })}
+                </tr>
+
+                {/* ROW 3: Weights */}
+                <tr className="bg-slate-50 border-b border-black font-black text-[9px] text-slate-900 leading-tight">
+                  <td colSpan={3} className="border-r border-black p-1 bg-slate-100/30 font-bold text-center uppercase">
+                    Weight
+                  </td>
+                  {cloCodes.map(code => {
+                    const list = cloAssessments[code] || [];
+                    return (
+                      <React.Fragment key={`weights-${code}`}>
+                        {list.map((ass, aIdx) => (
+                          <td
+                            key={`${code}-wt-${aIdx}`}
+                            className="border-r border-black p-1 font-mono text-[9px] text-center font-semibold bg-slate-100/30"
+                          >
+                            {ass.relativeWeight}%
+                          </td>
+                        ))}
+                        <td className="border-r border-black p-1 font-sans text-center font-bold bg-slate-100">
+                          100%
+                        </td>
+                      </React.Fragment>
+                    );
+                  })}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-black/40 font-mono text-[10px]">
+                {studentTotalGrades.map((item, idx) => {
+                  return (
+                    <tr key={item.student.regNo} className="hover:bg-slate-50/20 text-slate-850">
+                      <td className="border-r border-black p-1 text-slate-450 text-[9px] font-sans text-center">
+                        {idx + 1}
+                      </td>
+                      <td className="border-r border-black p-1 text-center text-slate-905 font-bold text-[10px] uppercase font-mono tracking-tight whitespace-nowrap">
+                        {item.student.regNo}
+                      </td>
+                      <td className="border-r border-black p-1 text-left font-sans text-slate-900 font-bold uppercase text-[10px] break-words">
+                        {item.student.name}
+                      </td>
+                      {cloCodes.map(code => {
+                        const list = cloAssessments[code] || [];
+                        let cloTotalScore = 0;
+
+                        // Calculate passing percentage
+                        let passingPctSum = 0;
+                        let countWithPassing = 0;
+                        list.forEach(ass => {
+                          passingPctSum += ((ass.passing ?? (ass.maxMarks * 0.5)) / ass.maxMarks) * 100;
+                          countWithPassing++;
+                        });
+                        const cloPassingThreshold = countWithPassing > 0 ? Math.round(passingPctSum / countWithPassing) : 50;
+
+                        return (
+                          <React.Fragment key={`stud-clo-${code}`}>
+                            {list.map((ass, aIdx) => {
+                              let obtainedMark = 0;
+                              if (ass.questionId) {
+                                obtainedMark = item.student.marks?.[`q-${ass.categoryName}-${ass.unitNo}-${ass.questionId}`] ?? 0;
+                              } else {
+                                obtainedMark = item.student.marks?.[`${ass.categoryName}-${ass.unitNo}`] ?? 0;
+                              }
+                              const pct = ass.maxMarks > 0 ? (obtainedMark / ass.maxMarks) : 0;
+                              const weightedScore = pct * ass.relativeWeight;
+                              cloTotalScore += weightedScore;
+
+                              const formatMark = (num: number) => {
+                                if (num === 0) return '0';
+                                return Number(num.toFixed(2)).toString();
+                              };
+
+                              return (
+                                <td
+                                  key={`${code}-stud-ass-${aIdx}`}
+                                  className="border-r border-black p-1 text-center font-mono text-[10px]"
+                                >
+                                  {formatMark(weightedScore)}
+                                </td>
+                              );
+                            })}
+                            {/* CLO Total column */}
+                            {(() => {
+                              const isFailed = item.aggregate > 0 && cloTotalScore < cloPassingThreshold;
+                              return (
+                                <td
+                                  className={`border-r border-black p-1 text-center font-bold font-sans text-[10px] ${
+                                    isFailed ? 'bg-slate-200 text-red-700 font-black' : 'bg-slate-50'
+                                  }`}
+                                >
+                                  {cloTotalScore.toFixed(2)}
+                                </td>
+                              );
+                            })()}
+                          </React.Fragment>
+                        );
+                      })}
+                    </tr>
+                  );
+                })}
+                {/* Pad table with empty template rows */}
+                {Array.from({ length: Math.max(0, 8 - course.students.length) }).map((_, emptyIdx) => {
+                  const displayIdx = course.students.length + emptyIdx + 1;
+                  return (
+                    <tr key={`empty-${emptyIdx}`} className="text-slate-850">
+                      <td className="border-r border-black p-1 text-slate-450 text-[9px] font-sans text-center">
+                        {displayIdx}
+                      </td>
+                      <td className="border-r border-black p-1"></td>
+                      <td className="border-r border-black p-1"></td>
+                      {cloCodes.map(code => {
+                        const list = cloAssessments[code] || [];
+                        return (
+                          <React.Fragment key={`empty-${code}`}>
+                            {list.map((_, aIdx) => (
+                              <td key={`empty-${code}-ass-${aIdx}`} className="border-r border-black p-1"></td>
+                            ))}
+                            <td className="border-r border-black p-1 bg-slate-50"></td>
+                          </React.Fragment>
+                        );
+                      })}
                     </tr>
                   );
                 })}
@@ -1582,11 +1869,12 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
     const params = new URLSearchParams(window.location.search);
     return params.get('campus') || 'Iqra University Chak Shahzad Campus Islamabad';
   });
-  const [reportType, setReportType] = useState<'standard' | 'combined' | 'award'>(() => {
+  const [reportType, setReportType] = useState<'standard' | 'combined' | 'award' | 'clo'>(() => {
     const params = new URLSearchParams(window.location.search);
     const rt = params.get('reportType');
     if (rt === 'combined') return 'combined';
     if (rt === 'award') return 'award';
+    if (rt === 'clo') return 'clo';
     return 'standard';
   });
   const [reportSemester, setReportSemester] = useState(() => {
@@ -3696,6 +3984,17 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                   >
                     <FileSpreadsheet className="w-3.5 h-3.5 text-slate-700 shrink-0" />
                     <span className="text-slate-900 font-bold">Award List (PDF)</span>
+                  </button>
+                  <button
+                    onClick={() => { 
+                      setReportType('clo');
+                      setActiveModal('marksheet-report');
+                      setOpenMenu(null);
+                    }}
+                    className="w-full text-left px-3.5 py-1.5 text-xs text-slate-900 hover:bg-slate-50 hover:text-black flex items-center gap-2 rounded font-bold"
+                  >
+                    <FileSpreadsheet className="w-3.5 h-3.5 text-slate-700 shrink-0" />
+                    <span className="text-slate-900 font-bold">CLO Based Result (PDF)</span>
                   </button>
 
                 </div>
