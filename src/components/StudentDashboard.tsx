@@ -73,6 +73,8 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
   const [studentBindings, setStudentBindings] = useState<StudentCourseBinding[]>([]);
   const [instructorCourses, setInstructorCourses] = useState<InstructorCourse[]>([]);
   const [allCoursesCLOs, setAllCoursesCLOs] = useState<Record<string, any[]>>({});
+  const [rawStudentCourses, setRawStudentCourses] = useState<any>(null);
+  const [showApiInspector, setShowApiInspector] = useState<boolean>(false);
   
   // Selected tab & active student login switcher for demo
   const [activeRegNo, setActiveRegNo] = useState<string>(studentRegNo);
@@ -242,34 +244,39 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
           });
 
           const studentCourses = await apiService.getStudentCourses();
+          setRawStudentCourses(studentCourses);
           const regToUse = matchingStudent ? matchingStudent.regNo : activeRegNo;
 
           // Fetch CLOs for each course
           const closMap: Record<string, any[]> = {};
           if (Array.isArray(studentCourses)) {
             for (const sc of studentCourses) {
+              let mergedCLOs = sc.clos || sc.courseCLOs || sc.course_clos || [];
               const cId = sc.id;
               if (cId) {
                 try {
                   const fetchedCLOs = await apiService.getCourseCLOs(cId);
                   if (Array.isArray(fetchedCLOs)) {
-                    closMap[sc.code] = fetchedCLOs;
+                    mergedCLOs = fetchedCLOs.map((fClo: any) => {
+                      const matchedExisting = mergedCLOs.find((ec: any) => 
+                        String(ec.code || '').trim().toUpperCase() === String(fClo.code || '').trim().toUpperCase()
+                      );
+                      return {
+                        ...fClo,
+                        percentage: matchedExisting?.percentage ?? matchedExisting?.attainment ?? matchedExisting?.score ?? matchedExisting?.obtained_attainment ?? matchedExisting?.clo_attainment ?? fClo.percentage,
+                        status: matchedExisting?.status ?? matchedExisting?.attained ?? matchedExisting?.attainment_status ?? fClo.status
+                      };
+                    });
                   }
                 } catch (cloErr) {
                   console.warn(`Failed to fetch CLOs for course ${sc.code} via instructor endpoint:`, cloErr);
-                  // If server fetch fails, look for CLOs in our combined allInstructorCourses list
                   const matchedIC = allInstructorCourses.find(ic => ic.code === sc.code || ic.id === sc.id);
                   if (matchedIC && Array.isArray((matchedIC as any).clos)) {
-                    closMap[sc.code] = (matchedIC as any).clos;
-                  } else if (Array.isArray(sc.clos)) {
-                    closMap[sc.code] = sc.clos;
-                  } else if (Array.isArray(sc.courseCLOs)) {
-                    closMap[sc.code] = sc.courseCLOs;
-                  } else if (Array.isArray(sc.course_clos)) {
-                    closMap[sc.code] = sc.course_clos;
+                    mergedCLOs = (matchedIC as any).clos;
                   }
                 }
               }
+              closMap[sc.code] = mergedCLOs;
             }
           }
           setAllCoursesCLOs(closMap);
@@ -346,6 +353,7 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
                 obeMarks: {
                   [regToUse]: obeMarksToUse
                 },
+                clos: sc.clos || sc.courseCLOs || sc.course_clos || [],
                 selectedGradingSystem: sc.selectedGradingSystem || matchedIC?.selectedGradingSystem || 'ready1'
               };
             });
@@ -469,9 +477,131 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
       console.warn(`[STUDENT_MARKS_DEBUG] No matching student record found for "${stdRegNo}" inside course "${courseCode}".`);
     }
 
+    // Fuzzy matcher to handle variations in category names (e.g. "Final" vs "Final Term", "Assignments" vs "Assignment")
+    const matchCategoryName = (cat1: string, cat2: string): boolean => {
+      const c1 = String(cat1 || '').trim().toLowerCase();
+      const c2 = String(cat2 || '').trim().toLowerCase();
+      if (c1 === c2) return true;
+      if ((c1.startsWith('final') && c2.startsWith('final')) || (c1.includes('final') && c2.includes('final'))) return true;
+      if ((c1.startsWith('mid') && c2.startsWith('mid')) || (c1.includes('mid') && c2.includes('mid'))) return true;
+      if ((c1.startsWith('quiz') && c2.startsWith('quiz')) || (c1.includes('quiz') && c2.includes('quiz'))) return true;
+      if ((c1.startsWith('assign') && c2.startsWith('assign')) || (c1.includes('assign') && c2.includes('assign'))) return true;
+      return false;
+    };
+
+    // Extremely robust helper to find obtained mark for a question ID across local state, obeMarks, or studentMarks flat keys
+    const getObeMark = (courseObj: any, regNo: string, questionId: any): number => {
+      if (!courseObj) return 0;
+      const obeMarks = courseObj.obeMarks;
+      const questionIdStr = String(questionId || '');
+      
+      // Case 1: Nested obeMarks, e.g. obeMarks[regNo][questionId]
+      if (obeMarks && typeof obeMarks === 'object') {
+        const studentMap = obeMarks[regNo];
+        if (studentMap && typeof studentMap === 'object') {
+          if (studentMap[questionIdStr] !== undefined) return Number(studentMap[questionIdStr]);
+        }
+        // Case-insensitive registration lookup inside nested obeMarks
+        for (const key of Object.keys(obeMarks)) {
+          if (key.trim().toLowerCase() === regNo.trim().toLowerCase()) {
+            const nestedMap = obeMarks[key];
+            if (nestedMap && nestedMap[questionIdStr] !== undefined) {
+              return Number(nestedMap[questionIdStr]);
+            }
+          }
+        }
+      }
+
+      // Case 2: Flat obeMarks directly mapping questionId -> score for logged-in student
+      if (obeMarks && obeMarks[questionIdStr] !== undefined) {
+        return Number(obeMarks[questionIdStr]);
+      }
+
+      // Case 3: Flat std.marks using q-Category-Unit-QuestionID, Category-Unit, or just QuestionID
+      const studentObj = courseObj.students?.find((s: any) => normalizeRegNo(s.regNo) === normalizeRegNo(regNo));
+      if (studentObj && studentObj.marks) {
+        if (studentObj.marks[questionIdStr] !== undefined) {
+          return Number(studentObj.marks[questionIdStr]);
+        }
+        // Fuzzy key match on keys containing the questionIdStr
+        for (const key of Object.keys(studentObj.marks)) {
+          if (key.endsWith(`-${questionIdStr}`) || key === `q-${questionIdStr}`) {
+            return Number(studentObj.marks[key]);
+          }
+        }
+      }
+
+      return 0;
+    };
+
     let aggregate = 0;
     let hasAnyMarks = false;
     let computedCLOs: { code: string; percentage: number; status: string }[] = [];
+
+    // Dynamically reconstruct unitsData from flat obeQuestions list for accurate, aligned calculations
+    const reconstructedUnits = {} as Record<string, any[]>;
+    
+    if (instCourse) {
+      const activeCats = instCourse.categories.filter(c => c.percentage > 0);
+      const obeQuestions = instCourse.obeQuestions || [];
+      
+      activeCats.forEach(cat => {
+        let existingUnits: any[] = [];
+        const existingKey = Object.keys(instCourse.unitsData || {}).find(k => matchCategoryName(k, cat.name));
+        if (existingKey) {
+          existingUnits = JSON.parse(JSON.stringify(instCourse.unitsData[existingKey] || []));
+        }
+        
+        reconstructedUnits[cat.name] = [];
+        const catUnitsCount = cat.units > 0 ? cat.units : 1;
+        
+        for (let u = 1; u <= catUnitsCount; u++) {
+          let unitObj = existingUnits.find((unit: any) => (unit.unitNo === u || unit.unit_no === u));
+          if (!unitObj) {
+            unitObj = {
+              unitNo: u,
+              weightage: 100 / catUnitsCount,
+              totalMarks: 0,
+              questions: [],
+              mappedCLOs: []
+            };
+          } else {
+            unitObj = JSON.parse(JSON.stringify(unitObj));
+            unitObj.unitNo = unitObj.unitNo || unitObj.unit_no || u;
+            unitObj.weightage = unitObj.weightage || (100 / catUnitsCount);
+          }
+          
+          if (!unitObj.questions || unitObj.questions.length === 0) {
+            const matchingQuestions = obeQuestions.filter((q: any) => {
+              const qCat = q.categoryName || q.category_name || '';
+              const qUnit = q.unitNo || q.unit_no || 1;
+              return matchCategoryName(qCat, cat.name) && Number(qUnit) === u;
+            });
+            
+            if (matchingQuestions.length > 0) {
+              unitObj.questions = matchingQuestions.map((q: any) => ({
+                id: q.id,
+                questionName: q.questionName || q.question_name || q.name || `Question ${q.id}`,
+                name: q.name || q.questionName || q.question_name || `Question ${q.id}`,
+                maxMarks: q.maxMarks || q.max_marks || 10,
+                mappedCLOs: q.mappedCLOs || q.mapped_clos || q.mappedClos || []
+              }));
+            }
+          }
+          
+          if (unitObj.questions && unitObj.questions.length > 0) {
+            unitObj.totalMarks = unitObj.questions.reduce((sum: number, q: any) => sum + (q.maxMarks || q.max_marks || 0), 0);
+          } else if (!unitObj.totalMarks) {
+            const catLower = cat.name.toLowerCase();
+            if (catLower.includes('mid')) unitObj.totalMarks = 30;
+            else if (catLower.includes('final')) unitObj.totalMarks = 40;
+            else unitObj.totalMarks = 10;
+          }
+          
+          reconstructedUnits[cat.name].push(unitObj);
+        }
+      });
+    }
 
     if (instCourse && std) {
       const activeCats = instCourse.categories.filter(c => c.percentage > 0);
@@ -480,78 +610,34 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
       console.log(`[STUDENT_MARKS_DEBUG] Active categories to calculate:`, activeCats.map(c => `${c.name} (${c.percentage}%)`));
 
       activeCats.forEach(cat => {
-        const existingUnits = instCourse.unitsData[cat.name] || [];
-        console.log(`[STUDENT_MARKS_DEBUG] Category "${cat.name}" units count: ${cat.units}`);
-        
-        if (cat.units > 0) {
-          for (let u = 1; u <= cat.units; u++) {
-            const matchingUnit = existingUnits.find(unit => unit.unitNo === u);
-            const unitWeightage = matchingUnit?.weightage ?? (100 / cat.units);
-            let totalMarks = matchingUnit ? matchingUnit.totalMarks : 0;
-            if (!totalMarks) {
-              const catNameLower = cat.name.toLowerCase();
-              if (catNameLower.includes('mid term') || catNameLower.includes('midterm') || catNameLower.includes('mid-term')) {
-                totalMarks = 30;
-              } else if (catNameLower.includes('final')) {
-                totalMarks = 40;
-              } else if (catNameLower.includes('presentation')) {
-                totalMarks = 10;
-              } else {
-                const dKey = `${cat.name}-${u}`;
-                const directMark = std.marks?.[dKey] ?? 0;
-                
-                const questions = matchingUnit?.questions || [];
-                let obtainedMark = directMark;
-                if (questions.length > 0) {
-                  obtainedMark = 0;
-                  questions.forEach(q => {
-                    const qKey = `q-${cat.name}-${u}-${q.id}`;
-                    obtainedMark += std.marks?.[qKey] ?? 0;
-                  });
-                }
-                
-                if (obtainedMark > 40) totalMarks = 50;
-                else if (obtainedMark > 30) totalMarks = 40;
-                else if (obtainedMark > 20) totalMarks = 30;
-                else if (obtainedMark > 10) totalMarks = 20;
-                else totalMarks = 10;
-              }
-            }
-            const questions = matchingUnit?.questions || [];
-            
-            let unitObtained = 0;
-            if (questions.length > 0) {
-              questions.forEach(q => {
-                const qKey = `q-${cat.name}-${u}-${q.id}`;
-                const localMark = std.marks?.[qKey];
-                const backendMark = instCourse?.obeMarks?.[stdRegNo]?.[q.id];
-                const finalMark = localMark !== undefined ? localMark : (backendMark !== undefined ? backendMark : 0);
-                unitObtained += finalMark;
-                console.log(`[STUDENT_MARKS_DEBUG]   - Question "${q.questionName}" (ID: ${q.id}) score: ${finalMark} (local: ${localMark}, backend: ${backendMark})`);
-              });
-            } else {
-              const dKey = `${cat.name}-${u}`;
-              const directMark = std.marks?.[dKey] ?? 0;
-              unitObtained += directMark;
-              console.log(`[STUDENT_MARKS_DEBUG]   - Direct Unit "${dKey}" score: ${directMark}`);
-            }
-
-            if (totalMarks > 0) {
-              const contribution = (unitObtained / totalMarks) * (unitWeightage / 100) * cat.percentage;
-              totalAggregate += contribution;
-              console.log(`[STUDENT_MARKS_DEBUG]   - Unit ${cat.name} #${u} total: ${unitObtained} / ${totalMarks} (weightage: ${unitWeightage}%, cat %: ${cat.percentage}%). Contribution: ${contribution.toFixed(2)}%`);
-            }
-
-            if (std.marks && (
-              std.marks[`${cat.name}-${u}`] !== undefined || 
-              std.marks[cat.name] !== undefined ||
-              Object.keys(std.marks).some(k => k.startsWith(`q-${cat.name}-${u}-`)) ||
-              (instCourse?.obeMarks?.[stdRegNo] && Object.keys(instCourse.obeMarks[stdRegNo]).length > 0)
-            )) {
-              hasAnyMarks = true;
-            }
+        const units = reconstructedUnits[cat.name] || [];
+        units.forEach(unit => {
+          const unitWeightage = unit.weightage ?? (cat.units > 0 ? (100 / cat.units) : 0);
+          let unitObtained = 0;
+          const totalMarks = unit.totalMarks || 10;
+          
+          if (unit.questions && unit.questions.length > 0) {
+            unit.questions.forEach((q: any) => {
+              const mark = getObeMark(instCourse, stdRegNo, q.id);
+              unitObtained += mark;
+            });
+          } else {
+            const dKey1 = `${cat.name}-${unit.unitNo}`;
+            const dKey2 = `${cat.name.toLowerCase()}-${unit.unitNo}`;
+            const directMark = std.marks?.[dKey1] ?? std.marks?.[dKey2] ?? 0;
+            unitObtained += directMark;
           }
-        }
+          
+          if (totalMarks > 0) {
+            const contribution = (unitObtained / totalMarks) * (unitWeightage / 100) * cat.percentage;
+            totalAggregate += contribution;
+            console.log(`[STUDENT_MARKS_DEBUG]   - ${cat.name} unit #${unit.unitNo}: ${unitObtained} / ${totalMarks} (contrib: ${contribution.toFixed(2)}%)`);
+          }
+          
+          if (unitObtained > 0 || (std.marks && Object.keys(std.marks).length > 0)) {
+            hasAnyMarks = true;
+          }
+        });
       });
 
       if (hasAnyMarks) {
@@ -559,7 +645,6 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
       }
     }
 
-    // No fake pseudo-random simulations or fallbacks
     if (!hasAnyMarks) {
       aggregate = 0;
     }
@@ -597,7 +682,7 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
           { grade: 'C', percentage: '60% - 66%', points: '2' },
           { grade: 'F', percentage: 'Below 60%', points: '0' },
         ];
-        const list = instCourse.customGradingSystem || DEFAULT_CUSTOM_GRADES;
+        const list = instCourse?.customGradingSystem || DEFAULT_CUSTOM_GRADES;
         
         const parsePercentRangeLocal = (pctStr: string): { min: number; max: number } => {
           if (!pctStr) return { min: 0, max: 0 };
@@ -666,45 +751,6 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
 
     if (instCourse && std) {
       const activeCats = instCourse.categories.filter(c => c.percentage > 0);
-      const obeQuestions = instCourse.obeQuestions || [];
-
-      // Reconstruct unitsData to ensure we have all questions dynamically populated from the flat obeQuestions list
-      const reconstructedUnitsData = JSON.parse(JSON.stringify(instCourse.unitsData || {}));
-      activeCats.forEach(cat => {
-        if (!reconstructedUnitsData[cat.name]) {
-          reconstructedUnitsData[cat.name] = [];
-        }
-        for (let u = 1; u <= cat.units; u++) {
-          let unitObj = reconstructedUnitsData[cat.name].find((unit: any) => unit.unitNo === u);
-          if (!unitObj) {
-            unitObj = {
-              unitNo: u,
-              weightage: 100 / cat.units,
-              totalMarks: 10,
-              questions: [],
-              mappedCLOs: []
-            };
-            reconstructedUnitsData[cat.name].push(unitObj);
-          }
-          if (!unitObj.questions || unitObj.questions.length === 0) {
-            const matchingQuestions = obeQuestions.filter((q: any) => {
-              const qCat = q.categoryName || q.category_name || '';
-              const qUnit = q.unitNo || q.unit_no || 1;
-              return qCat.trim().toLowerCase() === cat.name.trim().toLowerCase() && Number(qUnit) === u;
-            });
-            if (matchingQuestions.length > 0) {
-              unitObj.questions = matchingQuestions.map((q: any) => ({
-                id: q.id,
-                questionName: q.questionName || q.question_name || q.name || `Question ${q.id}`,
-                name: q.name || q.questionName || q.question_name || `Question ${q.id}`,
-                maxMarks: q.maxMarks || q.max_marks || 10,
-                mappedCLOs: q.mappedCLOs || q.mapped_clos || q.mappedClos || []
-              }));
-              unitObj.totalMarks = unitObj.questions.reduce((sum: number, q: any) => sum + q.maxMarks, 0);
-            }
-          }
-        }
-      });
 
       computedCLOs = Array.from({ length: numCLOsToUse }, (_, i) => {
         const defaultCode = `CLO-${i + 1}`;
@@ -712,6 +758,21 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
         const code = existingCloObj?.code || defaultCode;
         const description = existingCloObj?.description || `Course Learning Outcome ${i + 1}`;
         const mappedGA = existingCloObj?.mappedGA || existingCloObj?.mapped_ga || null;
+
+        // Check if there is pre-calculated score from backend!
+        const backendPct = existingCloObj?.percentage ?? existingCloObj?.attainment ?? existingCloObj?.score ?? existingCloObj?.obtained_attainment ?? existingCloObj?.clo_attainment;
+        const backendStatus = existingCloObj?.status ?? existingCloObj?.attained ?? existingCloObj?.attainment_status;
+
+        if (backendPct !== undefined && backendPct !== null) {
+          const finalPct = Math.round(Number(backendPct) * 10) / 10;
+          return {
+            code,
+            description,
+            mappedGA,
+            percentage: finalPct,
+            status: backendStatus || (finalPct >= 50 ? 'Attained' : 'Not attained')
+          };
+        }
 
         const normalizedCLO = code.trim().toUpperCase();
 
@@ -728,14 +789,14 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
         const list: LocalCLOAssessment[] = [];
 
         activeCats.forEach(cat => {
-          const units = reconstructedUnitsData[cat.name] || [];
+          const units = reconstructedUnits[cat.name] || [];
           units.forEach(unit => {
             const unitWeightage = unit.weightage ?? (cat.units > 0 ? (100 / cat.units) : 0);
 
             if (unit.questions && unit.questions.length > 0) {
-              unit.questions.forEach(q => {
+              unit.questions.forEach((q: any) => {
                 const qCLOs = q.mappedCLOs || [];
-                const matches = qCLOs.some(cloCode => 
+                const matches = qCLOs.some((cloCode: string) => 
                   String(cloCode).trim().toUpperCase() === normalizedCLO || 
                   String(cloCode).trim().toUpperCase() === defaultCode.toUpperCase()
                 );
@@ -754,7 +815,7 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
               });
             } else {
               const unitCLOs = unit.mappedCLOs || [];
-              const matches = unitCLOs.some(cloCode => 
+              const matches = unitCLOs.some((cloCode: string) => 
                 String(cloCode).trim().toUpperCase() === normalizedCLO || 
                 String(cloCode).trim().toUpperCase() === defaultCode.toUpperCase()
               );
@@ -817,23 +878,11 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
         list.forEach(ass => {
           let obtainedMark = 0;
           if (ass.questionId) {
-            const key1 = `q-${ass.categoryName}-${ass.unitNo}-${ass.questionId}`;
-            const key2 = `q-${ass.categoryName.toLowerCase()}-${ass.unitNo}-${ass.questionId}`;
-            obtainedMark = std.marks?.[key1] ?? std.marks?.[key2] ?? 0;
-            
-            if (obtainedMark === 0) {
-              if (instCourse?.obeMarks?.[stdRegNo]?.[ass.questionId] !== undefined) {
-                obtainedMark = instCourse.obeMarks[stdRegNo][ass.questionId];
-              } else if (instCourse?.obeMarks?.[ass.questionId] !== undefined) {
-                obtainedMark = (instCourse.obeMarks as any)[ass.questionId];
-              } else if (std.marks?.[ass.questionId] !== undefined) {
-                obtainedMark = std.marks[ass.questionId];
-              }
-            }
+            obtainedMark = getObeMark(instCourse, stdRegNo, ass.questionId);
           } else {
-            const key1 = `${ass.categoryName}-${ass.unitNo}`;
-            const key2 = `${ass.categoryName.toLowerCase()}-${ass.unitNo}`;
-            obtainedMark = std.marks?.[key1] ?? std.marks?.[key2] ?? 0;
+            const dKey1 = `${ass.categoryName}-${ass.unitNo}`;
+            const dKey2 = `${ass.categoryName.toLowerCase()}-${ass.unitNo}`;
+            obtainedMark = std.marks?.[dKey1] ?? std.marks?.[dKey2] ?? 0;
           }
           const pct = ass.maxMarks > 0 ? (obtainedMark / ass.maxMarks) : 0;
           const weightedScore = pct * ass.relativeWeight;
@@ -1881,6 +1930,65 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
             )}
 
           </AnimatePresence>
+
+          {/* RAW BACKEND DATA INSPECTOR FOR TRANSPARENT DEBUGGING */}
+          <div className="mt-8 bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-4 text-slate-300">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="space-y-0.5">
+                <h3 className="text-sm font-bold text-slate-100 font-mono flex items-center gap-2">
+                  <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  API Live Connection Diagnostics
+                </h3>
+                <p className="text-[10px] text-slate-500 font-mono">
+                  Verifying real-time data flow mapping between backend and student dashboard.
+                </p>
+              </div>
+              <button
+                id="toggle-api-inspector-btn"
+                onClick={() => setShowApiInspector(!showApiInspector)}
+                className="bg-slate-800 hover:bg-slate-700 text-slate-200 font-mono text-[10px] px-3.5 py-1.5 rounded-xl border border-slate-700 transition self-start sm:self-auto cursor-pointer"
+              >
+                {showApiInspector ? 'Hide Raw API JSON' : 'Inspect Raw API JSON'}
+              </button>
+            </div>
+
+            {showApiInspector && (
+              <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-200">
+                <div className="p-4 bg-slate-950 rounded-2xl border border-slate-850 font-mono text-xs overflow-auto max-h-96 space-y-2">
+                  <div className="text-amber-400 font-bold border-b border-slate-850 pb-1.5 mb-2 flex justify-between">
+                    <span>GET /api/student/courses/</span>
+                    <span className="text-slate-500 font-normal">Count: {Array.isArray(rawStudentCourses) ? rawStudentCourses.length : 0}</span>
+                  </div>
+                  {rawStudentCourses ? (
+                    <pre className="text-[11px] text-slate-300 whitespace-pre-wrap break-all leading-normal">
+                      {JSON.stringify(rawStudentCourses, null, 2)}
+                    </pre>
+                  ) : (
+                    <div className="text-slate-500 italic py-4 text-center">
+                      No course data retrieved yet. Please verify authentication or server connectivity.
+                    </div>
+                  )}
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-[11px] font-mono leading-relaxed bg-slate-950/50 p-4 rounded-2xl border border-slate-850">
+                  <div className="space-y-1">
+                    <span className="text-emerald-400 font-bold">Processed Courses ({instructorCourses.length}):</span>
+                    {instructorCourses.map(ic => (
+                      <div key={ic.code} className="text-slate-400 pl-2">
+                        • <span className="text-slate-200 font-bold">{ic.code}</span> (OBE Questions: {ic.obeQuestions?.length || 0})
+                      </div>
+                    ))}
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-indigo-400 font-bold">Active Student:</span>
+                    <div className="text-slate-300 pl-2">Reg No: <span className="text-white font-bold">{activeRegNo}</span></div>
+                    <div className="text-slate-300 pl-2">Name: <span className="text-slate-400 font-bold">{students.find(s => normalizeRegNo(s.regNo) === normalizeRegNo(activeRegNo))?.name || 'Logged-In Student'}</span></div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
         </div>
 
       </main>
