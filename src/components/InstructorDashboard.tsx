@@ -711,6 +711,62 @@ const getDegreeDisplay = (course: InstructorCourse): string => {
   return 'BSCS';
 };
 
+const getDynamicStyles = (colsCount: number) => {
+  if (colsCount <= 12) {
+    return {
+      tableClass: "text-[10px]",
+      headerRow1Class: "text-[10px]",
+      headerRow2Class: "text-[9.5px]",
+      cellClass: "p-1.5 text-[10px]",
+      monoCellClass: "p-1.5 text-[10px]",
+      rollNoStyle: { minWidth: "100px", width: "11%", maxWidth: "115px" },
+      nameStyle: { minWidth: "140px", width: "18%", maxWidth: "175px" },
+      assStyle: { minWidth: "32px" },
+      totStyle: { minWidth: "40px" },
+      gaStyle: { minWidth: "45px" },
+    };
+  } else if (colsCount <= 18) {
+    return {
+      tableClass: "text-[9px]",
+      headerRow1Class: "text-[9px]",
+      headerRow2Class: "text-[8.5px]",
+      cellClass: "p-1 text-[9px]",
+      monoCellClass: "p-1 text-[9px]",
+      rollNoStyle: { minWidth: "85px", width: "11%", maxWidth: "100px" },
+      nameStyle: { minWidth: "115px", width: "18%", maxWidth: "145px" },
+      assStyle: { minWidth: "26px" },
+      totStyle: { minWidth: "32px" },
+      gaStyle: { minWidth: "36px" },
+    };
+  } else if (colsCount <= 25) {
+    return {
+      tableClass: "text-[8px]",
+      headerRow1Class: "text-[8px]",
+      headerRow2Class: "text-[7.5px]",
+      cellClass: "px-1 py-0.5 text-[8px]",
+      monoCellClass: "px-0.5 py-0.5 text-[8px]",
+      rollNoStyle: { minWidth: "75px", width: "10%", maxWidth: "90px" },
+      nameStyle: { minWidth: "95px", width: "16%", maxWidth: "120px" },
+      assStyle: { minWidth: "22px" },
+      totStyle: { minWidth: "28px" },
+      gaStyle: { minWidth: "30px" },
+    };
+  } else {
+    return {
+      tableClass: "text-[7.2px]",
+      headerRow1Class: "text-[7.2px]",
+      headerRow2Class: "text-[7px]",
+      cellClass: "px-0.5 py-[1px] text-[7.2px]",
+      monoCellClass: "px-[1px] py-[1px] text-[7.2px] tracking-tighter",
+      rollNoStyle: { minWidth: "62px", width: "9%", maxWidth: "75px" },
+      nameStyle: { minWidth: "85px", width: "14%", maxWidth: "105px" },
+      assStyle: { minWidth: "18px" },
+      totStyle: { minWidth: "24px" },
+      gaStyle: { minWidth: "26px" },
+    };
+  }
+};
+
 const MarksheetDocument = ({
   course,
   campus,
@@ -722,7 +778,8 @@ const MarksheetDocument = ({
   dated,
   printDate,
   isPrintView,
-  reportType = 'standard'
+  reportType = 'standard',
+  courseCLOs = []
 }: {
   course: InstructorCourse;
   campus: string;
@@ -734,7 +791,8 @@ const MarksheetDocument = ({
   dated: string;
   printDate: string;
   isPrintView: boolean;
-  reportType?: 'standard' | 'combined' | 'award' | 'clo';
+  reportType?: 'standard' | 'combined' | 'award' | 'clo' | 'ga';
+  courseCLOs?: any[];
 }) => {
   const activeSystem = course.selectedGradingSystem || 'ready1';
   let gradingList: { grade: string; min: number; label: string }[] = [];
@@ -858,7 +916,34 @@ const MarksheetDocument = ({
 
   // CLO-Based Result Calculations
   const cloCount = course.cloCount || 4;
-  const cloCodes = Array.from({ length: cloCount }, (_, i) => `CLO-${i + 1}`);
+  const cloListToUse = courseCLOs && courseCLOs.length > 0
+    ? courseCLOs.map(c => ({
+        code: c.code,
+        description: c.description || 'Course Learning Outcome',
+        mappedGA: c.mappedGA || c.mapped_ga || null
+      }))
+    : Array.from({ length: cloCount }, (_, i) => ({
+        code: `CLO-${i + 1}`,
+        description: `Course Learning Outcome ${i + 1}`,
+        mappedGA: null
+      }));
+
+  const cloCodes = cloListToUse.map(c => c.code);
+
+  const gaToCLOsMap: Record<string, typeof cloListToUse> = {};
+  cloListToUse.forEach(cloObj => {
+    const gaCode = cloObj.mappedGA || 'No GA';
+    if (!gaToCLOsMap[gaCode]) {
+      gaToCLOsMap[gaCode] = [];
+    }
+    gaToCLOsMap[gaCode].push(cloObj);
+  });
+
+  const sortedGAKeys = Object.keys(gaToCLOsMap).sort((a, b) => {
+    if (a === 'No GA') return 1;
+    if (b === 'No GA') return -1;
+    return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+  });
 
   interface CLOAssessment {
     id: string;
@@ -965,12 +1050,36 @@ const MarksheetDocument = ({
     }
   });
 
+  // Determine dynamic styles based on number of columns
+  let totalTableCols = 3;
+  if (reportType === 'ga') {
+    sortedGAKeys.forEach(gaCode => {
+      const clos = gaToCLOsMap[gaCode] || [];
+      clos.forEach(cloObj => {
+        const list = cloAssessments[cloObj.code] || [];
+        totalTableCols += list.length + 1; // assessments + CLO Tot
+      });
+      totalTableCols += 1; // GA Total
+    });
+  } else if (reportType === 'clo') {
+    cloCodes.forEach(code => {
+      const list = cloAssessments[code] || [];
+      totalTableCols += list.length + 1; // assessments + CLO Tot
+    });
+  }
+
+  const ds = getDynamicStyles(totalTableCols);
+
   return (
-    <div id="marksheet-real-view" className={`p-6 bg-white shrink-0 antialiased text-black font-sans leading-relaxed ${isPrintView ? 'w-full' : 'w-[210mm] min-h-[297mm] shadow-2xl border border-slate-350 rounded-xl m-auto print:shadow-none print:border-none'}`}>
+    <div id="marksheet-real-view" className={`p-6 bg-white shrink-0 antialiased text-black font-sans leading-relaxed ${isPrintView ? 'w-full' : ((reportType === 'clo' || reportType === 'ga') ? 'min-w-[297mm] w-fit max-w-full min-h-[210mm]' : 'w-[210mm] min-h-[297mm]') + ' shadow-2xl border border-slate-350 rounded-xl m-auto print:shadow-none print:border-none'}`}>
       
       {/* Dynamic Style tags representing the official vector print directives */}
       <style>{`
         @media print {
+          @page {
+            size: ${(reportType === 'clo' || reportType === 'ga') ? 'landscape' : 'portrait'};
+            margin: 10mm;
+          }
           .no-print-break {
             page-break-inside: avoid;
             break-inside: avoid;
@@ -1157,11 +1266,240 @@ const MarksheetDocument = ({
                 })}
               </tbody>
             </table>
+          ) : reportType === 'ga' ? (
+            <table className={`w-full text-center border-collapse border border-black font-sans ${ds.tableClass}`}>
+              <thead>
+                {/* ROW 1: GA Codes Group Headers */}
+                <tr className={`bg-slate-50 border-b border-black font-black text-slate-900 leading-tight ${ds.headerRow1Class}`}>
+                  <th colSpan={3} className="border-r border-black p-1 text-center font-bold">
+                    Graduate Attributes Mapping
+                  </th>
+                  {sortedGAKeys.map(gaCode => {
+                    const clos = gaToCLOsMap[gaCode] || [];
+                    let totalCols = 0;
+                    clos.forEach(cloObj => {
+                      const list = cloAssessments[cloObj.code] || [];
+                      totalCols += list.length + 1; // questions + Total
+                    });
+                    totalCols += 1; // GA Total column
+                    return (
+                      <th
+                        key={gaCode}
+                        colSpan={totalCols}
+                        className="border-r border-black p-1 text-center font-black uppercase tracking-wider bg-indigo-50/30"
+                      >
+                        {gaCode}
+                      </th>
+                    );
+                  })}
+                </tr>
+
+                {/* ROW 2: CLO Codes Group Headers */}
+                <tr className={`bg-slate-50 border-b border-black font-black text-slate-900 leading-tight ${ds.headerRow2Class}`}>
+                  <th colSpan={3} className="border-r border-black p-1 text-center font-bold">
+                    Course Outcomes (CLO)
+                  </th>
+                  {sortedGAKeys.map(gaCode => {
+                    const clos = gaToCLOsMap[gaCode] || [];
+                    return (
+                      <React.Fragment key={`clo-row-${gaCode}`}>
+                        {clos.map(cloObj => {
+                          const list = cloAssessments[cloObj.code] || [];
+                          return (
+                            <th
+                              key={cloObj.code}
+                              colSpan={list.length + 1}
+                              className="border-r border-black p-1 text-center font-bold uppercase tracking-tight bg-slate-100/50"
+                            >
+                              {cloObj.code}
+                            </th>
+                          );
+                        })}
+                        <th 
+                          className="border-r border-black font-bold text-center bg-indigo-100/30 text-indigo-950 font-mono"
+                          style={{ padding: ds.cellClass.includes('px-') ? '2px' : '4px', fontSize: ds.headerRow2Class.match(/text-\[[^\]]+\]/)?.[0]?.slice(5,-1) || '9px' }}
+                        >
+                          {gaCode} Total
+                        </th>
+                      </React.Fragment>
+                    );
+                  })}
+                </tr>
+
+                {/* ROW 3: Column Names (Questions & totals) */}
+                <tr className={`bg-slate-50 border-b border-black font-black text-slate-900 leading-tight ${ds.headerRow2Class}`}>
+                  <th className="border-r border-black text-center w-[3%] min-w-[22px] max-w-[30px]" style={{ padding: ds.cellClass.includes('px-') ? '2px' : '4px' }}>S/N</th>
+                  <th className="border-r border-black text-center whitespace-nowrap" style={{ padding: ds.cellClass.includes('px-') ? '2px' : '4px', ...ds.rollNoStyle }}>Roll No.</th>
+                  <th className="border-r border-black text-left" style={{ padding: ds.cellClass.includes('px-') ? '2px' : '4px', ...ds.nameStyle }}>Student Name</th>
+                  {sortedGAKeys.map(gaCode => {
+                    const clos = gaToCLOsMap[gaCode] || [];
+                    return (
+                      <React.Fragment key={`items-row-${gaCode}`}>
+                        {clos.map(cloObj => {
+                          const list = cloAssessments[cloObj.code] || [];
+                          return (
+                            <React.Fragment key={`cols-${cloObj.code}`}>
+                              {list.map((ass, aIdx) => (
+                                <th
+                                  key={`${cloObj.code}-col-${aIdx}`}
+                                  className="border-r border-black p-0.5 font-mono text-center font-bold"
+                                  style={ds.assStyle}
+                                >
+                                  {ass.label}
+                                </th>
+                              ))}
+                              <th 
+                                className="border-r border-black p-0.5 font-sans text-center font-bold bg-slate-100"
+                                style={ds.totStyle}
+                              >
+                                CLO Tot
+                              </th>
+                            </React.Fragment>
+                          );
+                        })}
+                        <th 
+                          className="border-r border-black p-0.5 font-sans text-center font-bold bg-indigo-50 text-indigo-950"
+                          style={ds.gaStyle}
+                        >
+                          GA %
+                        </th>
+                      </React.Fragment>
+                    );
+                  })}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-black/40 font-mono">
+                {studentTotalGrades.map((item, idx) => {
+                  return (
+                    <tr key={item.student.regNo} className="hover:bg-slate-50/20 text-slate-850">
+                      <td className={`border-r border-black text-slate-450 font-sans text-center w-[3%] min-w-[22px] max-w-[30px] ${ds.cellClass}`}>
+                        {idx + 1}
+                      </td>
+                      <td 
+                        className={`border-r border-black text-center text-slate-905 font-bold uppercase font-mono tracking-tight whitespace-nowrap ${ds.monoCellClass}`}
+                        style={ds.rollNoStyle}
+                      >
+                        {item.student.regNo}
+                      </td>
+                      <td 
+                        className={`border-r border-black text-left font-sans text-slate-900 font-bold uppercase break-words ${ds.cellClass}`}
+                        style={ds.nameStyle}
+                      >
+                        {item.student.name}
+                      </td>
+                      {sortedGAKeys.map(gaCode => {
+                        const clos = gaToCLOsMap[gaCode] || [];
+                        const cloTotalScores: number[] = [];
+
+                        return (
+                          <React.Fragment key={`stud-ga-row-${gaCode}-${item.student.regNo}`}>
+                            {clos.map(cloObj => {
+                              const list = cloAssessments[cloObj.code] || [];
+                              let cloTotalScore = 0;
+
+                              return (
+                                <React.Fragment key={`stud-clo-items-${cloObj.code}`}>
+                                  {list.map((ass, aIdx) => {
+                                    let obtainedMark = 0;
+                                    if (ass.questionId) {
+                                      obtainedMark = item.student.marks?.[`q-${ass.categoryName}-${ass.unitNo}-${ass.questionId}`] ?? 0;
+                                    } else {
+                                      obtainedMark = item.student.marks?.[`${ass.categoryName}-${ass.unitNo}`] ?? 0;
+                                    }
+                                    const pct = ass.maxMarks > 0 ? (obtainedMark / ass.maxMarks) : 0;
+                                    const weightedScore = pct * ass.relativeWeight;
+                                    cloTotalScore += weightedScore;
+
+                                    const formatMark = (num: number) => {
+                                      if (num === 0) return '0';
+                                      return Number(num.toFixed(2)).toString();
+                                    };
+
+                                    return (
+                                      <td
+                                        key={`${cloObj.code}-stud-ass-val-${aIdx}`}
+                                        className={`border-r border-black text-center font-mono ${ds.monoCellClass}`}
+                                        style={ds.assStyle}
+                                      >
+                                        {formatMark(weightedScore)}
+                                      </td>
+                                    );
+                                  })}
+                                  {/* CLO Total column */}
+                                  {(() => {
+                                    cloTotalScores.push(cloTotalScore);
+                                    return (
+                                      <td 
+                                        className={`border-r border-black text-center font-bold font-sans bg-slate-50 ${ds.cellClass}`}
+                                        style={ds.totStyle}
+                                      >
+                                        {cloTotalScore.toFixed(2)}
+                                      </td>
+                                    );
+                                  })()}
+                                </React.Fragment>
+                              );
+                            })}
+                            {/* GA Total % column */}
+                            {(() => {
+                              const gaTotalScore = cloTotalScores.length > 0 
+                                ? cloTotalScores.reduce((sum, score) => sum + score, 0) / cloTotalScores.length
+                                : 0;
+                              return (
+                                <td 
+                                  className={`border-r border-black text-center font-black font-sans bg-indigo-50 text-indigo-950 ${ds.cellClass}`}
+                                  style={ds.gaStyle}
+                                >
+                                  {gaTotalScore.toFixed(2)}%
+                                </td>
+                              );
+                            })()}
+                          </React.Fragment>
+                        );
+                      })}
+                    </tr>
+                  );
+                })}
+
+                {/* Pad table with empty template rows */}
+                {Array.from({ length: Math.max(0, 8 - course.students.length) }).map((_, emptyIdx) => {
+                  const displayIdx = course.students.length + emptyIdx + 1;
+                  return (
+                    <tr key={`empty-${emptyIdx}`} className="text-slate-850">
+                      <td className={`border-r border-black text-slate-450 font-sans text-center w-[3%] min-w-[22px] max-w-[30px] ${ds.cellClass}`}>
+                        {displayIdx}
+                      </td>
+                      <td className={`border-r border-black ${ds.cellClass}`} style={ds.rollNoStyle}></td>
+                      <td className={`border-r border-black ${ds.cellClass}`} style={ds.nameStyle}></td>
+                      {sortedGAKeys.map(gaCode => {
+                        const clos = gaToCLOsMap[gaCode] || [];
+                        return (
+                          <React.Fragment key={`empty-ga-${gaCode}-${emptyIdx}`}>
+                            {clos.map(cloObj => {
+                              const list = cloAssessments[cloObj.code] || [];
+                              return (
+                                <React.Fragment key={`empty-clo-${cloObj.code}`}>
+                                  {list.map((_, aIdx) => (
+                                    <td key={`empty-ass-cell-${aIdx}`} className={`border-r border-black ${ds.cellClass}`} style={ds.assStyle}></td>
+                                  ))}
+                                  <td className={`border-r border-black bg-slate-50 ${ds.cellClass}`} style={ds.totStyle}></td>
+                                </React.Fragment>
+                              );
+                            })}
+                            <td className={`border-r border-black bg-indigo-50/30 ${ds.cellClass}`} style={ds.gaStyle}></td>
+                          </React.Fragment>
+                        );
+                      })}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           ) : reportType === 'clo' ? (
-            <table className="w-full text-center border-collapse border border-black font-sans text-[10px]">
+            <table className={`w-full text-center border-collapse border border-black font-sans ${ds.tableClass}`}>
               <thead>
                 {/* ROW 1: Header / CLO Names with Passing Threshold */}
-                <tr className="bg-slate-50 border-b border-black font-black text-[10px] text-slate-900 leading-tight">
+                <tr className={`bg-slate-50 border-b border-black font-black text-slate-900 leading-tight ${ds.headerRow1Class}`}>
                   <th colSpan={3} className="border-r border-black p-1.5 text-center font-bold">
                     Assessment (Passing Threshold)
                   </th>
@@ -1188,10 +1526,10 @@ const MarksheetDocument = ({
                 </tr>
 
                 {/* ROW 2: Column Names */}
-                <tr className="bg-slate-50 border-b border-black font-black text-[9.5px] text-slate-900 leading-tight">
-                  <th className="border-r border-black p-1 w-[4%] text-center">S/N</th>
-                  <th className="border-r border-black p-1 w-[12%] text-center">Roll No.</th>
-                  <th className="border-r border-black p-1 text-left w-[20%]">Student Name</th>
+                <tr className={`bg-slate-50 border-b border-black font-black text-slate-900 leading-tight ${ds.headerRow2Class}`}>
+                  <th className="border-r border-black text-center w-[3%] min-w-[22px] max-w-[30px]" style={{ padding: ds.cellClass.includes('px-') ? '2px' : '4px' }}>S/N</th>
+                  <th className="border-r border-black text-center whitespace-nowrap" style={{ padding: ds.cellClass.includes('px-') ? '2px' : '4px', ...ds.rollNoStyle }}>Roll No.</th>
+                  <th className="border-r border-black text-left" style={{ padding: ds.cellClass.includes('px-') ? '2px' : '4px', ...ds.nameStyle }}>Student Name</th>
                   {cloCodes.map(code => {
                     const list = cloAssessments[code] || [];
                     return (
@@ -1199,12 +1537,16 @@ const MarksheetDocument = ({
                         {list.map((ass, aIdx) => (
                           <th
                             key={`${code}-col-${aIdx}`}
-                            className="border-r border-black p-1 font-mono text-[9px] text-center font-bold"
+                            className="border-r border-black font-mono text-center font-bold"
+                            style={ds.assStyle}
                           >
                             {ass.label}
                           </th>
                         ))}
-                        <th className="border-r border-black p-1 font-sans text-center font-bold bg-slate-100/50">
+                        <th 
+                          className="border-r border-black font-sans text-center font-bold bg-slate-100/50"
+                          style={ds.totStyle}
+                        >
                           Total
                         </th>
                       </React.Fragment>
@@ -1213,7 +1555,7 @@ const MarksheetDocument = ({
                 </tr>
 
                 {/* ROW 3: Weights */}
-                <tr className="bg-slate-50 border-b border-black font-black text-[9px] text-slate-900 leading-tight">
+                <tr className={`bg-slate-50 border-b border-black font-black text-slate-900 leading-tight ${ds.headerRow2Class}`}>
                   <td colSpan={3} className="border-r border-black p-1 bg-slate-100/30 font-bold text-center uppercase">
                     Weight
                   </td>
@@ -1224,12 +1566,16 @@ const MarksheetDocument = ({
                         {list.map((ass, aIdx) => (
                           <td
                             key={`${code}-wt-${aIdx}`}
-                            className="border-r border-black p-1 font-mono text-[9px] text-center font-semibold bg-slate-100/30"
+                            className="border-r border-black font-mono text-center font-semibold bg-slate-100/30"
+                            style={ds.assStyle}
                           >
                             {ass.relativeWeight}%
                           </td>
                         ))}
-                        <td className="border-r border-black p-1 font-sans text-center font-bold bg-slate-100">
+                        <td 
+                          className="border-r border-black font-sans text-center font-bold bg-slate-100"
+                          style={ds.totStyle}
+                        >
                           100%
                         </td>
                       </React.Fragment>
@@ -1237,17 +1583,23 @@ const MarksheetDocument = ({
                   })}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-black/40 font-mono text-[10px]">
+              <tbody className="divide-y divide-black/40 font-mono">
                 {studentTotalGrades.map((item, idx) => {
                   return (
                     <tr key={item.student.regNo} className="hover:bg-slate-50/20 text-slate-850">
-                      <td className="border-r border-black p-1 text-slate-450 text-[9px] font-sans text-center">
+                      <td className={`border-r border-black text-slate-450 font-sans text-center w-[3%] min-w-[22px] max-w-[30px] ${ds.cellClass}`}>
                         {idx + 1}
                       </td>
-                      <td className="border-r border-black p-1 text-center text-slate-905 font-bold text-[10px] uppercase font-mono tracking-tight whitespace-nowrap">
+                      <td 
+                        className={`border-r border-black text-center text-slate-905 font-bold uppercase font-mono tracking-tight whitespace-nowrap ${ds.monoCellClass}`}
+                        style={ds.rollNoStyle}
+                      >
                         {item.student.regNo}
                       </td>
-                      <td className="border-r border-black p-1 text-left font-sans text-slate-900 font-bold uppercase text-[10px] break-words">
+                      <td 
+                        className={`border-r border-black text-left font-sans text-slate-900 font-bold uppercase break-words ${ds.cellClass}`}
+                        style={ds.nameStyle}
+                      >
                         {item.student.name}
                       </td>
                       {cloCodes.map(code => {
@@ -1284,7 +1636,8 @@ const MarksheetDocument = ({
                               return (
                                 <td
                                   key={`${code}-stud-ass-${aIdx}`}
-                                  className="border-r border-black p-1 text-center font-mono text-[10px]"
+                                  className={`border-r border-black text-center font-mono ${ds.monoCellClass}`}
+                                  style={ds.assStyle}
                                 >
                                   {formatMark(weightedScore)}
                                 </td>
@@ -1295,9 +1648,10 @@ const MarksheetDocument = ({
                               const isFailed = item.aggregate > 0 && cloTotalScore < cloPassingThreshold;
                               return (
                                 <td
-                                  className={`border-r border-black p-1 text-center font-bold font-sans text-[10px] ${
+                                  className={`border-r border-black text-center font-bold font-sans ${ds.cellClass} ${
                                     isFailed ? 'bg-slate-200 text-red-700 font-black' : 'bg-slate-50'
                                   }`}
+                                  style={ds.totStyle}
                                 >
                                   {cloTotalScore.toFixed(2)}
                                 </td>
@@ -1314,19 +1668,19 @@ const MarksheetDocument = ({
                   const displayIdx = course.students.length + emptyIdx + 1;
                   return (
                     <tr key={`empty-${emptyIdx}`} className="text-slate-850">
-                      <td className="border-r border-black p-1 text-slate-450 text-[9px] font-sans text-center">
+                      <td className={`border-r border-black text-slate-450 font-sans text-center w-[3%] min-w-[22px] max-w-[30px] ${ds.cellClass}`}>
                         {displayIdx}
                       </td>
-                      <td className="border-r border-black p-1"></td>
-                      <td className="border-r border-black p-1"></td>
+                      <td className={`border-r border-black ${ds.cellClass}`} style={ds.rollNoStyle}></td>
+                      <td className={`border-r border-black ${ds.cellClass}`} style={ds.nameStyle}></td>
                       {cloCodes.map(code => {
                         const list = cloAssessments[code] || [];
                         return (
                           <React.Fragment key={`empty-${code}`}>
                             {list.map((_, aIdx) => (
-                              <td key={`empty-${code}-ass-${aIdx}`} className="border-r border-black p-1"></td>
+                              <td key={`empty-${code}-ass-${aIdx}`} className={`border-r border-black ${ds.cellClass}`} style={ds.assStyle}></td>
                             ))}
-                            <td className="border-r border-black p-1 bg-slate-50"></td>
+                            <td className={`border-r border-black bg-slate-50 ${ds.cellClass}`} style={ds.totStyle}></td>
                           </React.Fragment>
                         );
                       })}
@@ -1535,8 +1889,36 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
       } catch (err: any) {
         console.error("Failed to load instructor courses from server:", err);
         if (active) {
-          setCourses([]);
-          setErrorMsg(err.message || "Failed to load instructor courses from backend server.");
+          const localCourses = apiService.getLocalInstructorCourses();
+          if (localCourses && localCourses.length > 0) {
+            const filtered = localCourses.filter(c => c.id !== 'course-1' && c.id !== 'course-2');
+            const normalized = filtered.map(normalizeCourse);
+            setCourses(normalized);
+            setErrorMsg(null);
+            
+            // Set active course from local data fallback
+            const urlParams = new URLSearchParams(window.location.search);
+            const paramCourseId = urlParams.get('courseId');
+            if (paramCourseId && normalized.some(c => c.id === paramCourseId)) {
+              setActiveCourseId(paramCourseId);
+            } else {
+              const savedActive = localStorage.getItem('IQRA_OBE_INSTRUCTOR_ACTIVE_ID');
+              const exists = normalized.some(c => c.id === savedActive);
+              if (!savedActive || savedActive === 'course-1' || savedActive === 'course-2' || !exists) {
+                if (normalized.length > 0) {
+                  setActiveCourseId(normalized[0].id);
+                } else {
+                  setActiveCourseId('');
+                }
+              } else {
+                setActiveCourseId(savedActive);
+              }
+            }
+            showNotification("⚠️ Offline fallback active: Loaded your courses from cache/local storage.", "info");
+          } else {
+            setCourses([]);
+            setErrorMsg(err.message || "Failed to load instructor courses from backend server.");
+          }
         }
       } finally {
         if (active) {
@@ -1869,12 +2251,13 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
     const params = new URLSearchParams(window.location.search);
     return params.get('campus') || 'Iqra University Chak Shahzad Campus Islamabad';
   });
-  const [reportType, setReportType] = useState<'standard' | 'combined' | 'award' | 'clo'>(() => {
+  const [reportType, setReportType] = useState<'standard' | 'combined' | 'award' | 'clo' | 'ga'>(() => {
     const params = new URLSearchParams(window.location.search);
     const rt = params.get('reportType');
     if (rt === 'combined') return 'combined';
     if (rt === 'award') return 'award';
     if (rt === 'clo') return 'clo';
+    if (rt === 'ga') return 'ga';
     return 'standard';
   });
   const [reportSemester, setReportSemester] = useState(() => {
@@ -2032,9 +2415,11 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
     }));
 
     try {
-      // Temporarily set the element to a standard crisp A4 portrait width (800px)
+      const isLandscape = reportType === 'clo' || reportType === 'ga';
+
+      // Temporarily set the element to a standard crisp A4 portrait width (800px) or landscape width (1130px)
       // This preserves exact typography and proportions without squishing or down-scaling elements to microscopic sizes in the resulting PDF.
-      element.style.width = '800px';
+      element.style.width = isLandscape ? '1130px' : '800px';
       element.style.maxWidth = 'none';
       element.style.minHeight = 'auto';
       element.style.boxShadow = 'none';
@@ -2066,12 +2451,12 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
         backgroundColor: '#ffffff'
       });
 
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      const pageHeight = 297; // A4 portrait height in mm
-      const imgWidth = 210; // A4 portrait width in mm
+      const pdf = new jsPDF(isLandscape ? 'l' : 'p', 'mm', 'a4');
+      const pageHeight = isLandscape ? 210 : 297; // A4 height in mm
+      const imgWidth = isLandscape ? 297 : 210; // A4 width in mm
       
-      const widthInPx = element.offsetWidth || 800;
-      const heightInPx = element.offsetHeight || 1130;
+      const widthInPx = element.offsetWidth || (isLandscape ? 1130 : 800);
+      const heightInPx = element.offsetHeight || (isLandscape ? 800 : 1130);
       const imgHeight = (heightInPx * imgWidth) / widthInPx; // scales naturally to preserve original aspect ratio
 
       let heightLeft = imgHeight;
@@ -2388,6 +2773,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
 
   // --- Sub-modules: OBE Setup States ---
   const [obeSubTab, setObeSubTab] = useState<'questions' | 'marks' | 'reports'>('questions');
+  const [reportsViewMode, setReportsViewMode] = useState<'clo' | 'ga'>('clo');
   const [qName, setQName] = useState('');
   const [qMaxMarks, setQMaxMarks] = useState<string>('10');
   const [qClos, setQClos] = useState<string[]>([]);
@@ -3744,8 +4130,10 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
         </button>
 
         {/* The Actual Printable Marksheet Document Container */}
-        <div className="flex-1 bg-slate-100 overflow-y-auto p-4 md:p-8 print:p-0 print:bg-white print:overflow-visible">
-          <div className="max-w-[210mm] mx-auto bg-white shadow-xl rounded-xl border border-slate-200 p-8 print:p-0 print:shadow-none print:border-none print:max-w-none print:bg-white print:rounded-none">
+        <div className="flex-1 bg-slate-100 overflow-auto p-4 md:p-8 print:p-0 print:bg-white print:overflow-visible">
+          <div className={`mx-auto bg-white shadow-xl rounded-xl border border-slate-200 p-8 print:p-0 print:shadow-none print:border-none print:max-w-none print:bg-white print:rounded-none ${
+            (reportType === 'clo' || reportType === 'ga') ? 'max-w-fit min-w-[297mm] w-fit' : 'max-w-[210mm] w-full'
+          }`}>
             <MarksheetDocument
               course={selectedCourse}
               campus={reportCampus}
@@ -3758,6 +4146,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
               printDate={reportPrintDate}
               isPrintView={true}
               reportType={reportType}
+              courseCLOs={courseCLOs}
             />
           </div>
         </div>
@@ -3995,6 +4384,17 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                   >
                     <FileSpreadsheet className="w-3.5 h-3.5 text-slate-700 shrink-0" />
                     <span className="text-slate-900 font-bold">CLO Based Result (PDF)</span>
+                  </button>
+                  <button
+                    onClick={() => { 
+                      setReportType('ga');
+                      setActiveModal('marksheet-report');
+                      setOpenMenu(null);
+                    }}
+                    className="w-full text-left px-3.5 py-1.5 text-xs text-slate-900 hover:bg-slate-50 hover:text-indigo-900 flex items-center gap-2 rounded font-bold"
+                  >
+                    <Award className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                    <span className="text-slate-900 font-bold">GA Based Result (PDF)</span>
                   </button>
 
                 </div>
@@ -6363,229 +6763,490 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                       })()}
                     </div>
                   )}
-
-                  {/* SUB-TAB 3: CLO REPORTS */}
+                       {/* SUB-TAB 3: CLO & GA REPORTS */}
                   {obeSubTab === 'reports' && (
                     <div className="space-y-6">
                       
-                      {/* Overall CLO Attainments Visual Gauge cards */}
-                      {(() => {
-                        const students = selectedCourse.students;
-                        const qs = selectedCourse.obeQuestions || [];
-                        const marks = selectedCourse.obeMarks || {};
+                      {/* Premium Interactive Reports Tab Selector */}
+                      <div className="flex border-b border-slate-200">
+                        <button
+                          onClick={() => setReportsViewMode('clo')}
+                          className={`px-5 py-2.5 text-xs font-bold transition-all border-b-2 flex items-center gap-2 cursor-pointer ${
+                            reportsViewMode === 'clo'
+                              ? 'border-indigo-600 text-indigo-600 font-extrabold'
+                              : 'border-transparent text-slate-500 hover:text-slate-900'
+                          }`}
+                        >
+                          <FileText className="w-4 h-4" />
+                          <span>CLO-wise Results & Attainment</span>
+                        </button>
+                        <button
+                          onClick={() => setReportsViewMode('ga')}
+                          className={`px-5 py-2.5 text-xs font-bold transition-all border-b-2 flex items-center gap-2 cursor-pointer ${
+                            reportsViewMode === 'ga'
+                              ? 'border-indigo-600 text-indigo-600 font-extrabold'
+                              : 'border-transparent text-slate-500 hover:text-indigo-900'
+                          }`}
+                        >
+                          <Award className="w-4 h-4" />
+                          <span>GA-wise Results & Attainment</span>
+                        </button>
+                      </div>
 
-                        // Compute dynamic CLO list based on database synchronized records
-                        const cloListToRender = courseCLOs.length > 0
-                          ? courseCLOs.map(c => ({
-                              code: c.code,
-                              description: c.description || 'No description supplied.',
-                              mappedGA: c.mappedGA
-                            }))
-                          : Array.from({ length: selectedCourse.cloCount || 4 }, (_, i) => ({
-                              code: `CLO-${i + 1}`,
-                              description: `Course Learning Outcome ${i + 1}`,
-                              mappedGA: null
-                            }));
+                      {reportsViewMode === 'clo' ? (
+                        /* Overall CLO Attainments Visual Gauge cards */
+                        (() => {
+                          const students = selectedCourse.students;
+                          const qs = selectedCourse.obeQuestions || [];
+                          const marks = selectedCourse.obeMarks || {};
 
-                        const cloPerformance = cloListToRender.map(cloObj => {
-                          const clo = cloObj.code;
-                          const cloQs = qs.filter(q => q.mappedCLOs.includes(clo));
-                          let totalClassMax = 0;
-                          let totalClassObs = 0;
-                          let attainedStudentsCount = 0;
+                          // Compute dynamic CLO list based on database synchronized records
+                          const cloListToRender = courseCLOs.length > 0
+                            ? courseCLOs.map(c => ({
+                                code: c.code,
+                                description: c.description || 'No description supplied.',
+                                mappedGA: c.mappedGA
+                              }))
+                            : Array.from({ length: selectedCourse.cloCount || 4 }, (_, i) => ({
+                                code: `CLO-${i + 1}`,
+                                description: `Course Learning Outcome ${i + 1}`,
+                                mappedGA: null
+                              }));
 
-                          students.forEach(std => {
-                            let stdMax = 0;
-                            let stdObs = 0;
-                            cloQs.forEach(q => {
-                              stdMax += q.maxMarks;
-                              stdObs += marks[std.regNo]?.[q.id] ?? 0;
+                          const cloPerformance = cloListToRender.map(cloObj => {
+                            const clo = cloObj.code;
+                            const cloQs = qs.filter(q => q.mappedCLOs.includes(clo));
+                            let totalClassMax = 0;
+                            let totalClassObs = 0;
+                            let attainedStudentsCount = 0;
+
+                            students.forEach(std => {
+                              let stdMax = 0;
+                              let stdObs = 0;
+                              cloQs.forEach(q => {
+                                stdMax += q.maxMarks;
+                                stdObs += marks[std.regNo]?.[q.id] ?? 0;
+                              });
+
+                              if (stdMax > 0) {
+                                const stdPct = (stdObs / stdMax) * 100;
+                                if (stdPct >= 50) {
+                                  attainedStudentsCount++;
+                                }
+                              }
+                              totalClassMax += stdMax;
+                              totalClassObs += stdObs;
                             });
 
-                            if (stdMax > 0) {
-                              const stdPct = (stdObs / stdMax) * 100;
-                              if (stdPct >= 50) {
-                                attainedStudentsCount++;
-                              }
-                            }
-                            totalClassMax += stdMax;
-                            totalClassObs += stdObs;
+                            const classAvgPct = totalClassMax > 0 ? (totalClassObs / totalClassMax) * 100 : 0;
+                            const attainmentRatePct = students.length > 0 ? (attainedStudentsCount / students.length) * 100 : 0;
+
+                            return {
+                              name: clo,
+                              description: cloObj.description,
+                              mappedGA: cloObj.mappedGA,
+                              mappedQs: cloQs.length,
+                              classAvg: classAvgPct,
+                              attainmentRate: attainmentRatePct
+                            };
                           });
 
-                          const classAvgPct = totalClassMax > 0 ? (totalClassObs / totalClassMax) * 100 : 0;
-                          const attainmentRatePct = students.length > 0 ? (attainedStudentsCount / students.length) * 100 : 0;
-
-                          return {
-                            name: clo,
-                            description: cloObj.description,
-                            mappedGA: cloObj.mappedGA,
-                            mappedQs: cloQs.length,
-                            classAvg: classAvgPct,
-                            attainmentRate: attainmentRatePct
-                          };
-                        });
-
-                        return (
-                          <div className="space-y-6 font-sans">
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                              {cloPerformance.map(clo => (
-                                <div key={clo.name} className="bg-slate-50/70 border border-slate-200 rounded-2xl p-4 shadow-xs space-y-3 transition-transform hover:translate-y-[-2px] hover:shadow-sm">
-                                  <div className="flex items-center justify-between border-b border-slate-150 pb-2">
-                                    <div className="flex flex-col">
-                                      <span className="text-xs font-black text-indigo-950 uppercase tracking-widest">{clo.name}</span>
-                                      {clo.mappedGA && (
-                                        <span className="text-[9px] font-bold text-indigo-500 font-mono mt-0.5">GA Mapping: {clo.mappedGA}</span>
-                                      )}
-                                    </div>
-                                    <span className="text-[10px] bg-indigo-50 border border-indigo-200/50 text-indigo-800 font-bold px-2 py-0.5 rounded-full shrink-0">
-                                      {clo.mappedQs} Qs
-                                    </span>
-                                  </div>
-
-                                  <p className="text-[10px] text-slate-500 line-clamp-2 leading-relaxed min-h-[30px]" title={clo.description}>
-                                    {clo.description}
-                                  </p>
-
-                                  <div className="space-y-1">
-                                    <div className="flex justify-between text-xs font-semibold text-slate-500">
-                                      <span>Average Score:</span>
-                                      <span className="text-indigo-955 font-bold font-mono">{clo.classAvg.toFixed(1)}%</span>
-                                    </div>
-                                    <div className="w-full bg-slate-200 rounded-full h-2">
-                                      <div
-                                        className="bg-indigo-600 h-2 rounded-full transition-all duration-500"
-                                        style={{ width: `${Math.min(100, clo.classAvg)}%` }}
-                                      ></div>
-                                    </div>
-                                  </div>
-
-                                  <div className="space-y-1">
-                                    <div className="flex justify-between text-xs font-semibold text-slate-500">
-                                      <span>Class Attainment (≥50%):</span>
-                                      <span className={`font-bold font-mono ${clo.attainmentRate >= 60 ? 'text-emerald-700' : 'text-amber-700'}`}>
-                                        {clo.attainmentRate.toFixed(1)}%
+                          return (
+                            <div className="space-y-6 font-sans">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                                {cloPerformance.map(clo => (
+                                  <div key={clo.name} className="bg-slate-50/70 border border-slate-200 rounded-2xl p-4 shadow-xs space-y-3 transition-transform hover:translate-y-[-2px] hover:shadow-sm">
+                                    <div className="flex items-center justify-between border-b border-slate-150 pb-2">
+                                      <div className="flex flex-col">
+                                        <span className="text-xs font-black text-indigo-950 uppercase tracking-widest">{clo.name}</span>
+                                        {clo.mappedGA && (
+                                          <span className="text-[9px] font-bold text-indigo-500 font-mono mt-0.5">GA Mapping: {clo.mappedGA}</span>
+                                        )}
+                                      </div>
+                                      <span className="text-[10px] bg-indigo-50 border border-indigo-200/50 text-indigo-800 font-bold px-2 py-0.5 rounded-full shrink-0">
+                                        {clo.mappedQs} Qs
                                       </span>
                                     </div>
-                                    <div className="w-full bg-slate-200 rounded-full h-1.5">
-                                      <div
-                                        className={`h-1.5 rounded-full transition-all duration-500 ${clo.attainmentRate >= 60 ? 'bg-emerald-500' : 'bg-amber-500'}`}
-                                        style={{ width: `${Math.min(100, clo.attainmentRate)}%` }}
-                                      ></div>
+
+                                    <p className="text-[10px] text-slate-500 line-clamp-2 leading-relaxed min-h-[30px]" title={clo.description}>
+                                      {clo.description}
+                                    </p>
+
+                                    <div className="space-y-1">
+                                      <div className="flex justify-between text-xs font-semibold text-slate-500">
+                                        <span>Average Score:</span>
+                                        <span className="text-indigo-955 font-bold font-mono">{clo.classAvg.toFixed(1)}%</span>
+                                      </div>
+                                      <div className="w-full bg-slate-200 rounded-full h-2">
+                                        <div
+                                          className="bg-indigo-600 h-2 rounded-full transition-all duration-500"
+                                          style={{ width: `${Math.min(100, clo.classAvg)}%` }}
+                                        ></div>
+                                      </div>
+                                    </div>
+
+                                    <div className="space-y-1">
+                                      <div className="flex justify-between text-xs font-semibold text-slate-500">
+                                        <span>Class Attainment (≥50%):</span>
+                                        <span className={`font-bold font-mono ${clo.attainmentRate >= 60 ? 'text-emerald-700' : 'text-amber-700'}`}>
+                                          {clo.attainmentRate.toFixed(1)}%
+                                        </span>
+                                      </div>
+                                      <div className="w-full bg-slate-200 rounded-full h-1.5">
+                                        <div
+                                          className={`h-1.5 rounded-full transition-all duration-500 ${clo.attainmentRate >= 60 ? 'bg-emerald-500' : 'bg-amber-500'}`}
+                                          style={{ width: `${Math.min(100, clo.attainmentRate)}%` }}
+                                        ></div>
+                                      </div>
                                     </div>
                                   </div>
-                                </div>
-                              ))}
-                            </div>
-
-                            {/* Detailed Student CLO Ledger Sheet */}
-                            <div className="space-y-3">
-                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                                <div>
-                                  <h4 className="text-sm font-extrabold text-[#111827]">
-                                    Student Individual CLO Attainment Grades Ledger
-                                  </h4>
-                                  <p className="text-[11px] text-slate-500 mt-0.5">
-                                    List of students with computed outcome competency progress bars. Threshold for attainment is defined at 50%.
-                                  </p>
-                                </div>
-                                <button
-                                  onClick={() => window.print()}
-                                  className="px-3.5 py-1.5 bg-indigo-50 border border-indigo-250 text-indigo-700 rounded-lg hover:bg-indigo-100 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer font-sans"
-                                >
-                                  <Award className="w-3.5 h-3.5" />
-                                  <span>Print Reports Sheet (PDF)</span>
-                                </button>
+                                ))}
                               </div>
 
-                              <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-xs">
-                                <table className="w-full text-left border-collapse text-xs">
-                                  <thead className="bg-[#f8fafc] border-b border-slate-200 font-sans text-slate-800">
-                                    <tr>
-                                      <th className="py-2.5 px-4 font-bold">Registration No</th>
-                                      <th className="py-2.5 px-3 font-bold border-r border-slate-200">FullName</th>
-                                      {cloListToRender.map(cloObj => (
-                                        <th key={cloObj.code} className="py-2.5 px-3 text-center border-r border-slate-200 font-bold bg-slate-100/10" title={cloObj.description}>
-                                          {cloObj.code} (%)
-                                          {cloObj.mappedGA && <div className="text-[9px] text-slate-400 font-mono font-normal">({cloObj.mappedGA})</div>}
-                                        </th>
-                                      ))}
-                                      <th className="py-2.5 px-3 text-center font-bold">Comprehensive Outcome Status</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody className="divide-y divide-slate-150 font-mono text-slate-705 text-xs">
-                                    {selectedCourse.students.map((student) => {
-                                      const attList: { name: string; pct: number | null; attained: boolean }[] = [];
-                                      let totalAttained = 0;
-                                      let clCountWithData = 0;
- 
-                                      const cellRender = cloListToRender.map(cloObj => {
-                                        const clo = cloObj.code;
-                                        const cloQs = qs.filter(q => q.mappedCLOs.includes(clo));
-                                        let stdMax = 0;
-                                        let stdObs = 0;
-                                        cloQs.forEach(q => {
-                                          stdMax += q.maxMarks;
-                                          stdObs += marks[student.regNo]?.[q.id] ?? 0;
+                              {/* Detailed Student CLO Ledger Sheet */}
+                              <div className="space-y-3">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                  <div>
+                                    <h4 className="text-sm font-extrabold text-[#111827]">
+                                      Student Individual CLO Attainment Grades Ledger
+                                    </h4>
+                                    <p className="text-[11px] text-slate-500 mt-0.5">
+                                      List of students with computed outcome competency progress bars. Threshold for attainment is defined at 50%.
+                                    </p>
+                                  </div>
+                                  <button
+                                    onClick={() => {
+                                      setReportType('clo');
+                                      setActiveModal('marksheet-report');
+                                    }}
+                                    className="px-3.5 py-1.5 bg-indigo-50 border border-indigo-250 text-indigo-700 rounded-lg hover:bg-indigo-100 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer font-sans"
+                                  >
+                                    <Award className="w-3.5 h-3.5" />
+                                    <span>Print Reports Sheet (PDF)</span>
+                                  </button>
+                                </div>
+
+                                <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-xs">
+                                  <table className="w-full text-left border-collapse text-xs">
+                                    <thead className="bg-[#f8fafc] border-b border-slate-200 font-sans text-slate-800">
+                                      <tr>
+                                        <th className="py-2.5 px-4 font-bold">Registration No</th>
+                                        <th className="py-2.5 px-3 font-bold border-r border-slate-200">FullName</th>
+                                        {cloListToRender.map(cloObj => (
+                                          <th key={cloObj.code} className="py-2.5 px-3 text-center border-r border-slate-200 font-bold bg-slate-100/10" title={cloObj.description}>
+                                            {cloObj.code} (%)
+                                            {cloObj.mappedGA && <div className="text-[9px] text-slate-400 font-mono font-normal">({cloObj.mappedGA})</div>}
+                                          </th>
+                                        ))}
+                                        <th className="py-2.5 px-3 text-center font-bold">Comprehensive Outcome Status</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-150 font-mono text-slate-705 text-xs">
+                                      {selectedCourse.students.map((student) => {
+                                        const attList: { name: string; pct: number | null; attained: boolean }[] = [];
+                                        let totalAttained = 0;
+                                        let clCountWithData = 0;
+    
+                                        const cellRender = cloListToRender.map(cloObj => {
+                                          const clo = cloObj.code;
+                                          const cloQs = qs.filter(q => q.mappedCLOs.includes(clo));
+                                          let stdMax = 0;
+                                          let stdObs = 0;
+                                          cloQs.forEach(q => {
+                                            stdMax += q.maxMarks;
+                                            stdObs += marks[student.regNo]?.[q.id] ?? 0;
+                                          });
+
+                                          const pctVal = stdMax > 0 ? (stdObs / stdMax) * 100 : null;
+                                          const attained = pctVal !== null ? pctVal >= 50 : false;
+                                          if (pctVal !== null) {
+                                            clCountWithData++;
+                                            if (attained) totalAttained++;
+                                          }
+
+                                          attList.push({ name: clo, pct: pctVal, attained });
+
+                                          return (
+                                            <td key={clo} className="py-2 px-3 text-center border-r border-slate-200">
+                                              {pctVal !== null ? (
+                                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${attained ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}`}>
+                                                  {pctVal.toFixed(1)}%
+                                                </span>
+                                              ) : (
+                                                <span className="text-slate-400 text-[10px] italic">-</span>
+                                              )}
+                                            </td>
+                                          );
                                         });
 
-                                        const pctVal = stdMax > 0 ? (stdObs / stdMax) * 100 : null;
-                                        const attained = pctVal !== null ? pctVal >= 50 : false;
-                                        if (pctVal !== null) {
-                                          clCountWithData++;
-                                          if (attained) totalAttained++;
-                                        }
-
-                                        attList.push({ name: clo, pct: pctVal, attained });
+                                        const isComprehensiveAttained = clCountWithData > 0 ? (totalAttained / clCountWithData) >= 0.75 : false;
 
                                         return (
-                                          <td key={clo} className="py-2 px-3 text-center border-r border-slate-200">
-                                            {pctVal !== null ? (
-                                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${attained ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}`}>
-                                                {pctVal.toFixed(1)}%
-                                              </span>
-                                            ) : (
-                                              <span className="text-slate-400 text-[10px] italic">-</span>
-                                            )}
-                                          </td>
+                                          <tr key={student.regNo} className="hover:bg-slate-50/50 font-semibold text-slate-700">
+                                            <td className="py-2.5 px-4 font-bold text-indigo-950">{student.regNo}</td>
+                                            <td className="py-2.5 px-3 border-r border-slate-200 text-slate-900 font-sans font-semibold">{student.name}</td>
+                                            {cellRender}
+                                            <td className="py-2.5 px-3 text-center font-sans">
+                                              {clCountWithData > 0 ? (
+                                                <span className={`px-3 py-1 rounded-full text-[10px] font-bold inline-flex items-center gap-1 ${isComprehensiveAttained ? 'bg-emerald-600 text-white shadow-xs' : 'bg-amber-100 text-amber-800'}`}>
+                                                  {isComprehensiveAttained ? '✔ EXCELLENT / ATTAINED' : '⚠ CLO UNDER CRITERION'}
+                                                </span>
+                                              ) : (
+                                                <span className="text-slate-400 text-xs italic">No OBE marks loaded</span>
+                                              )}
+                                            </td>
+                                          </tr>
                                         );
-                                      });
+                                      })}
 
-                                      const isComprehensiveAttained = clCountWithData > 0 ? (totalAttained / clCountWithData) >= 0.75 : false;
-
-                                      return (
-                                        <tr key={student.regNo} className="hover:bg-slate-50/50 font-semibold text-slate-700">
-                                          <td className="py-2.5 px-4 font-bold text-indigo-950">{student.regNo}</td>
-                                          <td className="py-2.5 px-3 border-r border-slate-200 text-slate-900 font-sans font-semibold">{student.name}</td>
-                                          {cellRender}
-                                          <td className="py-2.5 px-3 text-center font-sans">
-                                            {clCountWithData > 0 ? (
-                                              <span className={`px-3 py-1 rounded-full text-[10px] font-bold inline-flex items-center gap-1 ${isComprehensiveAttained ? 'bg-emerald-600 text-white shadow-xs' : 'bg-amber-100 text-amber-800'}`}>
-                                                {isComprehensiveAttained ? '✔ EXCELLENT / ATTAINED' : '⚠ CLO UNDER CRITERION'}
-                                              </span>
-                                            ) : (
-                                              <span className="text-slate-400 text-xs italic">No OBE marks loaded</span>
-                                            )}
+                                      {selectedCourse.students.length === 0 && (
+                                        <tr>
+                                          <td colSpan={7} className="py-12 bg-slate-50/50 text-center text-slate-505 font-sans">
+                                            <FileText className="w-8 h-8 text-slate-350 mx-auto mb-2 animate-bounce" />
+                                            <h5 className="font-bold text-slate-700">No student records to compile CLO performance</h5>
+                                            <p className="text-[10px] text-slate-500 mt-1">Populate student registrations to generate automated reports.</p>
                                           </td>
                                         </tr>
-                                      );
-                                    })}
-
-                                    {selectedCourse.students.length === 0 && (
-                                      <tr>
-                                        <td colSpan={7} className="py-12 bg-slate-50/50 text-center text-slate-505 font-sans">
-                                          <FileText className="w-8 h-8 text-slate-350 mx-auto mb-2 animate-bounce" />
-                                          <h5 className="font-bold text-slate-700">No student records to compile CLO performance</h5>
-                                          <p className="text-[10px] text-slate-500 mt-1">Populate student registrations to generate automated reports.</p>
-                                        </td>
-                                      </tr>
-                                    )}
-                                  </tbody>
-                                </table>
+                                      )}
+                                    </tbody>
+                                  </table>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        );
-                      })()}
+                          );
+                        })()
+                      ) : (
+                        /* GA Based interactive report */
+                        (() => {
+                          const students = selectedCourse.students;
+                          const qs = selectedCourse.obeQuestions || [];
+                          const marks = selectedCourse.obeMarks || {};
+
+                          // Compute dynamic CLO list based on database synchronized records
+                          const cloListToRender = courseCLOs.length > 0
+                            ? courseCLOs.map(c => ({
+                                code: c.code,
+                                description: c.description || 'No description supplied.',
+                                mappedGA: c.mappedGA || c.mapped_ga || null
+                              }))
+                            : Array.from({ length: selectedCourse.cloCount || 4 }, (_, i) => ({
+                                code: `CLO-${i + 1}`,
+                                description: `Course Learning Outcome ${i + 1}`,
+                                mappedGA: null
+                              }));
+
+                          // Group CLOs by GA code
+                          const gaToCLOsMap: Record<string, typeof cloListToRender> = {};
+                          cloListToRender.forEach(cloObj => {
+                            const gaCode = cloObj.mappedGA || 'No GA';
+                            if (!gaToCLOsMap[gaCode]) {
+                              gaToCLOsMap[gaCode] = [];
+                            }
+                            gaToCLOsMap[gaCode].push(cloObj);
+                          });
+
+                          const sortedGAs = Object.keys(gaToCLOsMap).sort((a, b) => {
+                            if (a === 'No GA') return 1;
+                            if (b === 'No GA') return -1;
+                            return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+                          });
+
+                          // Calculate GA averages & attainment rate for class
+                          const gaPerformance = sortedGAs.map(gaCode => {
+                            const clos = gaToCLOsMap[gaCode] || [];
+                            let totalClassMax = 0;
+                            let totalClassObs = 0;
+                            let attainedStudentsCount = 0;
+
+                            students.forEach(std => {
+                              let stdMax = 0;
+                              let stdObs = 0;
+                              clos.forEach(cloObj => {
+                                const cloQs = qs.filter(q => q.mappedCLOs.includes(cloObj.code));
+                                cloQs.forEach(q => {
+                                  stdMax += q.maxMarks;
+                                  stdObs += marks[std.regNo]?.[q.id] ?? 0;
+                                });
+                              });
+
+                              if (stdMax > 0) {
+                                const stdPct = (stdObs / stdMax) * 100;
+                                if (stdPct >= 50) {
+                                  attainedStudentsCount++;
+                                }
+                              }
+                              totalClassMax += stdMax;
+                              totalClassObs += stdObs;
+                            });
+
+                            const classAvgPct = totalClassMax > 0 ? (totalClassObs / totalClassMax) * 100 : 0;
+                            const attainmentRatePct = students.length > 0 ? (attainedStudentsCount / students.length) * 100 : 0;
+
+                            return {
+                              name: gaCode,
+                              clos: clos,
+                              classAvg: classAvgPct,
+                              attainmentRate: attainmentRatePct
+                            };
+                          });
+
+                          return (
+                            <div className="space-y-6 font-sans">
+                              
+                              {/* GA Attainments Gauge Cards */}
+                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                                {gaPerformance.map(ga => (
+                                  <div key={ga.name} className="bg-slate-50/70 border border-slate-200 rounded-2xl p-4 shadow-xs space-y-3 transition-transform hover:translate-y-[-2px] hover:shadow-sm">
+                                    <div className="flex items-center justify-between border-b border-slate-150 pb-2">
+                                      <span className="text-xs font-black text-indigo-950 uppercase tracking-widest">{ga.name}</span>
+                                      <span className="text-[10px] bg-indigo-50 border border-indigo-200/50 text-indigo-800 font-bold px-2 py-0.5 rounded-full shrink-0">
+                                        {ga.clos.length} CLOs
+                                      </span>
+                                    </div>
+
+                                    <div className="text-[10.5px] text-slate-500 leading-relaxed min-h-[30px]">
+                                      <span className="font-semibold text-slate-700">Mapped: </span>
+                                      {ga.clos.map(c => c.code).join(', ') || 'None'}
+                                    </div>
+
+                                    <div className="space-y-1">
+                                      <div className="flex justify-between text-xs font-semibold text-slate-500">
+                                        <span>Average Score:</span>
+                                        <span className="text-indigo-955 font-bold font-mono">{ga.classAvg.toFixed(1)}%</span>
+                                      </div>
+                                      <div className="w-full bg-slate-200 rounded-full h-2">
+                                        <div
+                                          className="bg-indigo-600 h-2 rounded-full transition-all duration-500"
+                                          style={{ width: `${Math.min(100, ga.classAvg)}%` }}
+                                        ></div>
+                                      </div>
+                                    </div>
+
+                                    <div className="space-y-1">
+                                      <div className="flex justify-between text-xs font-semibold text-slate-500">
+                                        <span>Class Attainment (≥50%):</span>
+                                        <span className={`font-bold font-mono ${ga.attainmentRate >= 60 ? 'text-emerald-700' : 'text-amber-700'}`}>
+                                          {ga.attainmentRate.toFixed(1)}%
+                                        </span>
+                                      </div>
+                                      <div className="w-full bg-slate-200 rounded-full h-1.5">
+                                        <div
+                                          className={`h-1.5 rounded-full transition-all duration-500 ${ga.attainmentRate >= 60 ? 'bg-emerald-500' : 'bg-amber-500'}`}
+                                          style={{ width: `${Math.min(100, ga.attainmentRate)}%` }}
+                                        ></div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+
+                              {/* Detailed Student GA Ledger Sheet */}
+                              <div className="space-y-3">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                  <div>
+                                    <h4 className="text-sm font-extrabold text-[#111827]">
+                                      Student Individual GA Attainment Ledger
+                                    </h4>
+                                    <p className="text-[11px] text-slate-500 mt-0.5">
+                                      List of students with computed Graduate Attribute aggregates based on mapped Course Outcomes.
+                                    </p>
+                                  </div>
+                                  <button
+                                    onClick={() => {
+                                      setReportType('ga');
+                                      setActiveModal('marksheet-report');
+                                    }}
+                                    className="px-3.5 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer font-sans shadow-xs"
+                                  >
+                                    <Award className="w-3.5 h-3.5" />
+                                    <span>Print GA Report Sheet (PDF)</span>
+                                  </button>
+                                </div>
+
+                                <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-xs">
+                                  <table className="w-full text-left border-collapse text-xs">
+                                    <thead className="bg-[#f8fafc] border-b border-slate-200 font-sans text-slate-800">
+                                      <tr>
+                                        <th className="py-2.5 px-4 font-bold">Registration No</th>
+                                        <th className="py-2.5 px-3 font-bold border-r border-slate-200">FullName</th>
+                                        {sortedGAs.map(gaCode => (
+                                          <th key={gaCode} className="py-2.5 px-3 text-center border-r border-slate-200 font-bold bg-slate-100/10">
+                                            {gaCode} (%)
+                                          </th>
+                                        ))}
+                                        <th className="py-2.5 px-3 text-center font-bold">Comprehensive GA Status</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-150 font-mono text-slate-705 text-xs">
+                                      {students.map((student) => {
+                                        let gaAttainedCount = 0;
+                                        let gaTotalCount = 0;
+
+                                        return (
+                                          <tr key={student.regNo} className="hover:bg-slate-50/50 font-semibold text-slate-700">
+                                            <td className="py-2.5 px-4 font-bold text-indigo-950">{student.regNo}</td>
+                                            <td className="py-2.5 px-3 border-r border-slate-200 text-slate-900 font-sans font-semibold">{student.name}</td>
+                                            {sortedGAs.map(gaCode => {
+                                              const clos = gaToCLOsMap[gaCode] || [];
+                                              let stdMax = 0;
+                                              let stdObs = 0;
+                                              clos.forEach(cloObj => {
+                                                const cloQs = qs.filter(q => q.mappedCLOs.includes(cloObj.code));
+                                                cloQs.forEach(q => {
+                                                  stdMax += q.maxMarks;
+                                                  stdObs += marks[student.regNo]?.[q.id] ?? 0;
+                                                });
+                                              });
+
+                                              const pctVal = stdMax > 0 ? (stdObs / stdMax) * 100 : null;
+                                              const attained = pctVal !== null ? pctVal >= 50 : false;
+                                              if (pctVal !== null) {
+                                                gaTotalCount++;
+                                                if (attained) gaAttainedCount++;
+                                              }
+
+                                              return (
+                                                <td key={gaCode} className="py-2 px-3 text-center border-r border-slate-200">
+                                                  {pctVal !== null ? (
+                                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${attained ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}`}>
+                                                      {pctVal.toFixed(1)}%
+                                                    </span>
+                                                  ) : (
+                                                    <span className="text-slate-400 text-[10px] italic">-</span>
+                                                  )}
+                                                </td>
+                                              );
+                                            })}
+                                            <td className="py-2.5 px-3 text-center font-sans">
+                                              {gaTotalCount > 0 ? (
+                                                <span className={`px-3 py-1 rounded-full text-[10px] font-bold inline-flex items-center gap-1 ${gaAttainedCount === gaTotalCount ? 'bg-indigo-600 text-white shadow-xs' : 'bg-amber-100 text-amber-800'}`}>
+                                                  {gaAttainedCount === gaTotalCount ? '✔ ALL GAs ATTAINED' : `⚠ ${gaTotalCount - gaAttainedCount} GA(s) UNFULFILLED`}
+                                                </span>
+                                              ) : (
+                                                <span className="text-slate-400 text-xs italic">No OBE marks loaded</span>
+                                              )}
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
+
+                                      {students.length === 0 && (
+                                        <tr>
+                                          <td colSpan={3 + sortedGAs.length} className="py-12 bg-slate-50/50 text-center text-slate-505 font-sans">
+                                            <FileText className="w-8 h-8 text-slate-350 mx-auto mb-2 animate-bounce" />
+                                            <h5 className="font-bold text-slate-700">No student records to compile GA performance</h5>
+                                            <p className="text-[10px] text-slate-500 mt-1">Populate student registrations to generate automated reports.</p>
+                                          </td>
+                                        </tr>
+                                      )}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })()
+                      )}
 
                     </div>
                   )}
@@ -7544,8 +8205,8 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                 </div>
 
                 {/* Right Scrollable Live Document Preview Panel */}
-                <div className="flex-1 bg-slate-300 p-4 sm:p-6 overflow-y-auto flex items-start justify-center">
-                  <div className="no-print origin-top scale-95 sm:scale-100">
+                <div className="flex-1 bg-slate-300 p-4 sm:p-6 overflow-auto">
+                  <div className="no-print origin-top scale-95 sm:scale-100 mx-auto w-fit pb-12">
                     <MarksheetDocument
                       course={selectedCourse}
                       campus={reportCampus}
@@ -7558,6 +8219,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                       printDate={reportPrintDate}
                       isPrintView={false}
                       reportType={reportType}
+                      courseCLOs={courseCLOs}
                     />
                   </div>
                 </div>

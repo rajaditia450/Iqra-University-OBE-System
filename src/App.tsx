@@ -60,7 +60,8 @@ export default function App() {
     // Session restoration on mount
     const savedUserStr = localStorage.getItem('IQRA_OBE_LOGGED_IN_USER');
     const token = localStorage.getItem('access');
-    if (savedUserStr && token) {
+    const hasValidToken = token && token !== 'undefined' && token !== 'null' && token.trim() !== '';
+    if (savedUserStr && hasValidToken) {
       try {
         const savedUser = JSON.parse(savedUserStr);
         if (savedUser && savedUser.mustChangePassword) {
@@ -72,6 +73,8 @@ export default function App() {
       } catch (e) {
         handleLogout();
       }
+    } else if (savedUserStr || token) {
+      handleLogout();
     }
   }, []);
 

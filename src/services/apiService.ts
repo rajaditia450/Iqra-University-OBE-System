@@ -468,9 +468,10 @@ const saveLocalStorageData = (data: OBEData) => {
 
 const getHeaders = () => {
   const token = localStorage.getItem('access');
+  const hasValidToken = token && token !== 'undefined' && token !== 'null' && token.trim() !== '';
   return {
     'Content-Type': 'application/json',
-    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+    ...(hasValidToken ? { 'Authorization': `Bearer ${token}` } : {}),
   };
 };
 
@@ -488,7 +489,8 @@ const onRefreshed = (token: string) => {
 
 const refreshAccessToken = async (): Promise<string | null> => {
   const refreshToken = localStorage.getItem('refresh');
-  if (!refreshToken) return null;
+  const hasValidRefresh = refreshToken && refreshToken !== 'undefined' && refreshToken !== 'null' && refreshToken.trim() !== '';
+  if (!hasValidRefresh) return null;
 
   const url = `${BASE_URL}/auth/token/refresh/`;
   try {
@@ -515,7 +517,10 @@ const refreshAccessToken = async (): Promise<string | null> => {
   return null;
 };
 
-const fetchWithTimeout = async (url: string, options: RequestInit = {}, timeoutMs = 15000): Promise<Response> => {
+const fetchWithTimeout = async (url: string, options: RequestInit = {}, timeoutMs = 90000): Promise<Response> => {
+  // Ensure we don't abort prematurely due to cold starts or slow DB response in container/preview environment
+  const finalTimeoutMs = Math.max(timeoutMs, 90000);
+
   // Security Interceptor: Block authenticated requests if the user must change their default password
   const savedUserStr = localStorage.getItem('IQRA_OBE_LOGGED_IN_USER');
   if (savedUserStr) {
@@ -530,7 +535,7 @@ const fetchWithTimeout = async (url: string, options: RequestInit = {}, timeoutM
 
   const makeRequest = async (tokenOverride?: string) => {
     const controller = new AbortController();
-    const id = setTimeout(() => controller.abort(), timeoutMs);
+    const id = setTimeout(() => controller.abort(), finalTimeoutMs);
     try {
       let reqOptions = { ...options };
       if (tokenOverride) {
@@ -552,8 +557,11 @@ const fetchWithTimeout = async (url: string, options: RequestInit = {}, timeoutM
       clearTimeout(id);
 
       return response;
-    } catch (error) {
+    } catch (error: any) {
       clearTimeout(id);
+      if (error && (error.name === 'AbortError' || error.message?.toLowerCase().includes('aborted') || error.message?.toLowerCase().includes('abort'))) {
+        throw new Error(`Request timed out after ${finalTimeoutMs / 1000} seconds. The server might be waking up or experiencing high traffic. Please try again in a moment.`);
+      }
       throw error;
     }
   };
@@ -1061,7 +1069,7 @@ export const apiService = {
   async getInstructorCourses(): Promise<InstructorCourse[]> {
     const response = await fetchWithTimeout(`${BASE_URL}/instructor/courses/`, {
       headers: getHeaders(),
-    }, 5000);
+    }, 20000);
     if (!response.ok) {
       const errData = await response.json().catch(() => ({}));
       const errMsg = errData.detail || errData.error || errData.message || `Failed to fetch instructor courses (Status ${response.status})`;
@@ -1390,7 +1398,7 @@ export const apiService = {
     const url = programId
       ? `${BASE_URL}/admin/semester-plans/?programId=${programId}`
       : `${BASE_URL}/admin/semester-plans/`;
-    const res = await fetchWithTimeout(url, { headers: getHeaders() }, 5000);
+    const res = await fetchWithTimeout(url, { headers: getHeaders() }, 20000);
     if (!res.ok) throw new Error('Failed to fetch semester plans');
     return res.json();
     // Returns: [{ programId, semester, courseCodes }]
@@ -1409,7 +1417,7 @@ export const apiService = {
   async getStudentCourses() {
     const res = await fetchWithTimeout(`${BASE_URL}/student/courses/`, {
       headers: getHeaders()
-    }, 5000);
+    }, 20000);
     if (!res.ok) throw new Error('Failed to fetch student courses');
     return res.json();
     // Returns: [{ id, code, title, creditHours, categories, studentMarks }]
@@ -1418,7 +1426,7 @@ export const apiService = {
   async getCourseAssignments() {
     const res = await fetchWithTimeout(`${BASE_URL}/admin/course-assignments/`, {
       headers: getHeaders()
-    }, 5000);
+    }, 20000);
     if (!res.ok) throw new Error('Failed to fetch course assignments');
     return res.json();
     // Returns: [{ teacherId, courseCode, programId }]
@@ -1460,7 +1468,7 @@ export const apiService = {
     if (queryParams.length > 0) {
       url += `?${queryParams.join('&')}`;
     }
-    const res = await fetchWithTimeout(url, { headers: getHeaders() }, 5000);
+    const res = await fetchWithTimeout(url, { headers: getHeaders() }, 20000);
     if (!res.ok) throw new Error('Failed to fetch final results');
     return res.json();
   },

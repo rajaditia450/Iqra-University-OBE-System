@@ -10,7 +10,9 @@ import {
   Percent,
   CheckCircle,
   Sliders,
-  Settings
+  Settings,
+  Save,
+  Undo
 } from 'lucide-react';
 import { InstructorCourse } from '../types';
 
@@ -60,6 +62,90 @@ export default function MarksEntrySpreadsheet({
   handleOpenUnitEditor,
   onShowNotification
 }: MarksEntrySpreadsheetProps) {
+
+  // Local state for tracking unsaved edited marks
+  // draftMarks maps student.regNo -> { markKey -> value }
+  const [draftMarks, setDraftMarks] = useState<Record<string, Record<string, number>>>({});
+  const [isDirty, setIsDirty] = useState(false);
+
+  // Initialize draftMarks whenever the course or student list changes
+  useEffect(() => {
+    const initialDraft: Record<string, Record<string, number>> = {};
+    selectedCourse.students.forEach(std => {
+      initialDraft[std.regNo] = { ...(std.marks || {}) };
+    });
+    setDraftMarks(initialDraft);
+    setIsDirty(false);
+  }, [selectedCourse.id, selectedCourse.students]);
+
+  // Handler to permanently save the draft marks back to the parent state
+  const handleSaveChanges = () => {
+    setCourses(prev => prev.map(c => {
+      if (c.id === selectedCourse.id) {
+        // Also keep obeMarks in perfect sync so backend always gets question-wise marks inside obeMarks
+        const copyObeMarks = { ...(c.obeMarks || {}) };
+
+        const updatedStudents = c.students.map(std => {
+          const nextMarks = { ...(draftMarks[std.regNo] || {}) };
+          
+          if (!copyObeMarks[std.regNo]) {
+            copyObeMarks[std.regNo] = {};
+          }
+          
+          // Recompute aggregated unit total aggregates for all categories for this student
+          c.categories.forEach(cat => {
+            for (let u = 1; u <= cat.units; u++) {
+              const matchingUnit = (c.unitsData[cat.name] || []).find(unit => unit.unitNo === u);
+              const questions = matchingUnit?.questions || [];
+              if (questions.length > 0) {
+                const uTotal = questions.reduce((sum, q) => {
+                  const qKey = `q-${cat.name}-${u}-${q.id}`;
+                  const score = nextMarks[qKey] ?? 0;
+                  
+                  // Keep obeMarks updated
+                  copyObeMarks[std.regNo][q.id] = score;
+
+                  return sum + score;
+                }, 0);
+                nextMarks[`${cat.name}-${u}`] = uTotal;
+              }
+            }
+          });
+
+          return {
+            ...std,
+            marks: nextMarks
+          };
+        });
+        return {
+          ...c,
+          students: updatedStudents,
+          obeMarks: copyObeMarks
+        };
+      }
+      return c;
+    }));
+    
+    setIsDirty(false);
+    if (onShowNotification) {
+      onShowNotification('All marks saved successfully!', 'success');
+    }
+  };
+
+  // Handler to revert draft edits back to original course marks
+  const handleCancelChanges = () => {
+    if (confirm('Are you sure you want to discard all unsaved changes?')) {
+      const initialDraft: Record<string, Record<string, number>> = {};
+      selectedCourse.students.forEach(std => {
+        initialDraft[std.regNo] = { ...(std.marks || {}) };
+      });
+      setDraftMarks(initialDraft);
+      setIsDirty(false);
+      if (onShowNotification) {
+        onShowNotification('Changes discarded.', 'info');
+      }
+    }
+  };
   
   // 1. Get list of all active categories (percentage > 0 && units > 0)
   const activeCategories = useMemo(() => {
@@ -211,20 +297,21 @@ export default function MarksEntrySpreadsheet({
     if (!currentCategory || unitLeafColumns.length === 0) return 0;
     let count = 0;
     selectedCourse.students.forEach(std => {
+      const studentDraft = draftMarks[std.regNo] || {};
       const hasAny = unitLeafColumns.some(col => {
         if (col.type === 'question') {
-          const mark = std.marks?.[col.id];
+          const mark = studentDraft[col.id];
           return mark !== undefined && mark !== null && mark > 0;
         } else {
           const dKey = `${currentCategory.name}-${col.unitNo}`;
-          const mark = std.marks?.[dKey];
+          const mark = studentDraft[dKey];
           return mark !== undefined && mark !== null && mark > 0;
         }
       });
       if (hasAny) count++;
     });
     return count;
-  }, [selectedCourse.students, currentCategory, unitLeafColumns]);
+  }, [selectedCourse.students, currentCategory, unitLeafColumns, draftMarks]);
 
   // Class obtained average across all questions/units
   const classAverage = useMemo(() => {
@@ -232,18 +319,19 @@ export default function MarksEntrySpreadsheet({
     let totalSum = 0;
     selectedCourse.students.forEach(std => {
       let stdTotal = 0;
+      const studentDraft = draftMarks[std.regNo] || {};
       unitLeafColumns.forEach(col => {
         if (col.type === 'question') {
-          stdTotal += std.marks?.[col.id] ?? 0;
+          stdTotal += studentDraft[col.id] ?? 0;
         } else if (col.type === 'direct') {
           const dKey = `${currentCategory?.name}-${col.unitNo}`;
-          stdTotal += std.marks?.[dKey] ?? 0;
+          stdTotal += studentDraft[dKey] ?? 0;
         }
       });
       totalSum += stdTotal;
     });
     return totalSum / enrolledCount;
-  }, [selectedCourse.students, unitLeafColumns, enrolledCount, currentCategory]);
+  }, [selectedCourse.students, unitLeafColumns, enrolledCount, currentCategory, draftMarks]);
 
   const classPercentageAvg = totalMaxMarksAllUnits > 0
     ? (classAverage / totalMaxMarksAllUnits) * 100
@@ -252,49 +340,53 @@ export default function MarksEntrySpreadsheet({
   // 8. Bulk Operations handlers
   const handleFillMaxAllUnits = () => {
     if (!currentCategory) return;
-    if (confirm(`Auto-Fill MAX MARKS for all ${enrolledCount} students across all ${currentCategory.units} units of ${currentCategory.name}? This will overwrite empty/existing marks with the maximum possible score.`)) {
-      setCourses(prev => prev.map(c => {
-        if (c.code === selectedCourse.code) {
-          const updatedStudents = c.students.map(std => {
-            const nextMarks = { ...(std.marks || {}) };
-            unitLeafColumns.forEach(col => {
-              if (col.type === 'question') {
-                nextMarks[col.id] = col.maxMarks;
-              } else if (col.type === 'direct') {
-                const dKey = `${currentCategory.name}-${col.unitNo}`;
-                nextMarks[dKey] = col.maxMarks;
-              }
-            });
-            return { ...std, marks: nextMarks };
+    if (confirm(`Auto-Fill MAX MARKS (locally in draft) for all ${enrolledCount} students across all ${currentCategory.units} units of ${currentCategory.name}? This will overwrite empty/existing marks with the maximum possible score in draft. You will need to click 'Save Changes' to apply permanently.`)) {
+      setDraftMarks(prev => {
+        const next = { ...prev };
+        selectedCourse.students.forEach(std => {
+          const studentDraft = { ...(next[std.regNo] || {}) };
+          unitLeafColumns.forEach(col => {
+            if (col.type === 'question') {
+              studentDraft[col.id] = col.maxMarks;
+            } else if (col.type === 'direct') {
+              const dKey = `${currentCategory.name}-${col.unitNo}`;
+              studentDraft[dKey] = col.maxMarks;
+            }
           });
-          return { ...c, students: updatedStudents };
-        }
-        return c;
-      }));
+          next[std.regNo] = studentDraft;
+        });
+        return next;
+      });
+      setIsDirty(true);
+      if (onShowNotification) {
+        onShowNotification('Filled max marks in draft. Click "Save Changes" to persist.', 'info');
+      }
     }
   };
 
   const handleClearAllMarksCategory = () => {
     if (!currentCategory) return;
-    if (confirm(`Clear all entered marks for all units under ${currentCategory.name}? This action is irreversible.`)) {
-      setCourses(prev => prev.map(c => {
-        if (c.code === selectedCourse.code) {
-          const updatedStudents = c.students.map(std => {
-            const nextMarks = { ...(std.marks || {}) };
-            unitLeafColumns.forEach(col => {
-              if (col.type === 'question') {
-                delete nextMarks[col.id];
-              } else if (col.type === 'direct') {
-                const dKey = `${currentCategory.name}-${col.unitNo}`;
-                delete nextMarks[dKey];
-              }
-            });
-            return { ...std, marks: nextMarks };
+    if (confirm(`Clear entered marks (locally in draft) for all units under ${currentCategory.name}? This action is irreversible once saved. You will need to click 'Save Changes' to apply permanently.`)) {
+      setDraftMarks(prev => {
+        const next = { ...prev };
+        selectedCourse.students.forEach(std => {
+          const studentDraft = { ...(next[std.regNo] || {}) };
+          unitLeafColumns.forEach(col => {
+            if (col.type === 'question') {
+              delete studentDraft[col.id];
+            } else if (col.type === 'direct') {
+              const dKey = `${currentCategory.name}-${col.unitNo}`;
+              delete studentDraft[dKey];
+            }
           });
-          return { ...c, students: updatedStudents };
-        }
-        return c;
-      }));
+          next[std.regNo] = studentDraft;
+        });
+        return next;
+      });
+      setIsDirty(true);
+      if (onShowNotification) {
+        onShowNotification('Cleared marks in draft. Click "Save Changes" to persist.', 'info');
+      }
     }
   };
 
@@ -371,6 +463,51 @@ export default function MarksEntrySpreadsheet({
               ×
             </button>
           )}
+        </div>
+      </div>
+
+      {/* ACTION BAR: Save Changes / Cancel / Unsaved Changes Indicator */}
+      <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-xs select-none">
+        <div className="flex items-center gap-2">
+          {isDirty ? (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-50 text-amber-800 border border-amber-200 text-xs font-bold animate-pulse">
+              <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+              <span>Unsaved Changes: Click "Save Changes" to save modified marks.</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600 border border-slate-200 text-xs font-bold">
+              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+              <span>All marks are up-to-date and saved.</span>
+            </div>
+          )}
+        </div>
+        
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleCancelChanges}
+            disabled={!isDirty}
+            className={`px-4 py-2 text-xs font-extrabold uppercase tracking-wider rounded-lg flex items-center gap-1.5 transition-all focus:outline-none cursor-pointer ${
+              isDirty 
+                ? 'bg-white border border-slate-350 text-slate-700 hover:bg-slate-100 hover:text-red-650 active:bg-slate-200 shadow-3xs'
+                : 'bg-slate-100 border border-slate-200 text-slate-400 cursor-not-allowed'
+            }`}
+          >
+            <Undo className="w-3.5 h-3.5 shrink-0" />
+            <span>Cancel</span>
+          </button>
+          
+          <button
+            onClick={handleSaveChanges}
+            disabled={!isDirty}
+            className={`px-5 py-2 text-xs font-extrabold uppercase tracking-wider rounded-lg flex items-center gap-1.5 transition-all focus:outline-none shadow-xs cursor-pointer ${
+              isDirty
+                ? 'bg-emerald-600 border border-emerald-700 text-white hover:bg-emerald-700 active:bg-emerald-800 font-black'
+                : 'bg-slate-100 border border-slate-200 text-slate-400 cursor-not-allowed'
+            }`}
+          >
+            <Save className="w-3.5 h-3.5 shrink-0" />
+            <span>Save Changes</span>
+          </button>
         </div>
       </div>
 
@@ -462,14 +599,15 @@ export default function MarksEntrySpreadsheet({
               ) : (
                 filteredStudents.map((student, stdIdx) => {
                   
-                  // Calculate obtained total on the fly
+                  // Calculate obtained total on the fly from the local draft state
                   let studentObtainedSum = 0;
+                  const studentDraft = draftMarks[student.regNo] || {};
                   unitLeafColumns.forEach(col => {
                     if (col.type === 'question') {
-                      studentObtainedSum += student.marks?.[col.id] ?? 0;
+                      studentObtainedSum += studentDraft[col.id] ?? 0;
                     } else if (col.type === 'direct') {
                       const dKey = `${currentCategory.name}-${col.unitNo}`;
-                      studentObtainedSum += student.marks?.[dKey] ?? 0;
+                      studentObtainedSum += studentDraft[dKey] ?? 0;
                     }
                   });
 
@@ -525,14 +663,8 @@ export default function MarksEntrySpreadsheet({
 
                         // Editable input cell
                         const inputCellId = `cell-${stdIdx}-${colIdx}`;
-                        let cellValue: number | undefined = undefined;
-
-                        if (col.type === 'question') {
-                          cellValue = student.marks?.[col.id];
-                        } else if (col.type === 'direct') {
-                          const dKey = `${currentCategory.name}-${col.unitNo}`;
-                          cellValue = student.marks?.[dKey];
-                        }
+                        const markKey = col.type === 'question' ? col.id : `${currentCategory.name}-${col.unitNo}`;
+                        const cellValue = studentDraft[markKey];
 
                         const isEmpty = cellValue === 0 || cellValue === undefined;
 
@@ -563,37 +695,45 @@ export default function MarksEntrySpreadsheet({
                                       if (numVal > col.maxMarks) {
                                         if (onShowNotification) {
                                           onShowNotification(`Warning: Entered marks (${numVal}) cannot be greater than the maximum marks (${col.maxMarks}) allowed for this assessment.`, 'error');
-                                        } else {
-                                          console.warn(`Warning: Entered marks (${numVal}) cannot be greater than the maximum marks (${col.maxMarks}) allowed for this assessment.`);
                                         }
                                         return;
                                       }
-                                      if (col.type === 'question' && col.qId && col.unitNo) {
-                                        handleSaveQuestionMark(student.regNo, currentCategory.name, col.unitNo, col.qId, numVal);
-                                      } else if (col.type === 'direct' && col.unitNo) {
-                                        handleSaveUnitDirectMark(student.regNo, currentCategory.name, col.unitNo, numVal);
-                                      }
+                                      setDraftMarks(prev => {
+                                        const nextStdDraft = { ...(prev[student.regNo] || {}) };
+                                        nextStdDraft[markKey] = numVal;
+                                        return {
+                                          ...prev,
+                                          [student.regNo]: nextStdDraft
+                                        };
+                                      });
+                                      setIsDirty(true);
                                     }
                                   }}
                                   onBlur={(e) => {
                                     const val = parseFloat(e.target.value);
                                     if (isNaN(val) || val < 0) {
-                                      if (col.type === 'question' && col.qId && col.unitNo) {
-                                        handleSaveQuestionMark(student.regNo, currentCategory.name, col.unitNo, col.qId, 0);
-                                      } else if (col.type === 'direct' && col.unitNo) {
-                                        handleSaveUnitDirectMark(student.regNo, currentCategory.name, col.unitNo, 0);
-                                      }
+                                      setDraftMarks(prev => {
+                                        const nextStdDraft = { ...(prev[student.regNo] || {}) };
+                                        nextStdDraft[markKey] = 0;
+                                        return {
+                                          ...prev,
+                                          [student.regNo]: nextStdDraft
+                                        };
+                                      });
+                                      setIsDirty(true);
                                     } else if (val > col.maxMarks) {
                                       if (onShowNotification) {
                                         onShowNotification(`Warning: Went over the maximum marks limit. Reverting to maximum (${col.maxMarks}m).`, 'error');
-                                      } else {
-                                        console.warn(`Warning: Went over the maximum marks limit. Reverting to maximum (${col.maxMarks}m).`);
                                       }
-                                      if (col.type === 'question' && col.qId && col.unitNo) {
-                                        handleSaveQuestionMark(student.regNo, currentCategory.name, col.unitNo, col.qId, col.maxMarks);
-                                      } else if (col.type === 'direct' && col.unitNo) {
-                                        handleSaveUnitDirectMark(student.regNo, currentCategory.name, col.unitNo, col.maxMarks);
-                                      }
+                                      setDraftMarks(prev => {
+                                        const nextStdDraft = { ...(prev[student.regNo] || {}) };
+                                        nextStdDraft[markKey] = col.maxMarks;
+                                        return {
+                                          ...prev,
+                                          [student.regNo]: nextStdDraft
+                                        };
+                                      });
+                                      setIsDirty(true);
                                     }
                                   }}
                                   onFocus={(e) => e.target.select()}
@@ -678,11 +818,12 @@ export default function MarksEntrySpreadsheet({
                   let sumOfMarks = 0;
                   selectedCourse.students.forEach(std => {
                     let sc = 0;
+                    const studentDraft = draftMarks[std.regNo] || {};
                     if (col.type === 'question') {
-                      sc = std.marks?.[col.id] ?? 0;
+                      sc = studentDraft[col.id] ?? 0;
                     } else if (col.type === 'direct') {
                       const dKey = `${currentCategory.name}-${col.unitNo}`;
-                      sc = std.marks?.[dKey] ?? 0;
+                      sc = studentDraft[dKey] ?? 0;
                     }
                     sumOfMarks += sc;
                   });

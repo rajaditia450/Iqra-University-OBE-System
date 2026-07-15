@@ -72,6 +72,7 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
   const [students, setStudents] = useState<Student[]>([]);
   const [studentBindings, setStudentBindings] = useState<StudentCourseBinding[]>([]);
   const [instructorCourses, setInstructorCourses] = useState<InstructorCourse[]>([]);
+  const [allCoursesCLOs, setAllCoursesCLOs] = useState<Record<string, any[]>>({});
   
   // Selected tab & active student login switcher for demo
   const [activeRegNo, setActiveRegNo] = useState<string>(studentRegNo);
@@ -144,18 +145,8 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
       setCourses(obData.courses || []);
       setGas(obData.gas || []);
 
-      // 1b. Load predefined semester plans
-      try {
-        const plans = await apiService.getSemesterPlans();
-        if (Array.isArray(plans)) {
-          setSemesterPlans(plans);
-        }
-      } catch (err) {
-        console.warn("Failed to load semester plans:", err);
-      }
-
-      // 2. Load students
-      const studentList = await apiService.getStudents();
+      // 1b. Skip hitting admin endpoints for students (predefined semester plans)
+      setSemesterPlans([]);
 
       // Retrieve logged-in user details as a reliable backup
       const loggedInUserStr = localStorage.getItem('IQRA_OBE_LOGGED_IN_USER');
@@ -177,6 +168,22 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
         } catch (e) {
           console.error("Error parsing logged-in user in student dashboard", e);
         }
+      }
+
+      // 2. We use the loggedInStudent as the only user list to completely avoid calling privileged apiService.getStudents()
+      let studentList: Student[] = [];
+      if (loggedInStudent) {
+        studentList = [loggedInStudent];
+      } else {
+        studentList = [{
+          regNo: studentRegNo,
+          name: studentRegNo.split('.').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
+          email: '',
+          departmentId: 'computing',
+          programId: 'bscs',
+          batch: 'Fall',
+          semester: '4th'
+        }];
       }
 
       // 3. Match login username or select first default
@@ -215,8 +222,57 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
       try {
         let mappedInstructorCourses: InstructorCourse[] = [];
         try {
+          // Attempt to fetch ALL instructor courses from server first (if user has permission or backend allows public read)
+          let serverInstructorCourses: InstructorCourse[] = [];
+          try {
+            serverInstructorCourses = await apiService.getInstructorCourses();
+          } catch (e) {
+            console.warn("[STUDENT_MARKS_DEBUG] Failed to fetch instructor courses from server:", e);
+          }
+
+          // Also load local instructor courses from localStorage
+          const localInstructorCourses = apiService.getLocalInstructorCourses();
+
+          // Combine them (preferring server-side if present)
+          const allInstructorCourses = [...serverInstructorCourses];
+          localInstructorCourses.forEach(lc => {
+            if (!allInstructorCourses.some(sc => sc.code === lc.code)) {
+              allInstructorCourses.push(lc);
+            }
+          });
+
           const studentCourses = await apiService.getStudentCourses();
           const regToUse = matchingStudent ? matchingStudent.regNo : activeRegNo;
+
+          // Fetch CLOs for each course
+          const closMap: Record<string, any[]> = {};
+          if (Array.isArray(studentCourses)) {
+            for (const sc of studentCourses) {
+              const cId = sc.id;
+              if (cId) {
+                try {
+                  const fetchedCLOs = await apiService.getCourseCLOs(cId);
+                  if (Array.isArray(fetchedCLOs)) {
+                    closMap[sc.code] = fetchedCLOs;
+                  }
+                } catch (cloErr) {
+                  console.warn(`Failed to fetch CLOs for course ${sc.code} via instructor endpoint:`, cloErr);
+                  // If server fetch fails, look for CLOs in our combined allInstructorCourses list
+                  const matchedIC = allInstructorCourses.find(ic => ic.code === sc.code || ic.id === sc.id);
+                  if (matchedIC && Array.isArray((matchedIC as any).clos)) {
+                    closMap[sc.code] = (matchedIC as any).clos;
+                  } else if (Array.isArray(sc.clos)) {
+                    closMap[sc.code] = sc.clos;
+                  } else if (Array.isArray(sc.courseCLOs)) {
+                    closMap[sc.code] = sc.courseCLOs;
+                  } else if (Array.isArray(sc.course_clos)) {
+                    closMap[sc.code] = sc.course_clos;
+                  }
+                }
+              }
+            }
+          }
+          setAllCoursesCLOs(closMap);
           
           if (Array.isArray(studentCourses)) {
             const dynamicBindings = studentCourses.map((sc: any) => ({
@@ -238,9 +294,12 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
               const codeStr = String(sc.code || '').trim().toUpperCase();
               const titleStr = String(sc.title || '').trim().toLowerCase();
 
-              // Clean, non-fake mapping: use what the backend actually returns
-              const standardCategories = sc.categories || [];
-              const standardUnitsData = sc.unitsData || {};
+              // Merge/lookup with the complete course details from our combined list
+              const matchedIC = allInstructorCourses.find(ic => ic.code === sc.code || ic.id === sc.id);
+
+              const standardCategories = sc.categories || matchedIC?.categories || [];
+              const standardUnitsData = sc.unitsData || matchedIC?.unitsData || {};
+              const obeQuestions = sc.obeQuestions || matchedIC?.obeQuestions || [];
 
               const pId = sc.programId || sc.program_id || matchingStudent?.programId || 'bscs';
               const prog = loadedProgs.find((p: any) => p.id === pId);
@@ -250,10 +309,10 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
               const dept = loadedDepts.find((d: any) => d.id === dId);
               const dName = dept ? dept.name : 'Department of Computing and Technology';
 
-              const studentMarksToUse = sc.studentMarks || {};
-              const obeMarksToUse = sc.obeMarks || {};
+              const studentMarksToUse = sc.studentMarks || sc.marks || matchedIC?.students?.find(s => normalizeRegNo(s.regNo) === normalizeRegNo(regToUse))?.marks || {};
+              const obeMarksToUse = sc.obeMarks || matchedIC?.obeMarks?.[regToUse] || {};
 
-              console.log(`[STUDENT_MARKS_DEBUG] Course ${codeStr} - "${sc.title}" details mapped from backend:`, {
+              console.log(`[STUDENT_MARKS_DEBUG] Course ${codeStr} - "${sc.title}" details mapped from backend/local:`, {
                 id: sc.id,
                 code: sc.code,
                 title: sc.title,
@@ -261,7 +320,7 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
                 obeMarks: obeMarksToUse,
                 categories: standardCategories,
                 unitsData: standardUnitsData,
-                obeQuestions: sc.obeQuestions,
+                obeQuestions: obeQuestions,
                 selectedGradingSystem: sc.selectedGradingSystem
               });
 
@@ -283,11 +342,11 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
                     marks: studentMarksToUse
                   }
                 ],
-                obeQuestions: sc.obeQuestions || [],
+                obeQuestions: obeQuestions,
                 obeMarks: {
                   [regToUse]: obeMarksToUse
                 },
-                selectedGradingSystem: sc.selectedGradingSystem || 'ready1'
+                selectedGradingSystem: sc.selectedGradingSystem || matchedIC?.selectedGradingSystem || 'ready1'
               };
             });
           } else {
@@ -428,7 +487,36 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
           for (let u = 1; u <= cat.units; u++) {
             const matchingUnit = existingUnits.find(unit => unit.unitNo === u);
             const unitWeightage = matchingUnit?.weightage ?? (100 / cat.units);
-            const totalMarks = matchingUnit ? matchingUnit.totalMarks : 10;
+            let totalMarks = matchingUnit ? matchingUnit.totalMarks : 0;
+            if (!totalMarks) {
+              const catNameLower = cat.name.toLowerCase();
+              if (catNameLower.includes('mid term') || catNameLower.includes('midterm') || catNameLower.includes('mid-term')) {
+                totalMarks = 30;
+              } else if (catNameLower.includes('final')) {
+                totalMarks = 40;
+              } else if (catNameLower.includes('presentation')) {
+                totalMarks = 10;
+              } else {
+                const dKey = `${cat.name}-${u}`;
+                const directMark = std.marks?.[dKey] ?? 0;
+                
+                const questions = matchingUnit?.questions || [];
+                let obtainedMark = directMark;
+                if (questions.length > 0) {
+                  obtainedMark = 0;
+                  questions.forEach(q => {
+                    const qKey = `q-${cat.name}-${u}-${q.id}`;
+                    obtainedMark += std.marks?.[qKey] ?? 0;
+                  });
+                }
+                
+                if (obtainedMark > 40) totalMarks = 50;
+                else if (obtainedMark > 30) totalMarks = 40;
+                else if (obtainedMark > 20) totalMarks = 30;
+                else if (obtainedMark > 10) totalMarks = 20;
+                else totalMarks = 10;
+              }
+            }
             const questions = matchingUnit?.questions || [];
             
             let unitObtained = 0;
@@ -572,38 +660,176 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
       }
     }
 
-    // CLO Performance Calculations (Genuine, No Mock Simulations)
-    const qs = instCourse?.obeQuestions || [];
-    const marks = instCourse?.obeMarks || {};
-    const cloCount = instCourse?.cloCount || 4;
+    // CLO Performance Calculations (Accurate Instructor Module CLO Reports Logic)
+    const courseCLODataList = allCoursesCLOs[courseCode] || [];
+    const numCLOsToUse = courseCLODataList.length > 0 ? courseCLODataList.length : (instCourse?.cloCount || 4);
 
-    computedCLOs = Array.from({ length: cloCount }, (_, i) => `CLO-${i + 1}`).map((clo, idx) => {
-      const cloQs = qs.filter(q => q.mappedCLOs.includes(clo));
-      let max = 0;
-      let score = 0;
-      
-      cloQs.forEach(q => {
-        max += q.maxMarks;
-        score += marks[stdRegNo]?.[q.id] ?? 0;
-      });
+    if (instCourse && std) {
+      const activeCats = instCourse.categories.filter(c => c.percentage > 0);
 
-      if (max === 0) {
-        console.log(`[STUDENT_MARKS_DEBUG]   - ${clo} has 0 assessment questions. Score: 0/0 (Not Assessed).`);
+      computedCLOs = Array.from({ length: numCLOsToUse }, (_, i) => {
+        const defaultCode = `CLO-${i + 1}`;
+        const existingCloObj = courseCLODataList[i] || courseCLODataList.find(item => item.code === defaultCode);
+        const code = existingCloObj?.code || defaultCode;
+        const description = existingCloObj?.description || `Course Learning Outcome ${i + 1}`;
+        const mappedGA = existingCloObj?.mappedGA || existingCloObj?.mapped_ga || null;
+
+        const normalizedCLO = code.trim().toUpperCase();
+
+        interface LocalCLOAssessment {
+          id: string;
+          categoryName: string;
+          unitNo: number;
+          questionId?: string;
+          maxMarks: number;
+          contrib: number;
+          relativeWeight: number;
+        }
+
+        const list: LocalCLOAssessment[] = [];
+
+        activeCats.forEach(cat => {
+          const units = instCourse.unitsData[cat.name] || [];
+          units.forEach(unit => {
+            const unitWeightage = unit.weightage ?? (cat.units > 0 ? (100 / cat.units) : 0);
+
+            if (unit.questions && unit.questions.length > 0) {
+              unit.questions.forEach(q => {
+                const qCLOs = q.mappedCLOs || [];
+                const matches = qCLOs.some(cloCode => 
+                  String(cloCode).trim().toUpperCase() === normalizedCLO || 
+                  String(cloCode).trim().toUpperCase() === defaultCode.toUpperCase()
+                );
+                if (matches) {
+                  const contrib = (q.maxMarks / unit.totalMarks) * (unitWeightage / 100) * cat.percentage;
+                  list.push({
+                    id: `q-${cat.name}-${unit.unitNo}-${q.id}`,
+                    categoryName: cat.name,
+                    unitNo: unit.unitNo,
+                    questionId: q.id,
+                    maxMarks: q.maxMarks,
+                    contrib: contrib,
+                    relativeWeight: 0
+                  });
+                }
+              });
+            } else {
+              const unitCLOs = unit.mappedCLOs || [];
+              const matches = unitCLOs.some(cloCode => 
+                String(cloCode).trim().toUpperCase() === normalizedCLO || 
+                String(cloCode).trim().toUpperCase() === defaultCode.toUpperCase()
+              );
+              if (matches) {
+                const contrib = (unitWeightage / 100) * cat.percentage;
+                list.push({
+                  id: `${cat.name}-${unit.unitNo}`,
+                  categoryName: cat.name,
+                  unitNo: unit.unitNo,
+                  maxMarks: unit.totalMarks,
+                  contrib: contrib,
+                  relativeWeight: 0
+                });
+              }
+            }
+          });
+        });
+
+        // Calculate relative weights for this CLO
+        const totalCLOContrib = list.reduce((sum, ass) => sum + ass.contrib, 0);
+
+        if (totalCLOContrib > 0) {
+          list.forEach(ass => {
+            ass.relativeWeight = (ass.contrib / totalCLOContrib) * 100;
+          });
+        } else if (list.length > 0) {
+          list.forEach(ass => {
+            ass.relativeWeight = 100 / list.length;
+          });
+        }
+
+        // Round weights to sum to exactly 100%
+        if (list.length > 0) {
+          const roundedWeights = list.map(ass => Math.round(ass.relativeWeight));
+          const roundedSum = roundedWeights.reduce((s, w) => s + w, 0);
+          if (roundedSum !== 100) {
+            const maxVal = Math.max(...roundedWeights);
+            const maxIdx = roundedWeights.indexOf(maxVal);
+            if (maxIdx !== -1) {
+              roundedWeights[maxIdx] += (100 - roundedSum);
+            }
+          }
+          list.forEach((ass, idx) => {
+            ass.relativeWeight = roundedWeights[idx];
+          });
+        }
+
+        if (list.length === 0) {
+          return {
+            code,
+            description,
+            mappedGA,
+            percentage: 0,
+            status: 'Not Assessed'
+          };
+        }
+
+        // Compute student's weighted CLO score
+        let cloTotalScore = 0;
+        list.forEach(ass => {
+          let obtainedMark = 0;
+          if (ass.questionId) {
+            obtainedMark = std.marks?.[`q-${ass.categoryName}-${ass.unitNo}-${ass.questionId}`] ?? 0;
+            if (obtainedMark === 0 && instCourse?.obeMarks?.[stdRegNo]?.[ass.questionId] !== undefined) {
+              obtainedMark = instCourse.obeMarks[stdRegNo][ass.questionId];
+            }
+          } else {
+            obtainedMark = std.marks?.[`${ass.categoryName}-${ass.unitNo}`] ?? 0;
+          }
+          const pct = ass.maxMarks > 0 ? (obtainedMark / ass.maxMarks) : 0;
+          const weightedScore = pct * ass.relativeWeight;
+          cloTotalScore += weightedScore;
+        });
+
+        const finalPct = Math.round(cloTotalScore * 10) / 10;
         return {
-          code: clo,
+          code,
+          description,
+          mappedGA,
+          percentage: finalPct,
+          status: finalPct >= 50 ? 'Attained' : 'Not attained'
+        };
+      });
+    } else {
+      computedCLOs = Array.from({ length: numCLOsToUse }, (_, i) => {
+        const defaultCode = `CLO-${i + 1}`;
+        const existingCloObj = courseCLODataList[i] || courseCLODataList.find(item => item.code === defaultCode);
+        const code = existingCloObj?.code || defaultCode;
+        const description = existingCloObj?.description || `Course Learning Outcome ${i + 1}`;
+        const mappedGA = existingCloObj?.mappedGA || existingCloObj?.mapped_ga || null;
+
+        return {
+          code,
+          description,
+          mappedGA,
           percentage: 0,
           status: 'Not Assessed'
         };
-      }
+      });
+    }
 
-      const pct = max > 0 ? (score / max) * 100 : 0;
-      console.log(`[STUDENT_MARKS_DEBUG]   - ${clo} assessment total: ${score} / ${max} = ${pct.toFixed(1)}%`);
-      return {
-        code: clo,
-        percentage: pct,
-        status: pct >= 50 ? 'Attained' : 'Needs Improvement'
-      };
-    });
+    const finalTx = finalTranscripts.find(
+      t => t.courseCode?.trim().toUpperCase() === courseCode.trim().toUpperCase()
+    );
+
+    if (finalTx) {
+      const finalPct = finalTx.finalPercentage ?? finalTx.percentage;
+      if (finalPct !== undefined && finalPct !== null) {
+        aggregate = finalPct;
+        hasAnyMarks = true;
+        letterGrade = finalTx.grade ?? letterGrade;
+        points = finalTx.gradePoints ?? finalTx.points ?? points;
+      }
+    }
 
     console.log(`[STUDENT_MARKS_DEBUG] Final computed aggregate for ${courseCode}: ${aggregate.toFixed(2)}% (Grade: ${letterGrade}, GP: ${points})`);
 
@@ -833,7 +1059,7 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
 
   // Aggregate Course Learning Outcomes (CLO) for the selected filter course
   const filteredCLOList = useMemo(() => {
-    const list: { courseCode: string; courseTitle: string; cloCode: string; percentage: number; status: string }[] = [];
+    const list: { courseCode: string; courseTitle: string; cloCode: string; description: string; mappedGA: string | null; percentage: number; status: string }[] = [];
     
     enrolledCoursesWithGrades.forEach(c => {
       if (cloFilterCourseCode !== 'all' && c.code !== cloFilterCourseCode) return;
@@ -843,6 +1069,8 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
           courseCode: c.code,
           courseTitle: c.title,
           cloCode: clo.code,
+          description: clo.description || `Course Learning Outcome for ${clo.code}`,
+          mappedGA: clo.mappedGA || null,
           percentage: Math.round(clo.percentage),
           status: clo.status
         });
@@ -890,7 +1118,25 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
               categoryObtainedSum += std.marks?.[qKey] ?? 0;
             });
           } else {
-            const totalMarks = matchingUnit ? matchingUnit.totalMarks : 10;
+            let totalMarks = matchingUnit ? matchingUnit.totalMarks : 0;
+            if (!totalMarks) {
+              const catNameLower = cat.name.toLowerCase();
+              if (catNameLower.includes('mid term') || catNameLower.includes('midterm') || catNameLower.includes('mid-term')) {
+                totalMarks = 30;
+              } else if (catNameLower.includes('final')) {
+                totalMarks = 40;
+              } else if (catNameLower.includes('presentation')) {
+                totalMarks = 10;
+              } else {
+                const dKey = `${cat.name}-${u}`;
+                const directMark = std.marks?.[dKey] ?? 0;
+                if (directMark > 40) totalMarks = 50;
+                else if (directMark > 30) totalMarks = 40;
+                else if (directMark > 20) totalMarks = 30;
+                else if (directMark > 10) totalMarks = 20;
+                else totalMarks = 10;
+              }
+            }
             categoryMaxMarksSum += totalMarks;
             const dKey = `${cat.name}-${u}`;
             categoryObtainedSum += std.marks?.[dKey] ?? 0;
@@ -1326,31 +1572,95 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
                                           {course.results.clos.map((clo, idx) => {
                                             const attained = clo.status === 'Attained';
                                             return (
-                                              <div key={idx} className="bg-white border border-slate-200 p-4 rounded-lg space-y-2.5 shadow-xs">
-                                                <div className="flex items-center justify-between">
-                                                  <span className="font-mono text-xs font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">{clo.code}</span>
-                                                  <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full border ${
-                                                    attained 
-                                                      ? 'bg-emerald-100 text-emerald-800 border-emerald-200' 
-                                                      : 'bg-amber-100 text-amber-800 border-amber-200'
-                                                  }`}>
-                                                    {clo.status}
-                                                  </span>
+                                              <div key={idx} className="bg-white border border-slate-200 p-4 rounded-lg space-y-2.5 shadow-xs flex flex-col justify-between">
+                                                <div className="space-y-1.5">
+                                                  <div className="flex items-center justify-between">
+                                                    <div className="flex items-center gap-2">
+                                                      <span className="font-mono text-xs font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">{clo.code}</span>
+                                                      {clo.mappedGA && (
+                                                        <span className="font-mono text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100">
+                                                          GA Mapping: {clo.mappedGA}
+                                                        </span>
+                                                      )}
+                                                    </div>
+                                                    <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full border ${
+                                                      attained 
+                                                        ? 'bg-emerald-100 text-emerald-800 border-emerald-200' 
+                                                        : 'bg-amber-100 text-amber-800 border-amber-200'
+                                                    }`}>
+                                                      {clo.status}
+                                                    </span>
+                                                  </div>
+                                                  <p className="text-xs text-slate-600 font-medium leading-relaxed">
+                                                    {clo.description}
+                                                  </p>
                                                 </div>
-                                                <div className="flex items-center justify-between text-xs text-slate-500 font-medium pt-0.5">
-                                                  <span>Outcome Mastery:</span>
-                                                  <span className="font-bold text-slate-700 font-mono">{Math.round(clo.percentage)}%</span>
-                                                </div>
-                                                <div className="w-full bg-slate-150 h-2 rounded-full overflow-hidden">
-                                                  <div 
-                                                    className={`h-full rounded-full ${attained ? 'bg-emerald-500' : 'bg-amber-500'}`}
-                                                    style={{ width: `${clo.percentage}%` }}
-                                                  />
+                                                <div className="space-y-1.5 pt-2 border-t border-slate-100">
+                                                  <div className="flex items-center justify-between text-xs text-slate-500 font-semibold">
+                                                    <span>Outcome Mastery:</span>
+                                                    <span className="font-bold text-slate-700 font-mono">{Math.round(clo.percentage)}%</span>
+                                                  </div>
+                                                  <div className="w-full bg-slate-150 h-2 rounded-full overflow-hidden">
+                                                    <div 
+                                                      className={`h-full rounded-full ${attained ? 'bg-emerald-500' : 'bg-amber-500'}`}
+                                                      style={{ width: `${clo.percentage}%` }}
+                                                    />
+                                                  </div>
                                                 </div>
                                               </div>
                                             );
                                           })}
                                         </div>
+                                      </div>
+
+                                      {/* GA Attainments for Expanded Course */}
+                                      <div className="pt-2">
+                                        <h5 className="text-xs font-bold uppercase text-indigo-950 tracking-wider flex items-center gap-1.5 pb-2 border-b border-slate-200">
+                                          <Award className="h-4.5 w-4.5 text-indigo-600" />
+                                          Mapped Graduate Attributes (GAs) & Current Profile
+                                        </h5>
+                                        {(!course.mappedGAs || course.mappedGAs.length === 0) ? (
+                                          <div className="text-xs text-slate-400 font-semibold py-2">
+                                            No Graduate Attributes mapped to this course.
+                                          </div>
+                                        ) : (
+                                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-3">
+                                            {course.mappedGAs.map((gaId: string) => {
+                                              const gaDef = gas.find(g => g.id === gaId);
+                                              const gaAttObj = gaAttainmentProfile.find(p => p.id === gaId);
+                                              const score = gaAttObj ? gaAttObj.score : 0;
+                                              const statusColor = score >= 75 ? 'text-indigo-600 bg-indigo-50 border-indigo-100' : score >= 50 ? 'text-emerald-700 bg-emerald-50 border-emerald-100' : 'text-amber-700 bg-amber-50 border-amber-100';
+                                              const barColor = score >= 75 ? 'bg-indigo-600' : score >= 50 ? 'bg-emerald-500' : 'bg-amber-500';
+
+                                              return (
+                                                <div key={gaId} className="bg-white border border-slate-200 p-4 rounded-lg space-y-2 shadow-xs flex flex-col justify-between">
+                                                  <div className="space-y-1">
+                                                    <div className="flex items-center justify-between">
+                                                      <span className="font-mono text-xs font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded border border-slate-200 uppercase tracking-tight">{gaId}</span>
+                                                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${statusColor}`}>
+                                                        {score >= 75 ? 'Excellent' : score >= 50 ? 'Satisfied' : 'Review Needed'}
+                                                      </span>
+                                                    </div>
+                                                    <h6 className="text-xs font-bold text-slate-800 tracking-tight leading-snug">{gaDef?.name || gaId}</h6>
+                                                    <p className="text-[10px] text-slate-400 font-medium leading-relaxed line-clamp-2">{gaDef?.description}</p>
+                                                  </div>
+                                                  <div className="space-y-1.5 pt-2 border-t border-slate-100">
+                                                    <div className="flex justify-between items-center text-[10px] font-semibold text-slate-500">
+                                                      <span>Overall GA Attainment:</span>
+                                                      <span className="font-mono text-indigo-950 font-black">{score.toFixed(1)}%</span>
+                                                    </div>
+                                                    <div className="w-full bg-slate-150 h-2 rounded-full overflow-hidden">
+                                                      <div 
+                                                        className={`h-full rounded-full ${barColor}`}
+                                                        style={{ width: `${score}%` }}
+                                                      />
+                                                    </div>
+                                                  </div>
+                                                </div>
+                                              );
+                                            })}
+                                          </div>
+                                        )}
                                       </div>
                                     </div>
                                   )}
@@ -1407,9 +1717,16 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
                         <div key={idx} className="bg-slate-50/50 hover:bg-white border border-slate-200/60 p-4.5 rounded-2xl shadow-sm transition-all flex flex-col justify-between gap-3">
                           <div className="space-y-1.5">
                             <div className="flex items-center justify-between">
-                              <span className="font-mono text-[11px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100/40">
-                                {clo.courseCode} • {clo.cloCode}
-                              </span>
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-mono text-[11px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100/40">
+                                  {clo.courseCode} • {clo.cloCode}
+                                </span>
+                                {clo.mappedGA && (
+                                  <span className="font-mono text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100">
+                                    GA Mapping: {clo.mappedGA}
+                                  </span>
+                                )}
+                              </div>
                               <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${
                                 attained 
                                   ? 'bg-emerald-50 text-emerald-700 border-emerald-100' 
@@ -1419,8 +1736,8 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
                               </span>
                             </div>
                             <h4 className="text-xs font-bold text-slate-800 line-clamp-1">{clo.courseTitle}</h4>
-                            <p className="text-[10px] text-slate-400 leading-relaxed font-medium">
-                              This learning outcome measures specific subject-matter competencies, laboratory validations, or design objectives assessed inside final assessments.
+                            <p className="text-[10px] text-slate-500 leading-relaxed font-medium">
+                              {clo.description}
                             </p>
                           </div>
 
