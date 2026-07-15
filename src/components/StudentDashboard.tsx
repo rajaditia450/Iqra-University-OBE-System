@@ -666,6 +666,45 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
 
     if (instCourse && std) {
       const activeCats = instCourse.categories.filter(c => c.percentage > 0);
+      const obeQuestions = instCourse.obeQuestions || [];
+
+      // Reconstruct unitsData to ensure we have all questions dynamically populated from the flat obeQuestions list
+      const reconstructedUnitsData = JSON.parse(JSON.stringify(instCourse.unitsData || {}));
+      activeCats.forEach(cat => {
+        if (!reconstructedUnitsData[cat.name]) {
+          reconstructedUnitsData[cat.name] = [];
+        }
+        for (let u = 1; u <= cat.units; u++) {
+          let unitObj = reconstructedUnitsData[cat.name].find((unit: any) => unit.unitNo === u);
+          if (!unitObj) {
+            unitObj = {
+              unitNo: u,
+              weightage: 100 / cat.units,
+              totalMarks: 10,
+              questions: [],
+              mappedCLOs: []
+            };
+            reconstructedUnitsData[cat.name].push(unitObj);
+          }
+          if (!unitObj.questions || unitObj.questions.length === 0) {
+            const matchingQuestions = obeQuestions.filter((q: any) => {
+              const qCat = q.categoryName || q.category_name || '';
+              const qUnit = q.unitNo || q.unit_no || 1;
+              return qCat.trim().toLowerCase() === cat.name.trim().toLowerCase() && Number(qUnit) === u;
+            });
+            if (matchingQuestions.length > 0) {
+              unitObj.questions = matchingQuestions.map((q: any) => ({
+                id: q.id,
+                questionName: q.questionName || q.question_name || q.name || `Question ${q.id}`,
+                name: q.name || q.questionName || q.question_name || `Question ${q.id}`,
+                maxMarks: q.maxMarks || q.max_marks || 10,
+                mappedCLOs: q.mappedCLOs || q.mapped_clos || q.mappedClos || []
+              }));
+              unitObj.totalMarks = unitObj.questions.reduce((sum: number, q: any) => sum + q.maxMarks, 0);
+            }
+          }
+        }
+      });
 
       computedCLOs = Array.from({ length: numCLOsToUse }, (_, i) => {
         const defaultCode = `CLO-${i + 1}`;
@@ -689,7 +728,7 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
         const list: LocalCLOAssessment[] = [];
 
         activeCats.forEach(cat => {
-          const units = instCourse.unitsData[cat.name] || [];
+          const units = reconstructedUnitsData[cat.name] || [];
           units.forEach(unit => {
             const unitWeightage = unit.weightage ?? (cat.units > 0 ? (100 / cat.units) : 0);
 
@@ -778,12 +817,23 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
         list.forEach(ass => {
           let obtainedMark = 0;
           if (ass.questionId) {
-            obtainedMark = std.marks?.[`q-${ass.categoryName}-${ass.unitNo}-${ass.questionId}`] ?? 0;
-            if (obtainedMark === 0 && instCourse?.obeMarks?.[stdRegNo]?.[ass.questionId] !== undefined) {
-              obtainedMark = instCourse.obeMarks[stdRegNo][ass.questionId];
+            const key1 = `q-${ass.categoryName}-${ass.unitNo}-${ass.questionId}`;
+            const key2 = `q-${ass.categoryName.toLowerCase()}-${ass.unitNo}-${ass.questionId}`;
+            obtainedMark = std.marks?.[key1] ?? std.marks?.[key2] ?? 0;
+            
+            if (obtainedMark === 0) {
+              if (instCourse?.obeMarks?.[stdRegNo]?.[ass.questionId] !== undefined) {
+                obtainedMark = instCourse.obeMarks[stdRegNo][ass.questionId];
+              } else if (instCourse?.obeMarks?.[ass.questionId] !== undefined) {
+                obtainedMark = (instCourse.obeMarks as any)[ass.questionId];
+              } else if (std.marks?.[ass.questionId] !== undefined) {
+                obtainedMark = std.marks[ass.questionId];
+              }
             }
           } else {
-            obtainedMark = std.marks?.[`${ass.categoryName}-${ass.unitNo}`] ?? 0;
+            const key1 = `${ass.categoryName}-${ass.unitNo}`;
+            const key2 = `${ass.categoryName.toLowerCase()}-${ass.unitNo}`;
+            obtainedMark = std.marks?.[key1] ?? std.marks?.[key2] ?? 0;
           }
           const pct = ass.maxMarks > 0 ? (obtainedMark / ass.maxMarks) : 0;
           const weightedScore = pct * ass.relativeWeight;
