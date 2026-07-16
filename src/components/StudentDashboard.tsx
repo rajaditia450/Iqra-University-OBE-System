@@ -551,492 +551,34 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
   };
 
   // Helper to retrieve realistic grades/attainments based on the student's registration ID and backend responses
+  // Helper to retrieve realistic grades/attainments based on the student's registration ID and backend responses
   const computeStudentCourseResult = (stdRegNo: string, courseCode: string) => {
-    // Look up if there is an Instructor Course with these marks
-    const instCourse = instructorCourses.find(ic => ic.code === courseCode);
-    const std = instCourse?.students.find(s => normalizeRegNo(s.regNo) === normalizeRegNo(stdRegNo));
-
-    console.log(`[STUDENT_MARKS_DEBUG] Calculating results for Student: "${stdRegNo}", Course: "${courseCode}"`);
-    if (!instCourse) {
-      console.warn(`[STUDENT_MARKS_DEBUG] No matching course structure found for "${courseCode}" in instructorCourses.`);
-    }
-    if (!std) {
-      console.warn(`[STUDENT_MARKS_DEBUG] No matching student record found for "${stdRegNo}" inside course "${courseCode}".`);
-    }
-
-    // Fuzzy matcher to handle variations in category names (e.g. "Final" vs "Final Term", "Assignments" vs "Assignment")
-    const matchCategoryName = (cat1: string, cat2: string): boolean => {
-      const c1 = String(cat1 || '').trim().toLowerCase();
-      const c2 = String(cat2 || '').trim().toLowerCase();
-      if (c1 === c2) return true;
-      if ((c1.startsWith('final') && c2.startsWith('final')) || (c1.includes('final') && c2.includes('final'))) return true;
-      if ((c1.startsWith('mid') && c2.startsWith('mid')) || (c1.includes('mid') && c2.includes('mid'))) return true;
-      if ((c1.startsWith('quiz') && c2.startsWith('quiz')) || (c1.includes('quiz') && c2.includes('quiz'))) return true;
-      if ((c1.startsWith('assign') && c2.startsWith('assign')) || (c1.includes('assign') && c2.includes('assign'))) return true;
-      return false;
-    };
-
-    // Extremely robust helper to find obtained mark for a question ID across local state, obeMarks, or studentMarks flat keys
-    const getObeMark = (courseObj: any, regNo: string, questionId: any): number => {
-      if (!courseObj) return 0;
-      const obeMarks = courseObj.obeMarks;
-      const questionIdStr = String(questionId || '');
-      
-      // Case 1: Nested obeMarks, e.g. obeMarks[regNo][questionId]
-      if (obeMarks && typeof obeMarks === 'object') {
-        const studentMap = obeMarks[regNo];
-        if (studentMap && typeof studentMap === 'object') {
-          if (studentMap[questionIdStr] !== undefined) return Number(studentMap[questionIdStr]);
-        }
-        // Case-insensitive registration lookup inside nested obeMarks
-        for (const key of Object.keys(obeMarks)) {
-          if (key.trim().toLowerCase() === regNo.trim().toLowerCase()) {
-            const nestedMap = obeMarks[key];
-            if (nestedMap && nestedMap[questionIdStr] !== undefined) {
-              return Number(nestedMap[questionIdStr]);
-            }
-          }
-        }
-      }
-
-      // Case 2: Flat obeMarks directly mapping questionId -> score for logged-in student
-      if (obeMarks && obeMarks[questionIdStr] !== undefined) {
-        return Number(obeMarks[questionIdStr]);
-      }
-
-      // Case 3: Flat std.marks using q-Category-Unit-QuestionID, Category-Unit, or just QuestionID
-      const studentObj = courseObj.students?.find((s: any) => normalizeRegNo(s.regNo) === normalizeRegNo(regNo));
-      if (studentObj && studentObj.marks) {
-        if (studentObj.marks[questionIdStr] !== undefined) {
-          return Number(studentObj.marks[questionIdStr]);
-        }
-        // Fuzzy key match on keys containing the questionIdStr
-        for (const key of Object.keys(studentObj.marks)) {
-          if (key.endsWith(`-${questionIdStr}`) || key === `q-${questionIdStr}`) {
-            return Number(studentObj.marks[key]);
-          }
-        }
-      }
-
-      return 0;
-    };
-
-    let aggregate = 0;
-    let hasAnyMarks = false;
-    let computedCLOs: { code: string; percentage: number; status: string }[] = [];
-
-    // Dynamically reconstruct unitsData from flat obeQuestions list for accurate, aligned calculations
-    const reconstructedUnits = {} as Record<string, any[]>;
-    
-    if (instCourse) {
-      const activeCats = instCourse.categories.filter(c => c.percentage > 0);
-      const obeQuestions = instCourse.obeQuestions || [];
-      
-      activeCats.forEach(cat => {
-        let existingUnits: any[] = [];
-        const existingKey = Object.keys(instCourse.unitsData || {}).find(k => matchCategoryName(k, cat.name));
-        if (existingKey) {
-          existingUnits = JSON.parse(JSON.stringify(instCourse.unitsData[existingKey] || []));
-        }
-        
-        reconstructedUnits[cat.name] = [];
-        const catUnitsCount = cat.units > 0 ? cat.units : 1;
-        
-        for (let u = 1; u <= catUnitsCount; u++) {
-          let unitObj = existingUnits.find((unit: any) => (unit.unitNo === u || unit.unit_no === u));
-          if (!unitObj) {
-            unitObj = {
-              unitNo: u,
-              weightage: 100 / catUnitsCount,
-              totalMarks: 0,
-              questions: [],
-              mappedCLOs: []
-            };
-          } else {
-            unitObj = JSON.parse(JSON.stringify(unitObj));
-            unitObj.unitNo = unitObj.unitNo || unitObj.unit_no || u;
-            unitObj.weightage = unitObj.weightage || (100 / catUnitsCount);
-          }
-          
-          if (!unitObj.questions || unitObj.questions.length === 0) {
-            const matchingQuestions = obeQuestions.filter((q: any) => {
-              let qCat = q.categoryName || q.category_name || '';
-              let qUnit = q.unitNo || q.unit_no || null;
-              
-              if (!qCat && String(q.id).startsWith('q-')) {
-                const parts = String(q.id).split('-');
-                if (parts.length >= 4) {
-                  qCat = parts[1];
-                  qUnit = Number(parts[2]);
-                } else if (parts.length === 3) {
-                  qCat = parts[1];
-                  qUnit = 1;
-                }
-              }
-              
-              if (qUnit === null || isNaN(Number(qUnit))) {
-                qUnit = 1;
-              }
-              
-              return matchCategoryName(qCat, cat.name) && Number(qUnit) === u;
-            });
-            
-            if (matchingQuestions.length > 0) {
-              unitObj.questions = matchingQuestions.map((q: any) => ({
-                id: q.id,
-                questionName: q.questionName || q.question_name || q.name || `Question ${q.id}`,
-                name: q.name || q.questionName || q.question_name || `Question ${q.id}`,
-                maxMarks: q.maxMarks || q.max_marks || 10,
-                mappedCLOs: q.mappedCLOs || q.mapped_clos || q.mappedClos || []
-              }));
-            }
-          }
-          
-          if (unitObj.questions && unitObj.questions.length > 0) {
-            unitObj.totalMarks = unitObj.questions.reduce((sum: number, q: any) => sum + (q.maxMarks || q.max_marks || 0), 0);
-          } else if (!unitObj.totalMarks) {
-            const catLower = cat.name.toLowerCase();
-            if (catLower.includes('mid')) unitObj.totalMarks = 30;
-            else if (catLower.includes('final')) unitObj.totalMarks = 40;
-            else unitObj.totalMarks = 10;
-          }
-          
-          reconstructedUnits[cat.name].push(unitObj);
-        }
-      });
-    }
-
-    if (instCourse && std) {
-      const activeCats = instCourse.categories.filter(c => c.percentage > 0);
-      let totalAggregate = 0;
-      
-      console.log(`[STUDENT_MARKS_DEBUG] Active categories to calculate:`, activeCats.map(c => `${c.name} (${c.percentage}%)`));
-
-      activeCats.forEach(cat => {
-        const units = reconstructedUnits[cat.name] || [];
-        units.forEach(unit => {
-          const unitWeightage = unit.weightage ?? (cat.units > 0 ? (100 / cat.units) : 0);
-          let unitObtained = 0;
-          const totalMarks = unit.totalMarks || 10;
-          
-          if (unit.questions && unit.questions.length > 0) {
-            unit.questions.forEach((q: any) => {
-              const mark = getFuzzyStudentMark(std.marks, cat.name, unit.unitNo, q.id);
-              unitObtained += mark;
-            });
-          } else {
-            const directMark = getFuzzyStudentMark(std.marks, cat.name, unit.unitNo);
-            unitObtained += directMark;
-          }
-          
-          if (totalMarks > 0) {
-            const contribution = (unitObtained / totalMarks) * (unitWeightage / 100) * cat.percentage;
-            totalAggregate += contribution;
-            console.log(`[STUDENT_MARKS_DEBUG]   - ${cat.name} unit #${unit.unitNo}: ${unitObtained} / ${totalMarks} (contrib: ${contribution.toFixed(2)}%)`);
-          }
-          
-          if (unitObtained > 0 || (std.marks && Object.keys(std.marks).length > 0)) {
-            hasAnyMarks = true;
-          }
-        });
-      });
-
-      if (hasAnyMarks) {
-        aggregate = totalAggregate;
-      }
-    }
-
-    if (!hasAnyMarks) {
-      aggregate = 0;
-    }
-
-    // Calculate Letter Grade and GP points based on Active system of instCourse
-    let letterGrade = '-';
-    let points = 0.0;
-    const system = instCourse?.selectedGradingSystem || 'ready1';
-
-    if (hasAnyMarks) {
-      if (system === 'ready1') {
-        if (aggregate >= 88) { letterGrade = 'A'; points = 4.0; }
-        else if (aggregate >= 81) { letterGrade = 'B+'; points = 3.5; }
-        else if (aggregate >= 74) { letterGrade = 'B'; points = 3.0; }
-        else if (aggregate >= 67) { letterGrade = 'C+'; points = 2.5; }
-        else if (aggregate >= 60) { letterGrade = 'C'; points = 2.0; }
-        else { letterGrade = 'F'; points = 0.0; }
-      } else if (system === 'ready2') {
-        if (aggregate >= 90) { letterGrade = 'A+'; points = 4.0; }
-        else if (aggregate >= 85) { letterGrade = 'A'; points = 4.0; }
-        else if (aggregate >= 80) { letterGrade = 'A-'; points = 3.7; }
-        else if (aggregate >= 75) { letterGrade = 'B+'; points = 3.3; }
-        else if (aggregate >= 70) { letterGrade = 'B'; points = 3.0; }
-        else if (aggregate >= 65) { letterGrade = 'B-'; points = 2.7; }
-        else if (aggregate >= 60) { letterGrade = 'C+'; points = 2.3; }
-        else if (aggregate >= 55) { letterGrade = 'C'; points = 2.0; }
-        else if (aggregate >= 50) { letterGrade = 'D'; points = 1.0; }
-        else { letterGrade = 'F'; points = 0.0; }
-      } else if (system === 'custom') {
-        const DEFAULT_CUSTOM_GRADES = [
-          { grade: 'A', percentage: '88% - 100%', points: '4' },
-          { grade: 'B+', percentage: '81% - 87%', points: '3.5' },
-          { grade: 'B', percentage: '74% - 80%', points: '3' },
-          { grade: 'C+', percentage: '67% - 73%', points: '2.5' },
-          { grade: 'C', percentage: '60% - 66%', points: '2' },
-          { grade: 'F', percentage: 'Below 60%', points: '0' },
-        ];
-        const list = instCourse?.customGradingSystem || DEFAULT_CUSTOM_GRADES;
-        
-        const parsePercentRangeLocal = (pctStr: string): { min: number; max: number } => {
-          if (!pctStr) return { min: 0, max: 0 };
-          const clean = pctStr.replace(/%/g, '').trim();
-          if (clean.toLowerCase().includes('below')) {
-            const val = parseInt(clean.replace(/below/i, '').trim(), 10);
-            return { min: 0, max: isNaN(val) ? 0 : val };
-          }
-          const parts = clean.split(/[-–to]/);
-          if (parts.length === 2) {
-            const minVal = parseInt(parts[0].trim(), 10);
-            const maxVal = parseInt(parts[1].trim(), 10);
-            return {
-              min: isNaN(minVal) ? 0 : minVal,
-              max: isNaN(maxVal) ? 0 : maxVal
-            };
-          }
-          const single = parseInt(clean, 10);
-          return { min: isNaN(single) ? 0 : single, max: isNaN(single) ? 0 : single };
-        };
-
-        let found = false;
-        for (const tier of list) {
-          const range = parsePercentRangeLocal(tier.percentage);
-          if (aggregate >= range.min && aggregate <= range.max) {
-            letterGrade = tier.grade;
-            points = parseFloat(tier.points) || 0.0;
-            found = true;
-            break;
-          }
-        }
-        if (!found) {
-          const sorted = [...list].sort((a, b) => {
-            const rA = parsePercentRangeLocal(a.percentage);
-            const rB = parsePercentRangeLocal(b.percentage);
-            return rA.min - rB.min;
-          });
-          if (sorted.length > 0) {
-            const lowestRange = parsePercentRangeLocal(sorted[0].percentage);
-            if (aggregate < lowestRange.min) {
-              letterGrade = 'F';
-              points = 0.0;
-            } else {
-              const highestTier = sorted[sorted.length - 1];
-              letterGrade = highestTier.grade;
-              points = parseFloat(highestTier.points) || 0.0;
-            }
-          } else {
-            letterGrade = 'F';
-            points = 0.0;
-          }
-        }
-      } else {
-        if (aggregate >= 88) { letterGrade = 'A'; points = 4.0; }
-        else if (aggregate >= 81) { letterGrade = 'B+'; points = 3.5; }
-        else if (aggregate >= 74) { letterGrade = 'B'; points = 3.0; }
-        else if (aggregate >= 67) { letterGrade = 'C+'; points = 2.5; }
-        else if (aggregate >= 60) { letterGrade = 'C'; points = 2.0; }
-        else { letterGrade = 'F'; points = 0.0; }
-      }
-    }
-
-    // CLO Performance Calculations (Accurate Instructor Module CLO Reports Logic)
-    const courseCLODataList = allCoursesCLOs[courseCode] || [];
-    const numCLOsToUse = courseCLODataList.length > 0 ? courseCLODataList.length : (instCourse?.cloCount || 4);
-
-    if (instCourse && std) {
-      const activeCats = instCourse.categories.filter(c => c.percentage > 0);
-
-      computedCLOs = Array.from({ length: numCLOsToUse }, (_, i) => {
-        const defaultCode = `CLO-${i + 1}`;
-        const existingCloObj = courseCLODataList[i] || courseCLODataList.find(item => item.code === defaultCode);
-        const code = existingCloObj?.code || defaultCode;
-        const description = existingCloObj?.description || `Course Learning Outcome ${i + 1}`;
-        const mappedGA = existingCloObj?.mappedGA || existingCloObj?.mapped_ga || null;
-
-        // Check if there is pre-calculated score from backend!
-        const backendPct = existingCloObj?.percentage ?? existingCloObj?.attainment ?? existingCloObj?.score ?? existingCloObj?.obtained_attainment ?? existingCloObj?.clo_attainment;
-        const backendStatus = existingCloObj?.status ?? existingCloObj?.attained ?? existingCloObj?.attainment_status;
-
-        if (backendPct !== undefined && backendPct !== null) {
-          const finalPct = Math.round(Number(backendPct) * 10) / 10;
-          return {
-            code,
-            description,
-            mappedGA,
-            percentage: finalPct,
-            status: backendStatus || (finalPct >= 50 ? 'Attained' : 'Not attained')
-          };
-        }
-
-        const normalizedCLO = code.trim().toUpperCase();
-
-        interface LocalCLOAssessment {
-          id: string;
-          categoryName: string;
-          unitNo: number;
-          questionId?: string;
-          maxMarks: number;
-          contrib: number;
-          relativeWeight: number;
-        }
-
-        const list: LocalCLOAssessment[] = [];
-
-        activeCats.forEach(cat => {
-          const units = reconstructedUnits[cat.name] || [];
-          units.forEach(unit => {
-            const unitWeightage = unit.weightage ?? (cat.units > 0 ? (100 / cat.units) : 0);
-
-            if (unit.questions && unit.questions.length > 0) {
-              unit.questions.forEach((q: any) => {
-                const qCLOs = q.mappedCLOs || [];
-                const matches = qCLOs.some((cloCode: string) => 
-                  String(cloCode).trim().toUpperCase() === normalizedCLO || 
-                  String(cloCode).trim().toUpperCase() === defaultCode.toUpperCase()
-                );
-                if (matches) {
-                  const contrib = (q.maxMarks / unit.totalMarks) * (unitWeightage / 100) * cat.percentage;
-                  list.push({
-                    id: `q-${cat.name}-${unit.unitNo}-${q.id}`,
-                    categoryName: cat.name,
-                    unitNo: unit.unitNo,
-                    questionId: q.id,
-                    maxMarks: q.maxMarks,
-                    contrib: contrib,
-                    relativeWeight: 0
-                  });
-                }
-              });
-            } else {
-              const unitCLOs = unit.mappedCLOs || [];
-              const matches = unitCLOs.some((cloCode: string) => 
-                String(cloCode).trim().toUpperCase() === normalizedCLO || 
-                String(cloCode).trim().toUpperCase() === defaultCode.toUpperCase()
-              );
-              if (matches) {
-                const contrib = (unitWeightage / 100) * cat.percentage;
-                list.push({
-                  id: `${cat.name}-${unit.unitNo}`,
-                  categoryName: cat.name,
-                  unitNo: unit.unitNo,
-                  maxMarks: unit.totalMarks,
-                  contrib: contrib,
-                  relativeWeight: 0
-                });
-              }
-            }
-          });
-        });
-
-        // Calculate relative weights for this CLO
-        const totalCLOContrib = list.reduce((sum, ass) => sum + ass.contrib, 0);
-
-        if (totalCLOContrib > 0) {
-          list.forEach(ass => {
-            ass.relativeWeight = (ass.contrib / totalCLOContrib) * 100;
-          });
-        } else if (list.length > 0) {
-          list.forEach(ass => {
-            ass.relativeWeight = 100 / list.length;
-          });
-        }
-
-        // Round weights to sum to exactly 100%
-        if (list.length > 0) {
-          const roundedWeights = list.map(ass => Math.round(ass.relativeWeight));
-          const roundedSum = roundedWeights.reduce((s, w) => s + w, 0);
-          if (roundedSum !== 100) {
-            const maxVal = Math.max(...roundedWeights);
-            const maxIdx = roundedWeights.indexOf(maxVal);
-            if (maxIdx !== -1) {
-              roundedWeights[maxIdx] += (100 - roundedSum);
-            }
-          }
-          list.forEach((ass, idx) => {
-            ass.relativeWeight = roundedWeights[idx];
-          });
-        }
-
-        if (list.length === 0) {
-          return {
-            code,
-            description,
-            mappedGA,
-            percentage: 0,
-            status: 'Not Assessed'
-          };
-        }
-
-        // Compute student's weighted CLO score
-        let cloTotalScore = 0;
-        list.forEach(ass => {
-          let obtainedMark = 0;
-          if (ass.questionId) {
-            obtainedMark = getFuzzyStudentMark(std.marks, ass.categoryName, ass.unitNo, ass.questionId);
-          } else {
-            obtainedMark = getFuzzyStudentMark(std.marks, ass.categoryName, ass.unitNo);
-          }
-          const pct = ass.maxMarks > 0 ? (obtainedMark / ass.maxMarks) : 0;
-          const weightedScore = pct * ass.relativeWeight;
-          cloTotalScore += weightedScore;
-        });
-
-        const finalPct = Math.round(cloTotalScore * 10) / 10;
-        return {
-          code,
-          description,
-          mappedGA,
-          percentage: finalPct,
-          status: finalPct >= 50 ? 'Attained' : 'Not attained'
-        };
-      });
-    } else {
-      computedCLOs = Array.from({ length: numCLOsToUse }, (_, i) => {
-        const defaultCode = `CLO-${i + 1}`;
-        const existingCloObj = courseCLODataList[i] || courseCLODataList.find(item => item.code === defaultCode);
-        const code = existingCloObj?.code || defaultCode;
-        const description = existingCloObj?.description || `Course Learning Outcome ${i + 1}`;
-        const mappedGA = existingCloObj?.mappedGA || existingCloObj?.mapped_ga || null;
-
-        return {
-          code,
-          description,
-          mappedGA,
-          percentage: 0,
-          status: 'Not Assessed'
-        };
-      });
-    }
-
-    const finalTx = finalTranscripts.find(
-      t => t.courseCode?.trim().toUpperCase() === courseCode.trim().toUpperCase()
+    // Get course from /api/student/courses/ response (stored in state rawStudentCourses)
+    const course = rawStudentCourses?.find(
+      (c: any) => c.code?.toUpperCase() === courseCode?.toUpperCase()
     );
 
-    if (finalTx) {
-      const finalPct = finalTx.finalPercentage ?? finalTx.percentage;
-      if (finalPct !== undefined && finalPct !== null) {
-        aggregate = finalPct;
-        hasAnyMarks = true;
-        letterGrade = finalTx.grade ?? letterGrade;
-        points = finalTx.gradePoints ?? finalTx.points ?? points;
-      }
+    if (!course) {
+      return { aggregate: 0, letterGrade: '-', points: 0, clos: [], hasAnyMarks: false };
     }
 
-    console.log(`[STUDENT_MARKS_DEBUG] Final computed aggregate for ${courseCode}: ${aggregate.toFixed(2)}% (Grade: ${letterGrade}, GP: ${points})`);
+    const courseCLOs = allCoursesCLOs[courseCode] || [];
 
     return {
-      aggregate,
-      letterGrade,
-      points,
-      clos: computedCLOs,
-      hasAnyMarks
+      aggregate:    course.totalPercentage ?? 0,       // ← from API
+      letterGrade:  course.grade ?? '-',                // ← from API
+      points:       course.gradePoints ?? 0,            // ← from API
+      hasAnyMarks:  (course.totalPercentage ?? 0) > 0,
+      clos:         (course.cloAttainments ?? []).map((c: any) => {
+        const matchingDef = courseCLOs.find((def: any) => def.code?.toUpperCase() === c.code?.toUpperCase());
+        return {
+          code:       c.code,
+          percentage: c.percentage,
+          status:     c.attained ? 'Attained' : 'Needs Improvement',
+          description: matchingDef?.description || c.description || `Course Learning Outcome ${c.code}`,
+          mappedGA:   matchingDef?.mappedGA || matchingDef?.mapped_ga || c.mappedGA || null
+        };
+      })
     };
   };
 
@@ -1050,8 +592,12 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
       .filter(c => studentCodes.includes(c.code))
       .map(c => {
         const results = computeStudentCourseResult(activeRegNo, c.code);
+        const apiCourse = rawStudentCourses?.find(
+          (rc: any) => rc.code?.toUpperCase() === c.code?.toUpperCase()
+        );
         return {
           ...c,
+          ...apiCourse,
           results
         };
       });
@@ -1064,7 +610,7 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
       seen.add(c.code);
       return true;
     });
-  }, [courses, studentBindings, activeRegNo, instructorCourses]);
+  }, [courses, studentBindings, activeRegNo, instructorCourses, rawStudentCourses]);
 
   // Group enrolled courses by Semester
   const coursesBySemester = useMemo(() => {
@@ -1086,6 +632,18 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
 
   // Compute SGPA / CGPA overall
   const GPAStats = useMemo(() => {
+    // Prefer studentSummary if available
+    if (studentSummary) {
+      const cgpaVal = typeof studentSummary.cgpa === 'number' ? studentSummary.cgpa : parseFloat(studentSummary.cgpa || '0');
+      const sgpaVal = typeof studentSummary.sgpa === 'number' ? studentSummary.sgpa : parseFloat(studentSummary.sgpa || '0');
+      return {
+        cgpa: cgpaVal,
+        sgpa: sgpaVal || cgpaVal,
+        totalCredits: studentSummary.totalCreditsCompleted ?? 0,
+        passedCourses: studentSummary.enrolledCourses?.filter((c: any) => c.grade !== 'F').length || 0
+      };
+    }
+
     let totalPointsProduct = 0;
     let totalCredits = 0;
     let passedCoursesCount = 0;
@@ -1129,17 +687,11 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
     let cgpa = totalCredits > 0 ? (totalPointsProduct / totalCredits) : 0.0;
     cgpa = Math.round(cgpa * 100) / 100;
 
-    // Fallback if no courses are graded on frontend/transcript but we have studentSummary.cgpa
-    if (totalCredits === 0 && studentSummary && studentSummary.cgpa) {
-      cgpa = typeof studentSummary.cgpa === 'number' ? studentSummary.cgpa : parseFloat(studentSummary.cgpa || '0');
-      totalCredits = studentSummary.totalCreditsCompleted || 0;
-      passedCoursesCount = studentSummary.enrolledCourses?.filter((c: any) => c.grade !== 'F').length || 0;
-    }
-
     return {
       cgpa,
-      totalCredits: totalCredits || (studentSummary?.totalCreditsCompleted || 0),
-      passedCourses: passedCoursesCount || (studentSummary?.enrolledCourses?.filter((c: any) => c.grade !== 'F').length || 0)
+      sgpa: cgpa,
+      totalCredits,
+      passedCourses: passedCoursesCount
     };
   }, [enrolledCoursesWithGrades, finalTranscripts, studentSummary]);
 
@@ -1279,92 +831,47 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
   }, [enrolledCoursesWithGrades, cloFilterCourseCode]);
 
   // Helper to retrieve detailed marks breakdown for expanded views
-  const getCourseMarksBreakdown = (courseCode: string) => {
-    const instCourse = instructorCourses.find(ic => ic.code === courseCode);
-    const std = instCourse?.students.find(s => normalizeRegNo(s.regNo) === normalizeRegNo(activeRegNo));
+  const getCourseMarksBreakdown = (course: any) => {
+    if (!course) return [];
     
-    if (!instCourse || !std || !std.marks) {
-      // Do not generate dummy mock marks. Return categories with 0 scores.
-      return [
-        { category: 'Assignments', scored: 0, max: 15, pct: 0 },
-        { category: 'Quizzes', scored: 0, max: 10, pct: 0 },
-        { category: 'Class Project', scored: 0, max: 15, pct: 0 },
-        { category: 'Presentation', scored: 0, max: 5, pct: 0 },
-        { category: 'Mid Term Exam', scored: 0, max: 20, pct: 0 },
-        { category: 'Final Term Exam', scored: 0, max: 30, pct: 0 },
-        { category: 'Class Attendance', scored: 0, max: 5, pct: 0 }
-      ];
+    // If we have a categoryBreakdown object directly from API
+    if (course.categoryBreakdown && typeof course.categoryBreakdown === 'object') {
+      if (Array.isArray(course.categoryBreakdown)) {
+        return course.categoryBreakdown;
+      }
+      return Object.entries(course.categoryBreakdown).map(([category, val]: [string, any]) => {
+        const scored = val.obtained !== undefined ? val.obtained : (val.scored ?? 0);
+        const max = val.total !== undefined ? val.total : (val.weight ?? val.max ?? 100);
+        const pct = val.percentage !== undefined ? val.percentage : (max > 0 ? Math.round((scored / max) * 100) : 0);
+        return {
+          category,
+          scored,
+          max,
+          pct
+        };
+      });
     }
 
-    const categoriesList = instCourse.categories.filter(cat => cat.percentage > 0);
-    const breakdown: { category: string; scored: number; max: number; pct: number }[] = [];
-
-    categoriesList.forEach(cat => {
-      let categoryObtainedSum = 0;
-      let categoryMaxMarksSum = 0;
-      
-      const matchCategoryNameLocal = (cat1: string, cat2: string): boolean => {
-        const c1 = String(cat1 || '').trim().toLowerCase();
-        const c2 = String(cat2 || '').trim().toLowerCase();
-        if (c1 === c2) return true;
-        if ((c1.startsWith('final') && c2.startsWith('final')) || (c1.includes('final') && c2.includes('final'))) return true;
-        if ((c1.startsWith('mid') && c2.startsWith('mid')) || (c1.includes('mid') && c2.includes('mid'))) return true;
-        if ((c1.startsWith('quiz') && c2.startsWith('quiz')) || (c1.includes('quiz') && c2.includes('quiz'))) return true;
-        if ((c1.startsWith('assign') && c2.startsWith('assign')) || (c1.includes('assign') && c2.includes('assign'))) return true;
-        return false;
-      };
-
-      const existingKey = Object.keys(instCourse.unitsData || {}).find(k => matchCategoryNameLocal(k, cat.name));
-      const existingUnits = existingKey ? instCourse.unitsData[existingKey] || [] : [];
-      
-      if (cat.units > 0) {
-        for (let u = 1; u <= cat.units; u++) {
-          const matchingUnit = existingUnits.find((unit: any) => (unit.unitNo === u || unit.unit_no === u));
-          const questions = matchingUnit?.questions || [];
-          
-          if (questions.length > 0) {
-            questions.forEach((q: any) => {
-              categoryMaxMarksSum += q.maxMarks || q.max_marks || 0;
-              categoryObtainedSum += getFuzzyStudentMark(std.marks, cat.name, u, q.id);
-            });
-          } else {
-            const directMark = getFuzzyStudentMark(std.marks, cat.name, u);
-            let totalMarks = matchingUnit ? (matchingUnit.totalMarks || matchingUnit.total_marks || 0) : 0;
-            if (!totalMarks) {
-              const catNameLower = cat.name.toLowerCase();
-              if (catNameLower.includes('mid term') || catNameLower.includes('midterm') || catNameLower.includes('mid-term')) {
-                totalMarks = 30;
-              } else if (catNameLower.includes('final')) {
-                totalMarks = 40;
-              } else if (catNameLower.includes('presentation')) {
-                totalMarks = 10;
-              } else {
-                if (directMark > 40) totalMarks = 50;
-                else if (directMark > 30) totalMarks = 40;
-                else if (directMark > 20) totalMarks = 30;
-                else if (directMark > 10) totalMarks = 20;
-                else totalMarks = 10;
-              }
-            }
-            categoryMaxMarksSum += totalMarks;
-            categoryObtainedSum += directMark;
-          }
-        }
-      }
-
-      const finalContribution = categoryMaxMarksSum > 0
-        ? (categoryObtainedSum / categoryMaxMarksSum) * cat.percentage
-        : 0;
-      
-      breakdown.push({
+    // Fallback if the rawStudentCourses structure has categories
+    if (course.categories && Array.isArray(course.categories)) {
+      return course.categories.map((cat: any) => ({
         category: cat.name,
-        scored: Math.round(finalContribution * 10) / 10,
-        max: cat.percentage,
-        pct: Math.round((finalContribution / (cat.percentage || 1)) * 100)
-      });
-    });
+        scored: 0,
+        max: cat.percentage ?? 100,
+        pct: 0
+      }));
+    }
 
-    return breakdown;
+    // Default static fallback list
+    return [
+      { category: 'Assignments', scored: 0, max: 15, pct: 0 },
+      { category: 'Quizzes', scored: 0, max: 10, pct: 0 },
+      { category: 'Class Project', scored: 0, max: 15, pct: 0 },
+      { category: 'Presentation', scored: 0, max: 5, pct: 0 },
+      { category: 'Mid Term Exam', scored: 0, max: 20, pct: 0 },
+      { category: 'Final Term Exam', scored: 0, max: 30, pct: 0 },
+      { category: 'Class Attendance', scored: 0, max: 5, pct: 0 }
+    ];
   };
 
   if (loading) {
@@ -1450,7 +957,9 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
                 </p>
                 <div className="flex items-center justify-center gap-1.5 mt-1.5">
                   <Award className="h-5 w-5 text-blue-600 shrink-0" />
-                  <span className="text-xl font-extrabold text-blue-950 font-mono">{activeSemesterGPA.toFixed(2)}</span>
+                  <span className="text-xl font-extrabold text-blue-950 font-mono">
+                    {(studentSummary?.sgpa ?? studentSummary?.cgpa ?? activeSemesterGPA ?? 0).toFixed(2)}
+                  </span>
                 </div>
               </div>
 
@@ -1467,7 +976,7 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
               <div className="bg-emerald-50 border border-emerald-200 p-3.5 rounded-xl text-center min-w-[130px] flex-1 lg:flex-none shadow-xs">
                 <p className="text-xs uppercase font-extrabold text-emerald-700 tracking-wider">Passed Credits</p>
                 <div className="flex items-center justify-center gap-1 mt-1.5">
-                  <span className="text-xl font-extrabold text-emerald-950 font-mono">{GPAStats.passedCourses * 3}</span>
+                  <span className="text-xl font-extrabold text-emerald-950 font-mono">{GPAStats.totalCredits}</span>
                   <span className="text-xs text-emerald-700 font-extrabold uppercase font-mono">Hrs</span>
                 </div>
               </div>
@@ -1753,7 +1262,7 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
                                         </h5>
                                         
                                         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 mt-3">
-                                          {getCourseMarksBreakdown(course.code).map((item, idx) => (
+                                          {getCourseMarksBreakdown(course).map((item, idx) => (
                                             <div key={idx} className="bg-white border border-slate-200 p-3 rounded-lg flex justify-between items-center shadow-xs">
                                               <div>
                                                 <p className="text-xs font-bold text-slate-700 truncate max-w-[120px]" title={item.category}>{item.category}</p>
