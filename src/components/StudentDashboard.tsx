@@ -761,51 +761,49 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
     return filtered;
   }, [activeStudent, gas]);
 
-  // Compute Graduate Attribute (GA) Attainment scores dynamically
-  // Each GA is mapped to courses. We aggregate the student's aggregate marks in those courses.
+  // Compute Graduate Attribute (GA) Attainment scores dynamically per instructions
+  // Group by mappedGA.gaId, average the CLO percentages, and only show GAs present in the data.
   const gaAttainmentProfile = useMemo(() => {
-    if (studentGA && Array.isArray(studentGA.attainments)) {
-      const list = studentGA.attainments.map((att: any) => ({
-        id: att.gaId,
-        name: att.gaTitle,
-        description: att.gaDescription || `Competency and standard metrics for ${att.gaTitle}`,
-        score: att.score || 0,
-        contributingCount: att.contributingCourses?.length || 0,
-        coursesList: (att.contributingCourses || []).map((c: any) => `${c.code} - ${c.title}`)
-      }));
-      return [...list].sort((a, b) => naturalCompare(a.id, b.id));
+    const gaMap: Record<string, { gaTitle: string; scores: number[]; courses: Set<string> }> = {};
+
+    if (Array.isArray(rawStudentCourses)) {
+      rawStudentCourses.forEach((course: any) => {
+        (course.cloAttainments ?? []).forEach((clo: any) => {
+          if (!clo.mappedGA) return; // skip unmapped CLOs
+
+          const { gaId, gaTitle } = clo.mappedGA;
+          if (!gaId) return;
+
+          if (!gaMap[gaId]) {
+            gaMap[gaId] = { gaTitle: gaTitle || `Graduate Attribute ${gaId}`, scores: [], courses: new Set() };
+          }
+
+          gaMap[gaId].scores.push(clo.percentage);
+          const matchedLocalCourse = courses.find((lc: any) => lc.code?.toUpperCase() === course.code?.toUpperCase());
+          const title = matchedLocalCourse?.title || course.title || course.name || '';
+          gaMap[gaId].courses.add(`${course.code} - ${title}`);
+        });
+      });
     }
 
-    const list = programGAs.map(ga => {
-      // Find courses that are mapped to this GA
-      const contributingCourses = enrolledCoursesWithGrades.filter(c => 
-        c.mappedGAs.includes(ga.id)
-      );
-
-      let sumPercentage = 0;
-      let count = 0;
-
-      contributingCourses.forEach(c => {
-        if (c.results && c.results.aggregate !== undefined && c.results.aggregate > 0) {
-          sumPercentage += c.results.aggregate;
-          count++;
-        }
-      });
-
-      let finalScore = 0;
-      if (count > 0) {
-        finalScore = sumPercentage / count;
-      }
+    const list = Object.entries(gaMap).map(([gaId, data]) => {
+      const avg = data.scores.length > 0 
+        ? data.scores.reduce((a, b) => a + b, 0) / data.scores.length 
+        : 0;
 
       return {
-        ...ga,
-        score: Math.round(finalScore * 10) / 10,
-        contributingCount: count,
-        coursesList: contributingCourses.map(c => `${c.code} - ${c.title}`)
+        id: gaId,
+        name: data.gaTitle,
+        description: `Competency and standard metrics for ${data.gaTitle}`,
+        score: Math.round(avg * 10) / 10,
+        attained: avg >= 50,   // 50% is the threshold
+        contributingCount: data.scores.length,
+        coursesList: Array.from(data.courses)
       };
     });
+
     return [...list].sort((a, b) => naturalCompare(a.id, b.id));
-  }, [programGAs, enrolledCoursesWithGrades, activeRegNo, studentGA]);
+  }, [rawStudentCourses, courses]);
 
   // Aggregate Course Learning Outcomes (CLO) for the selected filter course
   const filteredCLOList = useMemo(() => {
@@ -1336,48 +1334,60 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
                                           <Award className="h-4.5 w-4.5 text-indigo-600" />
                                           Mapped Graduate Attributes (GAs) & Current Profile
                                         </h5>
-                                        {(!course.mappedGAs || course.mappedGAs.length === 0) ? (
-                                          <div className="text-xs text-slate-400 font-semibold py-2">
-                                            No Graduate Attributes mapped to this course.
-                                          </div>
-                                        ) : (
-                                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-3">
-                                            {course.mappedGAs.map((gaId: string) => {
-                                              const gaDef = gas.find(g => g.id === gaId);
-                                              const gaAttObj = gaAttainmentProfile.find(p => p.id === gaId);
-                                              const score = gaAttObj ? gaAttObj.score : 0;
-                                              const statusColor = score >= 75 ? 'text-indigo-600 bg-indigo-50 border-indigo-100' : score >= 50 ? 'text-emerald-700 bg-emerald-50 border-emerald-100' : 'text-amber-700 bg-amber-50 border-amber-100';
-                                              const barColor = score >= 75 ? 'bg-indigo-600' : score >= 50 ? 'bg-emerald-500' : 'bg-amber-500';
+                                        {(() => {
+                                          const mappedGAsFromCLOs = Array.from(new Set(
+                                            (course.results?.clos ?? [])
+                                              .filter((clo: any) => clo.mappedGA && clo.mappedGA.gaId)
+                                              .map((clo: any) => clo.mappedGA.gaId)
+                                          )) as string[];
 
-                                              return (
-                                                <div key={gaId} className="bg-white border border-slate-200 p-4 rounded-lg space-y-2 shadow-xs flex flex-col justify-between">
-                                                  <div className="space-y-1">
-                                                    <div className="flex items-center justify-between">
-                                                      <span className="font-mono text-xs font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded border border-slate-200 uppercase tracking-tight">{gaId}</span>
-                                                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${statusColor}`}>
-                                                        {score >= 75 ? 'Excellent' : score >= 50 ? 'Satisfied' : 'Review Needed'}
-                                                      </span>
+                                          if (mappedGAsFromCLOs.length === 0) {
+                                            return (
+                                              <div className="text-xs text-slate-400 font-semibold py-2">
+                                                No Graduate Attributes mapped to this course.
+                                              </div>
+                                            );
+                                          }
+
+                                          return (
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-3">
+                                              {mappedGAsFromCLOs.map((gaId: string) => {
+                                                const gaAttObj = gaAttainmentProfile.find(p => p.id === gaId);
+                                                const score = gaAttObj ? gaAttObj.score : 0;
+                                                const name = gaAttObj ? gaAttObj.name : gaId;
+                                                const statusColor = score >= 75 ? 'text-indigo-600 bg-indigo-50 border-indigo-100' : score >= 50 ? 'text-emerald-700 bg-emerald-50 border-emerald-100' : 'text-amber-700 bg-amber-50 border-amber-100';
+                                                const barColor = score >= 75 ? 'bg-indigo-600' : score >= 50 ? 'bg-emerald-500' : 'bg-amber-500';
+
+                                                return (
+                                                  <div key={gaId} className="bg-white border border-slate-200 p-4 rounded-lg space-y-2 shadow-xs flex flex-col justify-between">
+                                                    <div className="space-y-1">
+                                                      <div className="flex items-center justify-between">
+                                                        <span className="font-mono text-xs font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded border border-slate-200 uppercase tracking-tight">{gaId}</span>
+                                                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${statusColor}`}>
+                                                          {score >= 75 ? 'Excellent' : score >= 50 ? 'Satisfied' : 'Review Needed'}
+                                                        </span>
+                                                      </div>
+                                                      <h6 className="text-xs font-bold text-slate-800 tracking-tight leading-snug">{name}</h6>
+                                                      <p className="text-[10px] text-slate-400 font-medium leading-relaxed line-clamp-2">Competency and standard metrics for {name}</p>
                                                     </div>
-                                                    <h6 className="text-xs font-bold text-slate-800 tracking-tight leading-snug">{gaDef?.name || gaId}</h6>
-                                                    <p className="text-[10px] text-slate-400 font-medium leading-relaxed line-clamp-2">{gaDef?.description}</p>
+                                                    <div className="space-y-1.5 pt-2 border-t border-slate-100">
+                                                      <div className="flex justify-between items-center text-[10px] font-semibold text-slate-500">
+                                                        <span>Overall GA Attainment:</span>
+                                                        <span className="font-mono text-indigo-950 font-black">{score.toFixed(1)}%</span>
+                                                      </div>
+                                                      <div className="w-full bg-slate-150 h-2 rounded-full overflow-hidden">
+                                                        <div 
+                                                          className={`h-full rounded-full ${barColor}`}
+                                                          style={{ width: `${score}%` }}
+                                                        />
+                                                      </div>
+                                                    </div>
                                                   </div>
-                                                  <div className="space-y-1.5 pt-2 border-t border-slate-100">
-                                                    <div className="flex justify-between items-center text-[10px] font-semibold text-slate-500">
-                                                      <span>Overall GA Attainment:</span>
-                                                      <span className="font-mono text-indigo-950 font-black">{score.toFixed(1)}%</span>
-                                                    </div>
-                                                    <div className="w-full bg-slate-150 h-2 rounded-full overflow-hidden">
-                                                      <div 
-                                                        className={`h-full rounded-full ${barColor}`}
-                                                        style={{ width: `${score}%` }}
-                                                      />
-                                                    </div>
-                                                  </div>
-                                                </div>
-                                              );
-                                            })}
-                                          </div>
-                                        )}
+                                                );
+                                              })}
+                                            </div>
+                                          );
+                                        })()}
                                       </div>
                                     </div>
                                   )}
