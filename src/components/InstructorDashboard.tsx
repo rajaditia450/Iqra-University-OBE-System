@@ -519,7 +519,7 @@ const normalizeCourse = (course: InstructorCourse): InstructorCourse => {
       });
 
       const isPresentation = key.toLowerCase().includes('presentation');
-      const formattedQuestions = questions.map((q: any) => {
+      let formattedQuestions = questions.map((q: any) => {
         if (isPresentation && (q.name.toLowerCase().startsWith('question') || q.name.toLowerCase().startsWith('q'))) {
           const match = q.name.match(/\d+$/);
           const numStr = match ? match[0] : '';
@@ -531,9 +531,19 @@ const normalizeCourse = (course: InstructorCourse): InstructorCourse => {
         return q;
       });
 
-      const finalUnitMappedCLOs = formattedQuestions.length > 0
-        ? [...new Set(formattedQuestions.flatMap(q => q.mappedCLOs))].sort()
-        : (mappedCLOs.length > 0 ? [mappedCLOs[0]] : ['CLO-1']);
+      if (formattedQuestions.length === 0) {
+        const labelPrefix = isPresentation ? 'Module' : 'Question';
+        formattedQuestions = [
+          {
+            id: `q-default-${unitNo}-${Date.now()}`,
+            name: `${labelPrefix} 1`,
+            maxMarks: totalMarks || 10,
+            mappedCLOs: mappedCLOs.length > 0 ? [mappedCLOs[0]] : ['CLO-1']
+          }
+        ];
+      }
+
+      const finalUnitMappedCLOs = Array.from(new Set<string>(formattedQuestions.flatMap(q => (q.mappedCLOs || []) as string[]))).sort();
 
       unitsList.push({
         unitNo,
@@ -865,7 +875,15 @@ const MarksheetDocument = ({
             questions.forEach(q => {
               totalMaxMarks += q.maxMarks || 0;
               const qKey = `q-${cat.name}-${u}-${q.id}`;
-              studentObtainedSum += Number(std.marks?.[qKey] || 0);
+              const dKey = `${cat.name}-${u}`;
+              const val = std.marks?.[qKey];
+              if (val !== undefined && Number(val) > 0) {
+                studentObtainedSum += Number(val);
+              } else if (questions.length === 1) {
+                studentObtainedSum += Number(std.marks?.[dKey] || 0);
+              } else {
+                studentObtainedSum += Number(val || 0);
+              }
             });
           } else {
             const maxMarks = matchingUnit ? matchingUnit.totalMarks : 10;
@@ -1081,6 +1099,8 @@ const MarksheetDocument = ({
   }
 
   const ds = getDynamicStyles(totalTableCols);
+  const gaFontSize = totalTableCols <= 12 ? '13px' : totalTableCols <= 18 ? '11.5px' : totalTableCols <= 25 ? '10.5px' : '9.5px';
+  const gaHeaderFontSize = totalTableCols <= 12 ? '13px' : totalTableCols <= 18 ? '11.5px' : totalTableCols <= 25 ? '10.5px' : '9.5px';
 
   return (
     <div id="marksheet-real-view" className={`p-6 bg-white shrink-0 antialiased text-black font-sans leading-relaxed ${isPrintView ? 'w-full' : ((reportType === 'clo' || reportType === 'ga') ? 'min-w-[297mm] w-fit max-w-full min-h-[210mm]' : 'w-[210mm] min-h-[297mm]') + ' shadow-2xl border border-slate-350 rounded-xl m-auto print:shadow-none print:border-none'}`}>
@@ -1109,35 +1129,59 @@ const MarksheetDocument = ({
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
           }
+          td {
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          .ga-highlight-cell {
+            background-color: #e0e7ff !important;
+            color: #1e1b4b !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          .ga-highlight-header {
+            background-color: #c7d2fe !important;
+            color: #1e1b4b !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+        }
+        .ga-highlight-cell {
+          background-color: #e0e7ff !important;
+          color: #1e1b4b !important;
+        }
+        .ga-highlight-header {
+          background-color: #c7d2fe !important;
+          color: #1e1b4b !important;
         }
       `}</style>
 
       {/* Header Block with Custom University Name in Blue */}
-      <div className="flex flex-col items-center justify-center text-center pb-4 border-b border-black">
-        <h1 className="text-[20px] sm:text-[22px] font-black font-serif text-[#005f9e] uppercase tracking-wide leading-tight select-none px-4">
+      <div className="flex flex-col items-center justify-center text-center pb-5 border-b-2 border-black">
+        <h1 className="text-[26px] sm:text-[28px] md:text-[32px] font-black font-serif text-[#005f9e] uppercase tracking-wide leading-tight select-none px-4">
           {campus}
         </h1>
-        <p className="text-[11px] font-semibold text-slate-600 uppercase tracking-wider mt-1.5">
+        <p className="text-[13px] sm:text-[14px] font-bold text-slate-800 uppercase tracking-wider mt-2">
           {session}
         </p>
         
         {/* Course detail bar */}
-        <div className="mt-3.5 w-full flex items-center justify-between border-y border-black py-1.5 px-4 font-mono text-[10px] uppercase font-extrabold text-slate-800">
-          <div>Semester: <span className="font-sans font-bold text-indigo-950 ml-0.5">{semester}</span></div>
-          <div>Dated: <span className="font-sans font-bold text-indigo-950 ml-0.5">{dated}</span></div>
+        <div className="mt-4 w-full flex items-center justify-between border-y-2 border-black py-2.5 px-4 font-mono text-[11.5px] uppercase font-extrabold text-slate-900">
+          <div>Semester: <span className="font-sans font-black text-indigo-950 ml-1 text-[12.5px]">{semester}</span></div>
+          <div>Dated: <span className="font-sans font-black text-indigo-950 ml-1 text-[12.5px]">{dated}</span></div>
         </div>
       </div>
 
       {/* Main Course Details Card */}
-      <div className="mt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[11px] font-bold text-slate-800 tracking-tight py-1 font-sans">
+      <div className="mt-5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[12.5px] font-black text-slate-900 tracking-tight py-1.5 font-sans border-b border-slate-300 pb-2">
         <div className="flex items-center gap-1">
-          <span>Subject Name:</span>
-          <span className="text-indigo-950 uppercase border-b border-black/35 pb-0.5 font-extrabold text-xs">{course.code} {course.title}</span>
+          <span className="text-slate-700">Subject Name:</span>
+          <span className="text-indigo-950 uppercase border-b-2 border-black pb-0.5 font-black text-[14px] sm:text-[15px]">{course.code} {course.title}</span>
         </div>
         <div className="flex items-center">
-          <div className="flex items-center gap-1">
-            <span>Section:</span>
-            <span className="text-indigo-950 uppercase border-b border-black/35 pb-0.5 px-2">{section}</span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-slate-700">Section:</span>
+            <span className="text-indigo-950 uppercase border-b-2 border-black pb-0.5 px-3 font-black text-[14px]">{section}</span>
           </div>
         </div>
       </div>
@@ -1328,8 +1372,12 @@ const MarksheetDocument = ({
                           );
                         })}
                         <th 
-                          className="border-r border-black font-bold text-center bg-indigo-100/30 text-indigo-950 font-mono"
-                          style={{ padding: ds.cellClass.includes('px-') ? '2px' : '4px', fontSize: ds.headerRow2Class.match(/text-\[[^\]]+\]/)?.[0]?.slice(5,-1) || '9px' }}
+                          className="border-r border-black font-black text-center ga-highlight-header"
+                          style={{
+                            padding: ds.cellClass.includes('px-') ? '2px 4px' : '4px 6px',
+                            fontSize: gaHeaderFontSize,
+                            minWidth: ds.gaStyle.minWidth
+                          }}
                         >
                           {formatGACodeToStandard(gaCode)} Total
                         </th>
@@ -1370,8 +1418,11 @@ const MarksheetDocument = ({
                           );
                         })}
                         <th 
-                          className="border-r border-black p-0.5 font-sans text-center font-bold bg-indigo-50 text-indigo-950"
-                          style={ds.gaStyle}
+                          className="border-r border-black p-0.5 font-sans text-center font-black ga-highlight-header"
+                          style={{
+                            ...ds.gaStyle,
+                            fontSize: gaHeaderFontSize
+                          }}
                         >
                           GA %
                         </th>
@@ -1415,6 +1466,9 @@ const MarksheetDocument = ({
                                     let obtainedMark = 0;
                                     if (ass.questionId) {
                                       obtainedMark = item.student.marks?.[`q-${ass.categoryName}-${ass.unitNo}-${ass.questionId}`] ?? 0;
+                                      if (obtainedMark === 0) {
+                                        obtainedMark = item.student.marks?.[`${ass.categoryName}-${ass.unitNo}`] ?? 0;
+                                      }
                                     } else {
                                       obtainedMark = item.student.marks?.[`${ass.categoryName}-${ass.unitNo}`] ?? 0;
                                     }
@@ -1459,8 +1513,11 @@ const MarksheetDocument = ({
                                 : 0;
                               return (
                                 <td 
-                                  className={`border-r border-black text-center font-black font-sans bg-indigo-50 text-indigo-950 ${ds.cellClass}`}
-                                  style={ds.gaStyle}
+                                  className="border-r border-black text-center font-black font-sans ga-highlight-cell"
+                                  style={{
+                                    ...ds.gaStyle,
+                                    fontSize: gaFontSize
+                                  }}
                                 >
                                   {gaTotalScore.toFixed(2)}%
                                 </td>
@@ -1498,7 +1555,7 @@ const MarksheetDocument = ({
                                 </React.Fragment>
                               );
                             })}
-                            <td className={`border-r border-black bg-indigo-50/30 ${ds.cellClass}`} style={ds.gaStyle}></td>
+                            <td className="border-r border-black ga-highlight-cell" style={ds.gaStyle}></td>
                           </React.Fragment>
                         );
                       })}
@@ -1633,6 +1690,9 @@ const MarksheetDocument = ({
                               let obtainedMark = 0;
                               if (ass.questionId) {
                                 obtainedMark = item.student.marks?.[`q-${ass.categoryName}-${ass.unitNo}-${ass.questionId}`] ?? 0;
+                                if (obtainedMark === 0) {
+                                  obtainedMark = item.student.marks?.[`${ass.categoryName}-${ass.unitNo}`] ?? 0;
+                                }
                               } else {
                                 obtainedMark = item.student.marks?.[`${ass.categoryName}-${ass.unitNo}`] ?? 0;
                               }
@@ -2747,11 +2807,26 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
       actualUnits = actualUnits.slice(0, cat.units);
     }
 
-    const normalizedUnits = actualUnits.map(u => ({
-      ...u,
-      mappedCLOs: u.mappedCLOs || [],
-      questions: u.questions || []
-    }));
+    const normalizedUnits = actualUnits.map(u => {
+      const isPresentation = categoryName.toLowerCase().includes('presentation');
+      const labelPrefix = isPresentation ? 'Module' : 'Question';
+      let qs = u.questions || [];
+      if (qs.length === 0) {
+        qs = [
+          {
+            id: `q-default-${u.unitNo}-${Date.now()}`,
+            name: `${labelPrefix} 1`,
+            maxMarks: u.totalMarks || 10,
+            mappedCLOs: u.mappedCLOs && u.mappedCLOs.length > 0 ? [u.mappedCLOs[0]] : ['CLO-1']
+          }
+        ];
+      }
+      return {
+        ...u,
+        mappedCLOs: [...new Set(qs.flatMap(q => q.mappedCLOs))].sort(),
+        questions: qs
+      };
+    });
 
     setTempUnits(normalizedUnits);
     const targetIdx = unitIndex !== undefined ? unitIndex : 0;
@@ -3532,6 +3607,10 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
       const unit = copy[selectedUnitIndex];
       if (unit) {
         const qList = unit.questions || [];
+        if (qList.length <= 1) {
+          showNotification("At least 1 question/module is required for the assessment.");
+          return prev;
+        }
         const newQuestionList = qList.filter(q => q.id !== qId);
 
         const newTotal = newQuestionList.reduce((sum, q) => sum + (q.maxMarks || 0), 0);
@@ -3572,6 +3651,8 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
 
   const handleAddUnitRow = () => {
     const nextNo = tempUnits.length + 1;
+    const isPresentation = unitEditingCategory?.toLowerCase().includes('presentation');
+    const labelPrefix = isPresentation ? 'Module' : 'Question';
     setTempUnits(prev => [
       ...prev,
       {
@@ -3579,7 +3660,15 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
         passing: 5,
         totalMarks: 10,
         weightage: 10,
-        mappedCLOs: []
+        mappedCLOs: ['CLO-1'],
+        questions: [
+          {
+            id: `q-default-${nextNo}-${Date.now()}`,
+            name: `${labelPrefix} 1`,
+            maxMarks: 10,
+            mappedCLOs: ['CLO-1']
+          }
+        ]
       }
     ]);
     setSelectedUnitIndex(tempUnits.length);
@@ -5000,7 +5089,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                               { grade: 'B+', percentage: '75% - 79%', points: '3.3' },
                               { grade: 'B', percentage: '70% - 74%', points: '3.0' },
                               { grade: 'B-', percentage: '65% - 69%', points: '2.7' },
-                              { grade: 'C+', percentage: '60% - 64%', points: '2.3' },
+                              { grade: 'C+', percentage: '60% - 64%', points: '2.5' },
                               { grade: 'C', percentage: '55% - 59%', points: '2.0' },
                               { grade: 'D', percentage: '50% - 54%', points: '1.0' },
                               { grade: 'F', percentage: 'Below 50%', points: '0.0' }
@@ -7723,14 +7812,8 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                         </div>
                       </div>
 
-                      <div className="flex justify-between items-center pt-2 border-t border-slate-250">
+                      <div className="pt-2 border-t border-slate-250">
                         <p className="text-[9.5px] text-slate-450 italic">{singularLabel} updates synchronize automatically above.</p>
-                        <button
-                          onClick={handleUpdateUnitSingle}
-                          className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg shadow-sm transition-colors cursor-pointer"
-                        >
-                          Update Unit Summary
-                        </button>
                       </div>
 
                     </div>

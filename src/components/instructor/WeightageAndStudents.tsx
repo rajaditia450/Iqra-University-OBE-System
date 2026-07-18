@@ -174,15 +174,6 @@ export default function WeightageAndStudents({
                       </p>
                     </div>
                   </div>
-
-                  <div className="flex justify-end pt-2">
-                    <button
-                      onClick={handleUpdateCategorySingle}
-                      className="w-full px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg shadow-xs transition-colors cursor-pointer text-center"
-                    >
-                      Update Highlighted Row
-                    </button>
-                  </div>
                 </div>
               ) : (
                 <div className="bg-[#f8fafc] border border-dashed border-slate-300 rounded-xl p-6 text-center text-slate-450 text-xs">

@@ -214,9 +214,10 @@ const calculateStudentCLOAttainment = (sc: any, regToUse: string, allInstructorC
   let checkStudentHasOBEMarks = false;
   let checkCourseHasQuestions = false;
   let checkResolvedRegNo = regToUse;
+  let matchedStudentInIC = null;
 
   if (matchedIC) {
-    const matchedStudentInIC = matchedIC.students?.find((s: any) => 
+    matchedStudentInIC = matchedIC.students?.find((s: any) => 
       areStudentsEqual(s.regNo, regToUse)
     );
 
@@ -227,8 +228,11 @@ const calculateStudentCLOAttainment = (sc: any, regToUse: string, allInstructorC
     const qs = matchedIC.obeQuestions || [];
     const marks = matchedIC.obeMarks || {};
 
-    checkStudentHasOBEMarks = marks[checkResolvedRegNo] !== undefined && Object.keys(marks[checkResolvedRegNo] || {}).length > 0;
-    checkCourseHasQuestions = qs.length > 0;
+    const studentMarksFromIC = matchedStudentInIC?.marks || {};
+    const hasStudentMarksInIC = Object.keys(studentMarksFromIC).length > 0;
+
+    checkStudentHasOBEMarks = (marks[checkResolvedRegNo] !== undefined && Object.keys(marks[checkResolvedRegNo] || {}).length > 0) || hasStudentMarksInIC;
+    checkCourseHasQuestions = qs.length > 0 || (matchedIC.categories && matchedIC.categories.some((c: any) => c.percentage > 0));
   }
 
   const hasDynamicData = matchedIC && checkStudentHasOBEMarks && checkCourseHasQuestions;
@@ -304,10 +308,6 @@ const calculateStudentCLOAttainment = (sc: any, regToUse: string, allInstructorC
   const cloCodes = courseCLOs.map((c: any) => (c.code || c.cloCode || '').trim().toUpperCase());
 
   // Resolve student registration number
-  const matchedStudentInIC = matchedIC.students?.find((s: any) => 
-    areStudentsEqual(s.regNo, regToUse)
-  );
-
   const resolvedRegNo = matchedStudentInIC?.regNo || 
     Object.keys(matchedIC.obeMarks || {}).find(k => areStudentsEqual(k, regToUse)) || 
     regToUse;
@@ -410,6 +410,43 @@ const calculateStudentCLOAttainment = (sc: any, regToUse: string, allInstructorC
       });
     }
   });
+
+  if (matchedIC && matchedStudentInIC) {
+    return courseCLOs.map((cloObj: any) => {
+      const cloCode = (cloObj.code || cloObj.cloCode || '').trim().toUpperCase();
+      const list = cloAssessments[cloCode] || [];
+      let cloTotalScore = 0;
+
+      list.forEach(ass => {
+        let obtainedMark = 0;
+        if (ass.questionId) {
+          obtainedMark = matchedStudentInIC.marks?.[`q-${ass.categoryName}-${ass.unitNo}-${ass.questionId}`] ?? 0;
+          if (obtainedMark === 0) {
+            obtainedMark = matchedStudentInIC.marks?.[`${ass.categoryName}-${ass.unitNo}`] ?? 0;
+          }
+        } else {
+          obtainedMark = matchedStudentInIC.marks?.[`${ass.categoryName}-${ass.unitNo}`] ?? 0;
+        }
+        const pct = ass.maxMarks > 0 ? (Number(obtainedMark) / ass.maxMarks) : 0;
+        const weightedScore = pct * ass.relativeWeight;
+        cloTotalScore += weightedScore;
+      });
+
+      const percentage = parseFloat(cloTotalScore.toFixed(2));
+      const attained = percentage >= 50;
+      const mappedGAObj = standardizeMappedGAObj(cloObj.mappedGA || cloObj.mapped_ga || null, cloCode);
+
+      return {
+        code: cloCode,
+        cloCode: cloCode,
+        percentage,
+        attained,
+        status: attained ? "Attained" : "Not Attained",
+        description: cloObj.description || `Course Learning Outcome ${cloCode}`,
+        mappedGA: mappedGAObj
+      };
+    });
+  }
 
   const studentMarks = sc.studentMarks || sc.marks || {};
   
@@ -567,18 +604,59 @@ const parseDetailsFromRegNo = (regNo: string) => {
 const getFuzzyStudentMark = (marks: Record<string, number> | undefined, catName: string, unitNo: number, questionId?: string): number => {
   if (!marks) return 0;
   
+  // 1. Try systematic exact match first (case-insensitive) to prevent cross-category mismatch
+  if (questionId) {
+    const targetKey = `q-${catName}-${unitNo}-${questionId}`.trim().toLowerCase();
+    for (const k of Object.keys(marks)) {
+      if (k.trim().toLowerCase() === targetKey) {
+        return Number(marks[k]);
+      }
+    }
+    // Also try without 'q-' prefix if stored differently
+    const targetKey2 = `${catName}-${unitNo}-${questionId}`.trim().toLowerCase();
+    for (const k of Object.keys(marks)) {
+      if (k.trim().toLowerCase() === targetKey2) {
+        return Number(marks[k]);
+      }
+    }
+    // Fallback: direct mark
+    const directKey = `${catName}-${unitNo}`.trim().toLowerCase();
+    for (const k of Object.keys(marks)) {
+      if (k.trim().toLowerCase() === directKey) {
+        return Number(marks[k]);
+      }
+    }
+  } else {
+    const targetKey = `${catName}-${unitNo}`.trim().toLowerCase();
+    for (const k of Object.keys(marks)) {
+      if (k.trim().toLowerCase() === targetKey) {
+        return Number(marks[k]);
+      }
+    }
+  }
+
+  // 2. Fallback to existing fuzzy logic if exact match not found
   if (questionId) {
     const qIdStr = String(questionId).trim().toLowerCase();
     
-    // 1. Direct exact match
+    // Direct exact match
     if (marks[questionId] !== undefined) return Number(marks[questionId]);
     
-    // 2. Case-insensitive match
+    // Case-insensitive match
     for (const k of Object.keys(marks)) {
       if (k.toLowerCase() === qIdStr) return Number(marks[k]);
     }
     
-    // 3. Search for keys ending with the question ID or matching a prefix
+    // Search for keys ending with the question ID or matching a prefix (verifying category first)
+    for (const k of Object.keys(marks)) {
+      const kLower = k.toLowerCase();
+      const catLower = catName.toLowerCase();
+      if (kLower.includes(catLower) && (kLower.endsWith(`-${qIdStr}`) || kLower === `q-${qIdStr}` || kLower.includes(`-${qIdStr}-`) || kLower.includes(`_${qIdStr}`))) {
+        return Number(marks[k]);
+      }
+    }
+
+    // Generic search for keys ending with the question ID
     for (const k of Object.keys(marks)) {
       const kLower = k.toLowerCase();
       if (kLower.endsWith(`-${qIdStr}`) || kLower === `q-${qIdStr}` || kLower.includes(`-${qIdStr}-`) || kLower.includes(`_${qIdStr}`)) {
@@ -586,7 +664,7 @@ const getFuzzyStudentMark = (marks: Record<string, number> | undefined, catName:
       }
     }
     
-    // 4. Normalization comparison
+    // Normalization comparison
     const cleanQId = qIdStr.replace(/[^a-z0-9]/g, '');
     for (const k of Object.keys(marks)) {
       const cleanK = k.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -1236,6 +1314,8 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
       matchInstructorCourse(ic, courseCode, course.name || course.title)
     );
 
+    let isCompleted = !matchedIC;
+
     if (matchedIC) {
       const matchedStudentInIC = matchedIC.students?.find((s: any) =>
         areStudentsEqual(s.regNo, stdRegNo)
@@ -1256,6 +1336,7 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
         let aggregate = 0;
         let activeCats = (matchedIC.categories || []).filter((cat: any) => cat.percentage > 0);
         let hasRealMarks = false;
+        let gradedWeightSum = 0;
 
         activeCats.forEach((cat: any) => {
           if (cat.units > 0) {
@@ -1296,6 +1377,7 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
 
             if (catHasAnyMarks) {
               hasRealMarks = true;
+              gradedWeightSum += cat.percentage;
             }
 
             const catContribution = totalMaxMarks > 0
@@ -1365,7 +1447,7 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
             else if (finalGrade === 'B+') finalPoints = 3.3;
             else if (finalGrade === 'B') finalPoints = 3.0;
             else if (finalGrade === 'B-') finalPoints = 2.7;
-            else if (finalGrade === 'C+') finalPoints = 2.3;
+            else if (finalGrade === 'C+') finalPoints = 2.5;
             else if (finalGrade === 'C') finalPoints = 2.0;
             else if (finalGrade === 'D') finalPoints = 1.0;
             else finalPoints = 0.0;
@@ -1392,6 +1474,7 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
           }
 
           hasAnyMarks = true;
+          isCompleted = (aggregate > 0 && Object.keys(combinedMarks).length > 0) && (aggregate >= 50 || matchedIC?.status === 'closed' || finalGrade !== 'F' && finalGrade !== '-' && finalGrade !== '');
         }
       }
     }
@@ -1401,6 +1484,7 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
       letterGrade:  finalGrade,
       points:       finalPoints,
       hasAnyMarks,
+      isCompleted,
       clos:         (dynamicCLOs ?? []).map((c: any) => {
         const matchingDef = courseCLOs.find((def: any) => (def.code || def.cloCode || '').toUpperCase() === (c.code || c.cloCode || '').toUpperCase());
         const rawMappedGA = matchingDef?.mappedGA || matchingDef?.mapped_ga || c.mappedGA || null;
@@ -1465,18 +1549,6 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
 
   // Compute SGPA / CGPA overall
   const GPAStats = useMemo(() => {
-    // Prefer studentSummary if available
-    if (studentSummary) {
-      const cgpaVal = typeof studentSummary.cgpa === 'number' ? studentSummary.cgpa : parseFloat(studentSummary.cgpa || '0');
-      const sgpaVal = typeof studentSummary.sgpa === 'number' ? studentSummary.sgpa : parseFloat(studentSummary.sgpa || '0');
-      return {
-        cgpa: cgpaVal,
-        sgpa: sgpaVal || cgpaVal,
-        totalCredits: studentSummary.totalCreditsCompleted ?? 0,
-        passedCourses: studentSummary.enrolledCourses?.filter((c: any) => c.grade !== 'F').length || 0
-      };
-    }
-
     let totalPointsProduct = 0;
     let totalCredits = 0;
     let passedCoursesCount = 0;
@@ -1487,7 +1559,7 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
 
     // 1. Process enrolled courses with grades
     enrolledCoursesWithGrades.forEach(c => {
-      if (c.results && c.results.hasAnyMarks) {
+      if (c.results && c.results.hasAnyMarks && c.results.isCompleted) {
         courseGPAs[c.code] = {
           points: c.results.points,
           credits: c.creditHours || 3,
@@ -1539,7 +1611,7 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
 
       semCourses.forEach(c => {
         const crHrs = c.creditHours || 3;
-        if (c.results && c.results.points !== undefined && c.results.hasAnyMarks) {
+        if (c.results && c.results.points !== undefined && c.results.hasAnyMarks && c.results.isCompleted) {
           totalPointsProduct += c.results.points * crHrs;
           totalCredits += crHrs;
           hasGrades = true;
@@ -1845,15 +1917,7 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
             </div>
           )}
 
-          <button
-            onClick={() => loadAllData()}
-            disabled={loading}
-            className="bg-indigo-50 hover:bg-indigo-100 disabled:bg-slate-50 text-indigo-700 disabled:text-slate-400 border border-indigo-150 font-bold p-2.5 rounded-xl transition-all flex items-center gap-2 text-xs cursor-pointer"
-            title="Refresh Marks & Attainments"
-          >
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            <span className="hidden sm:inline">Sync Live Marks</span>
-          </button>
+
 
           <button
             onClick={onLogout}
@@ -1891,43 +1955,26 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
             </div>
 
             {/* GPA AND PROGRESS WIDGETS */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 lg:flex lg:items-center gap-4 w-full md:w-auto relative z-10">
+            <div className="grid grid-cols-2 lg:flex lg:items-center gap-4 w-full md:w-auto relative z-10">
               {/* Semester GPA widget */}
               <div className="bg-blue-50 border border-blue-200 p-3.5 rounded-xl text-center min-w-[130px] flex-1 lg:flex-none shadow-xs">
                 <p className="text-xs uppercase font-extrabold text-blue-700 tracking-wider">
-                  {currentSemesterForGPA ? `${currentSemesterForGPA.split(' ')[0]} GPA` : 'Semester GPA'}
+                  GPA
                 </p>
                 <div className="flex items-center justify-center gap-1.5 mt-1.5">
                   <Award className="h-5 w-5 text-blue-600 shrink-0" />
                   <span className="text-xl font-extrabold text-blue-950 font-mono">
-                    {(studentSummary?.sgpa ?? studentSummary?.cgpa ?? activeSemesterGPA ?? 0).toFixed(2)}
+                    {(activeSemesterGPA ?? 0).toFixed(2)}
                   </span>
                 </div>
               </div>
 
               {/* Cumulative GPA widget */}
               <div className="bg-indigo-50 border border-indigo-200 p-3.5 rounded-xl text-center min-w-[130px] flex-1 lg:flex-none shadow-xs">
-                <p className="text-xs uppercase font-extrabold text-indigo-700 tracking-wider">Cumulative GPA</p>
+                <p className="text-xs uppercase font-extrabold text-indigo-700 tracking-wider">CGPA</p>
                 <div className="flex items-center justify-center gap-1.5 mt-1.5">
                   <Award className="h-5 w-5 text-indigo-600 shrink-0" />
                   <span className="text-xl font-extrabold text-indigo-950 font-mono">{GPAStats.cgpa.toFixed(2)}</span>
-                </div>
-              </div>
-
-              {/* Passed Credits widget */}
-              <div className="bg-emerald-50 border border-emerald-200 p-3.5 rounded-xl text-center min-w-[130px] flex-1 lg:flex-none shadow-xs">
-                <p className="text-xs uppercase font-extrabold text-emerald-700 tracking-wider">Passed Credits</p>
-                <div className="flex items-center justify-center gap-1 mt-1.5">
-                  <span className="text-xl font-extrabold text-emerald-950 font-mono">{GPAStats.totalCredits}</span>
-                  <span className="text-xs text-emerald-700 font-extrabold uppercase font-mono">Hrs</span>
-                </div>
-              </div>
-
-              {/* Courses widget */}
-              <div className="bg-slate-50 border border-slate-200 p-3.5 rounded-xl text-center min-w-[130px] flex-1 lg:flex-none shadow-xs">
-                <p className="text-xs uppercase font-extrabold text-slate-600 tracking-wider">Total Courses</p>
-                <div className="flex items-center justify-center gap-1 mt-1.5">
-                  <span className="text-xl font-extrabold text-slate-900 font-mono">{enrolledCoursesWithGrades.length}</span>
                 </div>
               </div>
             </div>
@@ -2108,11 +2155,7 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
                               <Calendar className="h-5 w-5 text-indigo-600" />
                               <h3 className="text-sm font-bold text-indigo-950 uppercase tracking-wider">{semesterKey} Academic Ledger</h3>
                             </div>
-                            {semesterGPAs[semesterKey] !== undefined && (
-                              <span className="bg-indigo-50 text-indigo-700 text-xs font-bold px-3 py-1 rounded-lg border border-indigo-200 font-mono">
-                                SGPA: {semesterGPAs[semesterKey].toFixed(2)}
-                              </span>
-                            )}
+
                           </div>
 
                           {/* Course Cards Grid */}

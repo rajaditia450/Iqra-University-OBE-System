@@ -15,6 +15,7 @@ import {
   Undo
 } from 'lucide-react';
 import { InstructorCourse } from '../types';
+import { apiService } from '../services/apiService';
 
 interface MarksEntrySpreadsheetProps {
   selectedCourse: InstructorCourse;
@@ -67,6 +68,7 @@ export default function MarksEntrySpreadsheet({
   // draftMarks maps student.regNo -> { markKey -> value }
   const [draftMarks, setDraftMarks] = useState<Record<string, Record<string, number>>>({});
   const [isDirty, setIsDirty] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Initialize draftMarks whenever the course or student list changes
   useEffect(() => {

@@ -2894,7 +2894,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                             </div>
 
                             {/* Counters Panel */}
-                            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                            <div className="grid grid-cols-3 gap-3">
                               <div className="bg-emerald-50/50 hover:bg-emerald-50 border border-emerald-100 rounded-xl p-3 text-center transition-all">
                                 <span className="text-[9px] font-bold text-emerald-700 uppercase tracking-wider">Completed</span>
                                 <div className="text-lg font-black text-emerald-800 mt-0.5">{studiedCount}</div>
@@ -2903,15 +2903,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                                 <span className="text-[9px] font-bold text-indigo-700 uppercase tracking-wider">Studying</span>
                                 <div className="text-lg font-black text-indigo-800 mt-0.5">{studyingCount}</div>
                               </div>
-                              <div className="bg-red-50/50 hover:bg-red-50 border border-red-100 rounded-xl p-3 text-center transition-all">
-                                <span className="text-[9px] font-bold text-red-700 uppercase tracking-wider">Backlogs / Failed</span>
-                                <div className="text-lg font-black text-red-800 mt-0.5">{failedCount}</div>
-                              </div>
-                              <div className="bg-amber-50/50 hover:bg-amber-50 border border-amber-100 rounded-xl p-3 text-center transition-all">
-                                <span className="text-[9px] font-bold text-amber-700 uppercase tracking-wider">Deferred</span>
-                                <div className="text-lg font-black text-amber-800 mt-0.5">{deferredCount}</div>
-                              </div>
-                              <div className="bg-slate-50 hover:bg-slate-100/70 border border-slate-200 rounded-xl p-3 text-center transition-all col-span-2 sm:col-span-1">
+                              <div className="bg-slate-50 hover:bg-slate-100/70 border border-slate-200 rounded-xl p-3 text-center transition-all">
                                 <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Future</span>
                                 <div className="text-lg font-black text-slate-700 mt-0.5">{laterCount}</div>
                               </div>
@@ -2975,17 +2967,6 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                           Studying Now
                         </button>
                         <button
-                          onClick={() => setStudentTab('failed')}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap ${
-                            studentTab === 'failed' 
-                              ? 'bg-red-600 text-white shadow-xs' 
-                              : 'text-slate-600 hover:bg-slate-100'
-                          }`}
-                        >
-                          <AlertCircle className="h-3.5 w-3.5" />
-                          Failed / Backlogs
-                        </button>
-                        <button
                           onClick={() => setStudentTab('studied')}
                           className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap ${
                             studentTab === 'studied' 
@@ -2995,17 +2976,6 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                         >
                           <CheckCircle2 className="h-3.5 w-3.5" />
                           Completed
-                        </button>
-                        <button
-                          onClick={() => setStudentTab('deferred')}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap ${
-                            studentTab === 'deferred' 
-                              ? 'bg-amber-600 text-white shadow-xs' 
-                              : 'text-slate-600 hover:bg-slate-100'
-                          }`}
-                        >
-                          <Clock className="h-3.5 w-3.5" />
-                          Deferred
                         </button>
                       </div>
 

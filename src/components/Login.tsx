@@ -53,6 +53,30 @@ export default function Login({ onLogin }: LoginProps) {
         return;
       }
 
+      const actualRole = (data.user?.user_type as string || '').toLowerCase();
+      const selectedRole = userType.toLowerCase();
+
+      let rolesMatch = false;
+      if (selectedRole === 'qa') {
+        rolesMatch = actualRole === 'qa' || actualRole === 'admin';
+      } else {
+        rolesMatch = actualRole === selectedRole;
+      }
+
+      if (!rolesMatch) {
+        const roleLabels: Record<string, string> = {
+          student: 'Student',
+          instructor: 'Instructor',
+          qa: 'Quality Assurance',
+          admission: 'Admission / IT',
+          dept_admin: 'Department Administration'
+        };
+        const selectedLabel = roleLabels[userType] || userType;
+        setError(`Access denied: The selected user type "${selectedLabel}" does not match your account's role.`);
+        setLoading(false);
+        return;
+      }
+
       // Save tokens
       // SECURITY NOTE: Storing JWT tokens in localStorage is susceptible to XSS.
       // For production hardening, transition to using secure, httpOnly cookies set by the backend.
