@@ -1899,38 +1899,41 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
           }
         }
       } catch (err: any) {
-        console.warn("Failed to load instructor courses from server (using local fallback if available):", err);
+        console.warn("Failed to load instructor courses from server:", err);
         if (active) {
-          const localCourses = apiService.getLocalInstructorCourses();
-          if (localCourses && localCourses.length > 0) {
-            const filtered = localCourses.filter(c => c.id !== 'course-1' && c.id !== 'course-2');
-            const normalized = filtered.map(normalizeCourse);
-            setCourses(normalized);
-            setErrorMsg(null);
-            
-            // Set active course from local data fallback
-            const urlParams = new URLSearchParams(window.location.search);
-            const paramCourseId = urlParams.get('courseId');
-            if (paramCourseId && normalized.some(c => c.id === paramCourseId)) {
-              setActiveCourseId(paramCourseId);
-            } else {
-              const savedActive = localStorage.getItem('IQRA_OBE_INSTRUCTOR_ACTIVE_ID');
-              const exists = normalized.some(c => c.id === savedActive);
-              if (!savedActive || savedActive === 'course-1' || savedActive === 'course-2' || !exists) {
-                if (normalized.length > 0) {
-                  setActiveCourseId(normalized[0].id);
-                } else {
-                  setActiveCourseId('');
-                }
+          const isBackend = apiService.isBackendUser();
+          if (!isBackend) {
+            const localCourses = apiService.getLocalInstructorCourses();
+            if (localCourses && localCourses.length > 0) {
+              const filtered = localCourses.filter(c => c.id !== 'course-1' && c.id !== 'course-2');
+              const normalized = filtered.map(normalizeCourse);
+              setCourses(normalized);
+              setErrorMsg(null);
+              
+              // Set active course from local data fallback
+              const urlParams = new URLSearchParams(window.location.search);
+              const paramCourseId = urlParams.get('courseId');
+              if (paramCourseId && normalized.some(c => c.id === paramCourseId)) {
+                setActiveCourseId(paramCourseId);
               } else {
-                setActiveCourseId(savedActive);
+                const savedActive = localStorage.getItem('IQRA_OBE_INSTRUCTOR_ACTIVE_ID');
+                const exists = normalized.some(c => c.id === savedActive);
+                if (!savedActive || savedActive === 'course-1' || savedActive === 'course-2' || !exists) {
+                  if (normalized.length > 0) {
+                    setActiveCourseId(normalized[0].id);
+                  } else {
+                    setActiveCourseId('');
+                  }
+                } else {
+                  setActiveCourseId(savedActive);
+                }
               }
+              showNotification("⚠️ Offline fallback active: Loaded your courses from cache/local storage.", "info");
+              return;
             }
-            showNotification("⚠️ Offline fallback active: Loaded your courses from cache/local storage.", "info");
-          } else {
-            setCourses([]);
-            setErrorMsg(err.message || "Failed to load instructor courses from backend server.");
           }
+          setCourses([]);
+          setErrorMsg(err.message || "Failed to load instructor courses from backend server.");
         }
       } finally {
         if (active) {

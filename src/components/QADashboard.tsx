@@ -606,7 +606,7 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
         { code: 'CLO-1', percentage: 70 + (hash % 15), status: 'Attained', totalStudents: reportMetrics.filteredStudents?.length || 24 },
         { code: 'CLO-2', percentage: 65 + (hash % 20), status: 'Attained', totalStudents: reportMetrics.filteredStudents?.length || 24 },
         { code: 'CLO-3', percentage: 55 + (hash % 25), status: 'Attained', totalStudents: reportMetrics.filteredStudents?.length || 24 },
-        { code: 'CLO-4', percentage: 45 + (hash % 30), status: (45 + (hash % 30)) >= 50 ? 'Attained' : 'Needs Improvement', totalStudents: reportMetrics.filteredStudents?.length || 24 }
+        { code: 'CLO-4', percentage: 45 + (hash % 30), status: (45 + (hash % 30)) >= 50 ? 'Attained' : 'Not Attained', totalStudents: reportMetrics.filteredStudents?.length || 24 }
       ];
     }
 
@@ -665,7 +665,7 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
       return {
         code: clo,
         percentage: totalCount > 0 ? percentage : null,
-        status: totalCount > 0 ? (percentage >= 50 ? 'Attained' : 'Needs Improvement') : 'Not Assessed',
+        status: totalCount > 0 ? (percentage >= 50 ? 'Attained' : 'Not Attained') : 'Not Assessed',
         totalStudents: totalCount
       };
     });

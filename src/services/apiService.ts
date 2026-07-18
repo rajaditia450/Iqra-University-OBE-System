@@ -822,6 +822,10 @@ export const apiService = {
     }
   },
 
+  isBackendUser(): boolean {
+    return isBackendUser();
+  },
+
   async getAllData(): Promise<OBEData> {
     const [deptsRes, programsRes, gasRes, coursesRes] = await Promise.all([
       fetchWithTimeout(`${BASE_URL}/departments/`, { headers: getHeaders() }),
@@ -1119,17 +1123,20 @@ export const apiService = {
     }
     const data = await response.json();
     if (Array.isArray(data)) {
-      const deletedKeysStr = localStorage.getItem('IQRA_OBE_DELETED_COURSES');
-      if (deletedKeysStr) {
-        try {
-          const deletedKeys = JSON.parse(deletedKeysStr);
-          return data.filter(ic => {
-            const key1 = `${ic.code}-${ic.programId || ''}`.toLowerCase().trim();
-            const key2 = String(ic.id).toLowerCase().trim();
-            return !deletedKeys.includes(key1) && !deletedKeys.includes(key2);
-          });
-        } catch (e) {
-          console.error(e);
+      const isBackend = isBackendUser();
+      if (!isBackend) {
+        const deletedKeysStr = localStorage.getItem('IQRA_OBE_DELETED_COURSES');
+        if (deletedKeysStr) {
+          try {
+            const deletedKeys = JSON.parse(deletedKeysStr);
+            return data.filter(ic => {
+              const key1 = `${ic.code}-${ic.programId || ''}`.toLowerCase().trim();
+              const key2 = String(ic.id).toLowerCase().trim();
+              return !deletedKeys.includes(key1) && !deletedKeys.includes(key2);
+            });
+          } catch (e) {
+            console.error(e);
+          }
         }
       }
       return data;
@@ -1138,8 +1145,10 @@ export const apiService = {
   },
 
   async saveInstructorCourses(courses: InstructorCourse[]): Promise<InstructorCourse[]> {
-    // Save to local storage first for resilient fallback
-    localStorage.setItem('IQRA_OBE_INSTRUCTOR_COURSES', JSON.stringify(courses));
+    // Save to local storage only if offline/sandbox mode is active
+    if (!isBackendUser()) {
+      localStorage.setItem('IQRA_OBE_INSTRUCTOR_COURSES', JSON.stringify(courses));
+    }
     try {
       const mappedCourses = courses.map(mapInstructorCourseToBackend);
       console.log('[DEBUG apiService.saveInstructorCourses] Sending payload to Django backend:', {
