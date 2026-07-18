@@ -5,7 +5,7 @@ export interface Student {
   name: string;
   departmentId: string;
   programId: string;
-  batch: 'Spring' | 'Summer' | 'Fall';
+  batch: string;
   semester?: string;
   email?: string;
 }

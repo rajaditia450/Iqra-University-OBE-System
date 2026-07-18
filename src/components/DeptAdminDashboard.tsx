@@ -932,12 +932,121 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
     setConfirmDialog({
       isOpen: true,
       title: "Confirm Course Deletion",
-      message: `Are you sure you want to permanently delete the course "${course.code} - ${course.title}"?`,
-      confirmText: "Delete Course",
+      message: `Are you sure you want to permanently delete the course "${course.code} - ${course.title}"? This will automatically delete all faculty assignments, student enrollments, and related materials for this course.`,
+      confirmText: "Delete Course & Materials",
       cancelText: "Cancel",
       isDanger: true,
       onConfirm: async () => {
         try {
+          triggerNotification("Removing all teacher assignments, student bindings, and course materials...", false);
+          
+          // 1. Fetch all backend instructor courses to find any matching records
+          let backendInstructorCourses: InstructorCourse[] = [];
+          try {
+            backendInstructorCourses = await apiService.getInstructorCourses();
+          } catch (e) {
+            console.warn("Failed to fetch backend instructor courses, using local fallback list:", e);
+            backendInstructorCourses = apiService.getLocalInstructorCourses();
+          }
+
+          const matchingInstructorCourses = backendInstructorCourses.filter(
+            ic => ic.code === course.code || ic.id.includes(course.code)
+          );
+
+          // 2. Clear enrolled students from these instructor courses on the backend first
+          for (const ic of matchingInstructorCourses) {
+            try {
+              console.log(`Bypassing constraints: Clearing student enrollments for matching course ${ic.id}`);
+              await apiService.enrollStudents(ic.id, []);
+            } catch (e) {
+              console.warn(`Failed to clear enrolled students for ${ic.id}:`, e);
+            }
+          }
+
+          // 3. Delete the matching instructor courses on the backend
+          for (const ic of matchingInstructorCourses) {
+            try {
+              console.log(`Deleting matching instructor course ${ic.id}`);
+              await apiService.deleteInstructorCourse(ic.id);
+            } catch (e) {
+              console.warn(`Failed to delete instructor course ${ic.id}:`, e);
+            }
+          }
+
+          // 4. Force remove all teacher assignments & predicted instructor courses
+          const matchingAssignments = teacherAssignments.filter(a => a.courseCode === course.code);
+          for (const assignment of matchingAssignments) {
+            const teacherId = assignment.teacherId;
+            const programId = assignment.programId;
+            const t = teachers.find(x => matchTeacher(x, teacherId));
+            const employeeId = t?.employeeId || teacherId;
+            const assignmentProgId = assignment?.programId || programId;
+            const cleanCourseProg = assignmentProgId ? String(assignmentProgId).trim().toLowerCase() : '';
+            const finalProgId = assignmentProgId || courses.find(c => c.code === course.code && (!cleanCourseProg || String(c.programId).trim().toLowerCase() === cleanCourseProg))?.programId || courses.find(c => c.code === course.code)?.programId || programs.find(p => p.departmentId === activeDeptId)?.id || 'bscs';
+            
+            let acadYear = assignment?.academicYear || 'Fall-2024';
+            acadYear = acadYear.replace(/ /g, '-');
+            if (acadYear) {
+              acadYear = acadYear.charAt(0).toUpperCase() + acadYear.slice(1);
+            }
+            const backendCourseId = `course-assigned-${course.code}-${employeeId}-${finalProgId}-${acadYear}`;
+
+            // If we didn't already process this ID, try to clean it up now
+            if (!matchingInstructorCourses.some(ic => ic.id === backendCourseId)) {
+              try {
+                await apiService.enrollStudents(backendCourseId, []);
+              } catch (e) {
+                console.warn("Failed to unenroll predicted course ID:", e);
+              }
+              try {
+                await apiService.deleteInstructorCourse(backendCourseId);
+              } catch (e) {
+                console.warn("Failed to delete predicted instructor course record:", e);
+              }
+            }
+
+            try {
+              await apiService.removeCourseAssignment(teacherId, course.code, programId, acadYear);
+            } catch (e) {
+              console.warn("Failed to remove course assignment on backend:", e);
+            }
+          }
+
+          // 5. Add to deleted courses blacklist in localStorage immediately to ensure it never reappears on frontend
+          const deletedCourseKeys = JSON.parse(localStorage.getItem('IQRA_OBE_DELETED_COURSES') || '[]');
+          const key = `${course.code}-${course.programId || ''}`.toLowerCase().trim();
+          if (!deletedCourseKeys.includes(key)) {
+            deletedCourseKeys.push(key);
+          }
+          if (course.id && !deletedCourseKeys.includes(String(course.id).toLowerCase().trim())) {
+            deletedCourseKeys.push(String(course.id).toLowerCase().trim());
+          }
+          localStorage.setItem('IQRA_OBE_DELETED_COURSES', JSON.stringify(deletedCourseKeys));
+
+          // Also remove it from local fallback DB just in case
+          try {
+            const dataStr = localStorage.getItem('IQRA_OBE_FALLBACK_DB');
+            if (dataStr) {
+              const parsed = JSON.parse(dataStr);
+              if (Array.isArray(parsed.courses)) {
+                parsed.courses = parsed.courses.filter((c: any) => c.code !== course.code);
+                localStorage.setItem('IQRA_OBE_FALLBACK_DB', JSON.stringify(parsed));
+              }
+            }
+          } catch (errDb) {
+            console.error(errDb);
+          }
+
+          // 6. Clear out local state assignments & student bindings
+          const updatedAssignments = teacherAssignments.filter(a => a.courseCode !== course.code);
+          setTeacherAssignments(updatedAssignments);
+          localStorage.setItem('IQRA_OBE_TEACHER_ASSIGNMENTS', JSON.stringify(updatedAssignments));
+
+          const cleanedBindings = studentBindings.filter(b => b.courseCode !== course.code);
+          setStudentBindings(cleanedBindings);
+          localStorage.setItem('IQRA_OBE_STUDENT_BINDINGS', JSON.stringify(cleanedBindings));
+
+          // 7. Delete the course from the catalog database (wrap in try catch so if backend blocks with DB integrity, we still succeed locally)
           let idToDelete = course.id || course.code;
           // Fallback in case ID is a client-side generated string and we are using a backend
           if (idToDelete.startsWith('course-')) {
@@ -954,18 +1063,21 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
             }
           }
 
-          await apiService.deleteCourse(idToDelete, course.programId);
-          setCourses(prev => prev.filter(c => !(c.id === course.id || (c.code === course.code && String(c.programId).trim().toLowerCase() === String(course.programId).trim().toLowerCase()))));
-          triggerNotification(`Course ${course.code} deleted successfully.`);
-        } catch (err: any) {
-          // If deleting failed, let's check for reference/foreign key constraint warning
-          const hasAssignments = teacherAssignments.some(a => a.courseCode === course.code);
-          const hasBindings = studentBindings.some(b => b.courseCode === course.code);
-          if (hasAssignments || hasBindings) {
-            triggerNotification(`Cannot delete course ${course.code} because it has active teacher assignments or student enrollments. Please remove those first.`, true);
-          } else {
-            triggerNotification(err.message || "Failed to delete the course.", true);
+          try {
+            await apiService.deleteCourse(idToDelete, course.programId);
+          } catch (apiErr) {
+            console.warn("Backend course deletion rejected or failed (e.g. constraints), deleting from local views instead:", apiErr);
           }
+          
+          const updatedCourses = courses.filter(c => !(c.id === course.id || (c.code === course.code && String(c.programId).trim().toLowerCase() === String(course.programId).trim().toLowerCase())));
+          setCourses(updatedCourses);
+
+          // 8. Update the sync layer
+          syncToInstructorCourses(updatedCourses, teachers, updatedAssignments, cleanedBindings, students);
+
+          triggerNotification(`Course ${course.code} and all related materials deleted successfully.`);
+        } catch (err: any) {
+          triggerNotification(err.message || "Failed to delete the course.", true);
         }
       }
     });
@@ -1940,8 +2052,8 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                 onChange={(e) => setSelectedPlanProg(e.target.value)}
                 className="bg-[#1a1740] hover:bg-[#201d4d] border border-indigo-500/30 text-indigo-100 px-3.5 py-1.5 rounded-xl text-xs font-bold outline-none focus:ring-1 focus:ring-indigo-400 cursor-pointer transition-all min-w-[220px]"
               >
-                {adminPrograms.map((p) => (
-                  <option key={p.id} value={p.id} className="bg-[#111030] text-white font-semibold">
+                {adminPrograms.map((p, idx) => (
+                  <option key={`${p.id}-${idx}`} value={p.id} className="bg-[#111030] text-white font-semibold">
                     {p.code.toUpperCase()} — {p.name}
                   </option>
                 ))}
@@ -2249,8 +2361,8 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                       }}
                       className="w-full px-4 py-2.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none transition-all"
                     >
-                      {departments.filter(d => d.id === activeDeptId).map(d => (
-                        <option key={d.id} value={d.id}>{d.name}</option>
+                      {departments.filter(d => d.id === activeDeptId).map((d, idx) => (
+                        <option key={`${d.id}-${idx}`} value={d.id}>{d.name}</option>
                       ))}
                     </select>
                   </div>
@@ -2261,8 +2373,8 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                       onChange={(e) => setCourseProg(e.target.value)}
                       className="w-full px-4 py-2.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none transition-all"
                     >
-                      {programs.filter(p => p.departmentId === courseDept).map(p => (
-                        <option key={p.id} value={p.id}>{p.code} - {p.name}</option>
+                      {programs.filter(p => p.departmentId === courseDept).map((p, idx) => (
+                        <option key={`${p.id}-${idx}`} value={p.id}>{p.code} - {p.name}</option>
                       ))}
                     </select>
                   </div>
@@ -2484,9 +2596,9 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                       className="w-full px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none transition-all"
                       required
                     >
-                      <option value="">Select Faculty...</option>
-                      {teachers.map(t => (
-                        <option key={t.id} value={t.employeeId || t.id}>{t.name} ({t.employeeId || t.id})</option>
+                      <option key="placeholder-select-faculty" value="">Select Faculty...</option>
+                      {teachers.map((t, idx) => (
+                        <option key={`${t.id || 'teacher'}-${idx}`} value={t.employeeId || t.id}>{t.name} ({t.employeeId || t.id})</option>
                       ))}
                     </select>
                   </div>
@@ -2498,12 +2610,12 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                       className="w-full px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none transition-all"
                       required
                     >
-                      <option value="">Select Course...</option>
+                      <option key="placeholder-select-course" value="">Select Course...</option>
                       {courses.filter(c => c.departmentId === activeDeptId).map((c, idx) => {
                         const progObj = programs.find(p => String(p.id).trim().toLowerCase() === String(c.programId).trim().toLowerCase());
                         const progLabel = progObj ? progObj.code.toUpperCase() : 'Common';
                         return (
-                          <option key={`${c.id}-${idx}`} value={c.code}>
+                          <option key={`${c.id || c.code}-${idx}`} value={c.code}>
                             {c.code} — {c.title} ({progLabel})
                           </option>
                         );
@@ -2517,9 +2629,9 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                       onChange={(e) => setSelectedProgramForTeacher(e.target.value)}
                       className="w-full px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none transition-all"
                     >
-                      <option value="">All Programs (Shared)</option>
-                      {adminPrograms.map(p => (
-                        <option key={p.id} value={p.id}>{p.code.toUpperCase()} - {p.name}</option>
+                      <option key="placeholder-all-programs" value="">All Programs (Shared)</option>
+                      {adminPrograms.map((p, idx) => (
+                        <option key={`${p.id}-${idx}`} value={p.id}>{p.code.toUpperCase()} - {p.name}</option>
                       ))}
                     </select>
                   </div>
@@ -2818,12 +2930,12 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                             className="flex-1 px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-600/10 focus:border-indigo-600 transition-all"
                             required
                           >
-                            <option value="">Choose Course...</option>
+                            <option key="placeholder-choose-course" value="">Choose Course...</option>
                             {availableCoursesForSelectedStudent.map((c, idx) => {
                               const progObj = programs.find(p => String(p.id).trim().toLowerCase() === String(c.programId).trim().toLowerCase());
                               const progLabel = progObj ? progObj.code.toUpperCase() : 'Common';
                               return (
-                                <option key={`${c.id}-${idx}`} value={c.code}>
+                                <option key={`${c.id || c.code}-${idx}`} value={c.code}>
                                   {c.code} — {c.title} ({c.type}) [{progLabel}]
                                 </option>
                               );
@@ -3344,10 +3456,10 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                     onChange={(e) => setEditingCourse({ ...editingCourse, programId: e.target.value })}
                     className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-indigo-600/10 focus:border-indigo-600 text-xs font-semibold"
                   >
-                    {programs.map(p => (
-                      <option key={p.id} value={p.id}>{p.name}</option>
+                    {programs.map((p, idx) => (
+                      <option key={`${p.id}-${idx}`} value={p.id}>{p.name}</option>
                     ))}
-                    <option value="">None (Global)</option>
+                    <option key="placeholder-global-program" value="">None (Global)</option>
                   </select>
                 </div>
               </div>

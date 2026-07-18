@@ -68,6 +68,15 @@ export const getCategoryPrefix = (name: string): string => {
   return name.split(' ').map(w => w[0]).join('').toUpperCase();
 };
 
+export const formatGACodeToStandard = (id: string): string => {
+  if (!id || id === 'No GA' || id === 'None') return id || 'No GA';
+  const matches = id.match(/\d+/);
+  if (matches) {
+    return `GA${matches[0]}`;
+  }
+  return id;
+};
+
 const DEFAULT_CUSTOM_GRADES = [
   { grade: 'A', percentage: '88% - 100%', points: '4' },
   { grade: 'B+', percentage: '81% - 87%', points: '3.5' },
@@ -843,31 +852,34 @@ const MarksheetDocument = ({
     const categoryContributions: Record<string, number> = {};
 
     activeCats.forEach(cat => {
-      let catContribution = 0;
+      let totalMaxMarks = 0;
+      let studentObtainedSum = 0;
       const existingUnits = course.unitsData[cat.name] || [];
+
       if (cat.units > 0) {
         for (let u = 1; u <= cat.units; u++) {
           const matchingUnit = existingUnits.find(unit => unit.unitNo === u);
-          const unitWeightage = matchingUnit?.weightage ?? (100 / cat.units);
-          const totalMarks = matchingUnit ? matchingUnit.totalMarks : 10;
           const questions = matchingUnit?.questions || [];
-          
-          let unitObtained = 0;
+
           if (questions.length > 0) {
             questions.forEach(q => {
+              totalMaxMarks += q.maxMarks || 0;
               const qKey = `q-${cat.name}-${u}-${q.id}`;
-              unitObtained += std.marks?.[qKey] ?? 0;
+              studentObtainedSum += Number(std.marks?.[qKey] || 0);
             });
           } else {
+            const maxMarks = matchingUnit ? matchingUnit.totalMarks : 10;
+            totalMaxMarks += maxMarks;
             const dKey = `${cat.name}-${u}`;
-            unitObtained += std.marks?.[dKey] ?? 0;
-          }
-
-          if (totalMarks > 0) {
-            catContribution += (unitObtained / totalMarks) * (unitWeightage / 100) * cat.percentage;
+            studentObtainedSum += Number(std.marks?.[dKey] || 0);
           }
         }
       }
+
+      const catContribution = totalMaxMarks > 0
+        ? (studentObtainedSum / totalMaxMarks) * cat.percentage
+        : 0;
+
       categoryContributions[cat.name] = catContribution;
       aggregate += catContribution;
     });
@@ -1288,7 +1300,7 @@ const MarksheetDocument = ({
                         colSpan={totalCols}
                         className="border-r border-black p-1 text-center font-black uppercase tracking-wider bg-indigo-50/30"
                       >
-                        {gaCode}
+                        {formatGACodeToStandard(gaCode)}
                       </th>
                     );
                   })}
@@ -1319,7 +1331,7 @@ const MarksheetDocument = ({
                           className="border-r border-black font-bold text-center bg-indigo-100/30 text-indigo-950 font-mono"
                           style={{ padding: ds.cellClass.includes('px-') ? '2px' : '4px', fontSize: ds.headerRow2Class.match(/text-\[[^\]]+\]/)?.[0]?.slice(5,-1) || '9px' }}
                         >
-                          {gaCode} Total
+                          {formatGACodeToStandard(gaCode)} Total
                         </th>
                       </React.Fragment>
                     );
@@ -1887,7 +1899,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
           }
         }
       } catch (err: any) {
-        console.error("Failed to load instructor courses from server:", err);
+        console.warn("Failed to load instructor courses from server (using local fallback if available):", err);
         if (active) {
           const localCourses = apiService.getLocalInstructorCourses();
           if (localCourses && localCourses.length > 0) {
@@ -3978,31 +3990,35 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
     
     selectedCourse.categories.forEach(cat => {
       if (cat.percentage > 0) {
+        let totalMaxMarks = 0;
+        let studentObtainedSum = 0;
+        const existingUnits = selectedCourse.unitsData[cat.name] || [];
+
         if (cat.units > 0) {
-          const existingUnits = selectedCourse.unitsData[cat.name] || [];
-          
           for (let u = 1; u <= cat.units; u++) {
             const matchingUnit = existingUnits.find(unit => unit.unitNo === u);
-            const unitWeightage = matchingUnit?.weightage ?? (100 / cat.units);
-            const totalMarks = matchingUnit ? matchingUnit.totalMarks : 10;
             const questions = matchingUnit?.questions || [];
-            
-            let unitObtained = 0;
+
             if (questions.length > 0) {
               questions.forEach(q => {
+                totalMaxMarks += q.maxMarks || 0;
                 const qKey = `q-${cat.name}-${u}-${q.id}`;
-                unitObtained += student.marks?.[qKey] ?? 0;
+                studentObtainedSum += student.marks?.[qKey] ?? 0;
               });
             } else {
+              const maxMarks = matchingUnit ? matchingUnit.totalMarks : 10;
+              totalMaxMarks += maxMarks;
               const dKey = `${cat.name}-${u}`;
-              unitObtained += student.marks?.[dKey] ?? 0;
-            }
-
-            if (totalMarks > 0) {
-              aggregate += (unitObtained / totalMarks) * (unitWeightage / 100) * cat.percentage;
+              studentObtainedSum += student.marks?.[dKey] ?? 0;
             }
           }
         }
+
+        const catContribution = totalMaxMarks > 0
+          ? (studentObtainedSum / totalMaxMarks) * cat.percentage
+          : 0;
+
+        aggregate += catContribution;
       }
     });
     
@@ -7098,7 +7114,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                                 {gaPerformance.map(ga => (
                                   <div key={ga.name} className="bg-slate-50/70 border border-slate-200 rounded-2xl p-4 shadow-xs space-y-3 transition-transform hover:translate-y-[-2px] hover:shadow-sm">
                                     <div className="flex items-center justify-between border-b border-slate-150 pb-2">
-                                      <span className="text-xs font-black text-indigo-950 uppercase tracking-widest">{ga.name}</span>
+                                      <span className="text-xs font-black text-indigo-950 uppercase tracking-widest">{formatGACodeToStandard(ga.name)}</span>
                                       <span className="text-[10px] bg-indigo-50 border border-indigo-200/50 text-indigo-800 font-bold px-2 py-0.5 rounded-full shrink-0">
                                         {ga.clos.length} CLOs
                                       </span>
@@ -7171,7 +7187,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                                         <th className="py-2.5 px-3 font-bold border-r border-slate-200">FullName</th>
                                         {sortedGAs.map(gaCode => (
                                           <th key={gaCode} className="py-2.5 px-3 text-center border-r border-slate-200 font-bold bg-slate-100/10">
-                                            {gaCode} (%)
+                                            {formatGACodeToStandard(gaCode)} (%)
                                           </th>
                                         ))}
                                         <th className="py-2.5 px-3 text-center font-bold">Comprehensive GA Status</th>

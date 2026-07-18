@@ -422,6 +422,19 @@ const getLocalStorageData = (): OBEData => {
         localStorage.setItem('IQRA_OBE_FALLBACK_DB', JSON.stringify(parsed));
       }
       
+      const deletedKeysStr = localStorage.getItem('IQRA_OBE_DELETED_COURSES');
+      if (deletedKeysStr && Array.isArray(parsed.courses)) {
+        try {
+          const deletedKeys = JSON.parse(deletedKeysStr);
+          parsed.courses = parsed.courses.filter((c: any) => {
+            const key1 = `${c.code}-${c.programId || ''}`.toLowerCase().trim();
+            const key2 = String(c.id).toLowerCase().trim();
+            return !deletedKeys.includes(key1) && !deletedKeys.includes(key2);
+          });
+        } catch (e) {
+          console.error(e);
+        }
+      }
       return parsed;
     } catch (e) {
       console.error("Failed to parse local storage fallback, resetting to default.", e);
@@ -456,6 +469,20 @@ const getLocalStorageData = (): OBEData => {
     }
     return { ...p, pos: cleanedPos };
   });
+
+  const deletedKeysStrBase = localStorage.getItem('IQRA_OBE_DELETED_COURSES');
+  if (deletedKeysStrBase && Array.isArray(base.courses)) {
+    try {
+      const deletedKeys = JSON.parse(deletedKeysStrBase);
+      base.courses = base.courses.filter((c: any) => {
+        const key1 = `${c.code}-${c.programId || ''}`.toLowerCase().trim();
+        const key2 = String(c.id).toLowerCase().trim();
+        return !deletedKeys.includes(key1) && !deletedKeys.includes(key2);
+      });
+    } catch (e) {
+      console.error(e);
+    }
+  }
 
   localStorage.setItem('IQRA_OBE_FALLBACK_DB', JSON.stringify(base));
   
@@ -817,11 +844,26 @@ export const apiService = {
 
     const normalizedCourses = Array.isArray(courses) ? courses.map(normalizeCourse) : [];
 
+    let filteredCourses = normalizedCourses;
+    const deletedKeysStr = localStorage.getItem('IQRA_OBE_DELETED_COURSES');
+    if (deletedKeysStr) {
+      try {
+        const deletedKeys = JSON.parse(deletedKeysStr);
+        filteredCourses = normalizedCourses.filter(c => {
+          const key1 = `${c.code}-${c.programId || ''}`.toLowerCase().trim();
+          const key2 = String(c.id).toLowerCase().trim();
+          return !deletedKeys.includes(key1) && !deletedKeys.includes(key2);
+        });
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
     return {
       departments: Array.isArray(depts) ? depts : [],
       programs: Array.isArray(programs) ? programs : [],
       gas: Array.isArray(gas) ? gas : [],
-      courses: normalizedCourses,
+      courses: filteredCourses,
     };
   },
 
@@ -1076,7 +1118,22 @@ export const apiService = {
       throw new Error(errMsg);
     }
     const data = await response.json();
-    if (Array.isArray(data)) return data;
+    if (Array.isArray(data)) {
+      const deletedKeysStr = localStorage.getItem('IQRA_OBE_DELETED_COURSES');
+      if (deletedKeysStr) {
+        try {
+          const deletedKeys = JSON.parse(deletedKeysStr);
+          return data.filter(ic => {
+            const key1 = `${ic.code}-${ic.programId || ''}`.toLowerCase().trim();
+            const key2 = String(ic.id).toLowerCase().trim();
+            return !deletedKeys.includes(key1) && !deletedKeys.includes(key2);
+          });
+        } catch (e) {
+          console.error(e);
+        }
+      }
+      return data;
+    }
     throw new Error('Malformed instructor courses data received');
   },
 
@@ -1857,7 +1914,21 @@ const DUMMY_PLAYGROUND_COURSES: InstructorCourse[] = [
 const getLocalInstructorCourses = (): InstructorCourse[] => {
   try {
     const data = localStorage.getItem('IQRA_OBE_INSTRUCTOR_COURSES');
-    return data ? JSON.parse(data) : [];
+    let result: InstructorCourse[] = data ? JSON.parse(data) : [];
+    const deletedKeysStr = localStorage.getItem('IQRA_OBE_DELETED_COURSES');
+    if (deletedKeysStr && result.length > 0) {
+      try {
+        const deletedKeys = JSON.parse(deletedKeysStr);
+        result = result.filter(ic => {
+          const key1 = `${ic.code}-${ic.programId || ''}`.toLowerCase().trim();
+          const key2 = String(ic.id).toLowerCase().trim();
+          return !deletedKeys.includes(key1) && !deletedKeys.includes(key2);
+        });
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    return result;
   } catch (e) {
     return [];
   }

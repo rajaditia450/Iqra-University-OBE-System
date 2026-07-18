@@ -50,9 +50,7 @@ export default function App() {
     localStorage.removeItem('IQRA_OBE_LOGGED_IN_USER');
     localStorage.removeItem('IQRA_OBE_USER_DEPT_ID');
     localStorage.removeItem('IQRA_OBE_USER_DEPT_NAME');
-    localStorage.removeItem('IQRA_OBE_INSTRUCTOR_COURSES');
     localStorage.removeItem('IQRA_OBE_INSTRUCTOR_ACTIVE_ID');
-    localStorage.removeItem('IQRA_OBE_STUDENTS');
     setCurrentUser(null);
   };
 
