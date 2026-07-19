@@ -824,9 +824,9 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
                       )}
 
                       {successMsg && (
-                        <div className="bg-emerald-50 text-emerald-800 text-sm p-4 rounded-xl border border-emerald-100 flex flex-col gap-2 font-medium">
+                        <div className="bg-blue-50 text-blue-800 text-sm p-4 rounded-xl border border-blue-100 flex flex-col gap-2 font-medium">
                           <div className="flex items-start gap-2.5">
-                            <Check className="w-5 h-5 shrink-0 text-emerald-600 mt-0.5" />
+                            <Check className="w-5 h-5 shrink-0 text-blue-600 mt-0.5" />
                             <span>{successMsg}</span>
                           </div>
                           <button
@@ -835,7 +835,7 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
                               setSuccessMsg(null);
                               setActiveTab('directory');
                             }}
-                            className="mt-2 self-start text-xs font-bold text-emerald-700 hover:text-emerald-950 underline transition-colors cursor-pointer"
+                            className="mt-2 self-start text-xs font-bold text-blue-700 hover:text-blue-950 underline transition-colors cursor-pointer"
                           >
                             &rarr; Go to Directory to view student
                           </button>
@@ -1009,9 +1009,9 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
                           )}
 
                           {successMsg && (
-                            <div className="bg-emerald-50 text-emerald-800 text-sm p-4 rounded-xl border border-emerald-100 flex flex-col gap-2 font-medium">
+                            <div className="bg-blue-50 text-blue-800 text-sm p-4 rounded-xl border border-blue-100 flex flex-col gap-2 font-medium">
                               <div className="flex items-start gap-2.5">
-                                <Check className="w-5 h-5 shrink-0 text-emerald-600 mt-0.5" />
+                                <Check className="w-5 h-5 shrink-0 text-blue-600 mt-0.5" />
                                 <span>{successMsg}</span>
                               </div>
                               <button
@@ -1020,7 +1020,7 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
                                   setSuccessMsg(null);
                                   setActiveTab('directory');
                                 }}
-                                className="mt-2 self-start text-xs font-bold text-emerald-700 hover:text-emerald-950 underline transition-colors cursor-pointer"
+                                className="mt-2 self-start text-xs font-bold text-blue-700 hover:text-blue-950 underline transition-colors cursor-pointer"
                               >
                                 &rarr; Back to Student Directory
                               </button>
@@ -1362,11 +1362,11 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
                             {importStatus.type !== 'idle' && (
                               <div className={`p-4 rounded-xl border flex items-start gap-2.5 font-semibold text-sm ${
                                 importStatus.type === 'success' 
-                                  ? 'bg-emerald-50 text-emerald-800 border-emerald-100' 
+                                  ? 'bg-blue-50 text-blue-800 border-blue-100' 
                                   : 'bg-red-50 text-red-700 border-red-100'
                               }`}>
                                 {importStatus.type === 'success' ? (
-                                  <Check className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+                                  <Check className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
                                 ) : (
                                   <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
                                 )}
@@ -1375,7 +1375,7 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
                                   {importStatus.type === 'success' && (
                                     <button
                                       onClick={() => setActiveTab('directory')}
-                                      className="block text-xs text-emerald-700 hover:text-emerald-950 underline transition-colors cursor-pointer mt-1"
+                                      className="block text-xs text-blue-700 hover:text-blue-950 underline transition-colors cursor-pointer mt-1"
                                     >
                                       Go to Student Directory &rarr;
                                     </button>
@@ -1453,7 +1453,7 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
                                 <p className="text-xs text-slate-500">Review data compatibility before importing to the database.</p>
                               </div>
                               <div className="text-right text-xs font-semibold flex items-center gap-2">
-                                <span className="text-emerald-600">{previewData.filter(r => r.isValid).length} Valid Records</span>
+                                <span className="text-blue-600">{previewData.filter(r => r.isValid).length} Valid Records</span>
                                 <span className="text-slate-300">|</span>
                                 <span className="text-red-500">{previewData.filter(r => !r.isValid).length} Warnings</span>
                               </div>
@@ -1485,8 +1485,8 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
                                       <td className="px-4 py-3 text-slate-500">{row.semester}</td>
                                       <td className="px-4 py-3">
                                         {row.isValid ? (
-                                          <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 text-[10px] font-bold rounded-md border border-emerald-100 flex items-center gap-1 w-max">
-                                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                                          <span className="px-2 py-0.5 bg-blue-50 text-blue-700 text-[10px] font-bold rounded-md border border-blue-100 flex items-center gap-1 w-max">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
                                             <span>Ready</span>
                                           </span>
                                         ) : (

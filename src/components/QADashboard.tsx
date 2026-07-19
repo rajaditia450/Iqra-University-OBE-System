@@ -65,7 +65,7 @@ function getGAColor(gaId: string): string {
   const num = parseInt(gaId.replace(/\D/g, ''), 10) || 1;
   const colors = [
     'bg-blue-500 border-blue-600 text-blue-100',
-    'bg-emerald-500 border-emerald-600 text-emerald-100',
+    'bg-blue-500 border-blue-600 text-blue-100',
     'bg-indigo-500 border-indigo-600 text-indigo-100',
     'bg-violet-500 border-violet-600 text-violet-100',
     'bg-teal-500 border-teal-600 text-teal-100',
@@ -83,7 +83,7 @@ function getGATextColors(gaId: string): { text: string; bg: string; border: stri
   const num = parseInt(gaId.replace(/\D/g, ''), 10) || 1;
   const textColors = [
     { text: 'text-blue-700', bg: 'bg-blue-50', border: 'border-blue-150/60' },
-    { text: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-150/60' },
+    { text: 'text-blue-700', bg: 'bg-blue-50', border: 'border-blue-150/60' },
     { text: 'text-indigo-700', bg: 'bg-indigo-50', border: 'border-indigo-150/60' },
     { text: 'text-violet-700', bg: 'bg-violet-50', border: 'border-violet-150/60' },
     { text: 'text-teal-700', bg: 'bg-teal-50', border: 'border-teal-150/60' },
@@ -2055,11 +2055,11 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                                     isConfiguring 
                                       ? 'hover:bg-indigo-100/50 hover:scale-105 cursor-pointer text-indigo-900 border-y border-indigo-100/40' 
                                       : 'cursor-default'
-                                  } ${doesMap ? 'bg-emerald-500/10' : ''}`}
+                                  } ${doesMap ? 'bg-blue-500/10' : ''}`}
                                 >
                                   {doesMap ? (
                                     <div className="flex items-center justify-center">
-                                      <span className="w-5 h-5 rounded-md bg-emerald-600 flex items-center justify-center text-white font-black text-[10px] shadow-sm">
+                                      <span className="w-5 h-5 rounded-md bg-blue-600 flex items-center justify-center text-white font-black text-[10px] shadow-sm">
                                         ✓
                                       </span>
                                     </div>
@@ -2105,7 +2105,7 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                                   setIsEditingVmInline(false);
                                 }}
                                 disabled={savingLoad}
-                                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm hover:scale-105"
+                                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm hover:scale-105"
                               >
                                 {savingLoad ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
                                 <span>Save Changes</span>
@@ -2237,7 +2237,7 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                                   setIsEditingVmInline(false);
                                 }}
                                 disabled={savingLoad}
-                                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm hover:scale-105"
+                                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm hover:scale-105"
                               >
                                 {savingLoad ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
                                 <span>Save Changes</span>
@@ -2378,7 +2378,7 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                             setIsEditingPoInline(false);
                           }}
                           disabled={savingLoad}
-                          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm hover:scale-105"
+                          className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm hover:scale-105"
                         >
                           {savingLoad ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
                           <span>Save Objectives</span>
@@ -2819,7 +2819,7 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                                                   pct === null 
                                                     ? 'bg-slate-50 border-slate-200 text-slate-400' 
                                                     : pct >= 50 
-                                                    ? 'bg-emerald-50 border-emerald-150 text-emerald-800 hover:bg-emerald-100 hover:border-emerald-200' 
+                                                    ? 'bg-blue-50 border-blue-150 text-blue-800 hover:bg-blue-100 hover:border-blue-200' 
                                                     : 'bg-rose-50 border-rose-150 text-rose-800 hover:bg-rose-100 hover:border-rose-200'
                                                 }`}
                                               >
@@ -2849,7 +2849,7 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                                         {avgAttainment !== null ? (
                                           <span className={`px-2.5 py-1 rounded-full text-[9px] font-black border tracking-wider uppercase inline-block ${
                                             avgAttainment >= 50 
-                                              ? 'bg-emerald-100 text-emerald-800 border-emerald-200 shadow-xs' 
+                                              ? 'bg-blue-100 text-blue-800 border-blue-200 shadow-xs' 
                                               : 'bg-rose-100 text-rose-800 border-rose-200 shadow-xs'
                                           }`}>
                                             {avgAttainment >= 50 ? 'Compliant' : 'Audit Required'}
@@ -2940,7 +2940,7 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                                                               </span>
                                                               <span className={`px-1.5 py-0.5 rounded font-mono font-black text-[9px] ${
                                                                 qPassPct !== null && qPassPct >= 50 
-                                                                  ? 'bg-emerald-50 text-emerald-700' 
+                                                                  ? 'bg-blue-50 text-blue-700' 
                                                                   : 'bg-rose-50 text-rose-700'
                                                               }`}>
                                                                 {qPassPct}% Pass
@@ -3121,7 +3121,7 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                             </div>
                             <div>
                               <span className="text-slate-400 font-bold uppercase text-[10px]">Passing Criteria:</span>
-                              <span className="ml-2 font-black text-emerald-700 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-md">50% Marks (KPI)</span>
+                              <span className="ml-2 font-black text-blue-700 bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-md">50% Marks (KPI)</span>
                             </div>
                           </div>
 
@@ -3257,9 +3257,9 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                                             </td>
                                             {/* Category % */}
                                             <td className={`px-2 py-2 text-center border-r border-slate-300 font-mono font-extrabold bg-slate-50/50 ${
-                                              catDetail.isPassed ? 'text-emerald-700' : 'text-rose-600'
+                                              catDetail.isPassed ? 'text-blue-700' : 'text-rose-600'
                                             }`}>
-                                              {catDetail.pct.toFixed(0)}%
+                                              {catDetail.pct % 1 === 0 ? catDetail.pct.toFixed(0) : catDetail.pct.toFixed(2).replace(/\.?0+$/, '')}%
                                               {!catDetail.isPassed && <span className="ml-1 text-[8px] font-black uppercase text-rose-500 bg-rose-50 px-1 py-0.5 rounded">X</span>}
                                             </td>
                                           </Fragment>
@@ -3275,7 +3275,7 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                                       <td className="px-3 py-2 text-center border-l border-slate-300">
                                         <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-black border ${
                                           isOverallPassed 
-                                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                                            ? 'bg-blue-50 text-blue-700 border-blue-200' 
                                             : 'bg-rose-50 text-rose-700 border-rose-200'
                                         }`}>
                                           {isOverallPassed ? 'ATTAINED' : 'NOT ATTAINED'}
@@ -3310,7 +3310,7 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
 
                       {/* Stat 2 */}
                       <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-xs flex items-center gap-4 hover:border-indigo-100 transition-all">
-                        <div className="bg-emerald-50 border border-emerald-100 p-3.5 rounded-2xl text-emerald-650 shrink-0">
+                        <div className="bg-blue-50 border border-blue-100 p-3.5 rounded-2xl text-blue-650 shrink-0">
                           <TrendingUp className="w-5 h-5" />
                         </div>
                         <div>
@@ -3397,7 +3397,7 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                                     <div 
                                       className={`w-full rounded-t-sm transition-all duration-500 hover:brightness-105 cursor-pointer ${
                                         passedPct >= 80 
-                                          ? 'bg-emerald-500' 
+                                          ? 'bg-blue-500' 
                                           : passedPct >= 65 
                                           ? 'bg-teal-500' 
                                           : passedPct >= 50 
@@ -3454,7 +3454,7 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                                   <td className="px-6 py-3.5 text-center font-mono text-slate-600">
                                     {metric.totalCount} Students
                                   </td>
-                                  <td className="px-6 py-3.5 text-center font-mono text-emerald-600 font-bold">
+                                  <td className="px-6 py-3.5 text-center font-mono text-blue-600 font-bold">
                                     {isAssessed ? metric.passedCount : '—'}
                                   </td>
                                   <td className="px-6 py-3.5 text-center font-mono text-rose-500">
@@ -3468,7 +3468,7 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                                       !isAssessed
                                         ? 'bg-slate-50 text-slate-400 border-slate-200'
                                         : metric.percentage >= 80
-                                        ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
+                                        ? 'bg-blue-50 text-blue-700 border-blue-100'
                                         : metric.percentage >= 65
                                         ? 'bg-teal-50 text-teal-700 border-teal-100'
                                         : metric.percentage >= 50
@@ -3623,7 +3623,7 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                                       <div className="mt-1 flex items-center gap-1.5">
                                         <span className="text-[9.5px] text-slate-400 font-medium">Status:</span>
                                         <span className={`px-1.5 py-0.2 rounded text-[8px] font-black uppercase ${
-                                          averageAttainment >= 50 ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                                          averageAttainment >= 50 ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30' : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
                                         }`}>
                                           {averageAttainment >= 50 ? 'Passed' : 'Audit Required'}
                                         </span>
@@ -3728,7 +3728,7 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                                       <div 
                                         style={{ width: `${ga.averageAttainment}%` }}
                                         className={`h-full rounded-full transition-all duration-500 ${
-                                          isPassed ? 'bg-emerald-500' : 'bg-rose-500'
+                                          isPassed ? 'bg-blue-500' : 'bg-rose-500'
                                         }`}
                                       />
                                     </div>
@@ -3740,7 +3740,7 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                                   {/* Status Badge */}
                                   <span className={`px-3 py-1 rounded-full text-[9px] font-black border tracking-wider uppercase inline-block text-center w-28 ${
                                     isPassed 
-                                      ? 'bg-emerald-50 text-emerald-800 border-emerald-150 shadow-2xs' 
+                                      ? 'bg-blue-50 text-blue-800 border-blue-150 shadow-2xs' 
                                       : 'bg-rose-50 text-rose-800 border-rose-150 shadow-2xs'
                                   }`}>
                                     {isPassed ? 'Passed' : 'Audit Required'}
@@ -3993,7 +3993,7 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                         </tr>
                         <tr>
                           <td className="border border-slate-200 px-3 py-1.5 font-bold">System Status</td>
-                          <td className="border border-slate-200 px-3 py-1.5 text-emerald-700 font-bold">OBE Curricular Database Synced</td>
+                          <td className="border border-slate-200 px-3 py-1.5 text-blue-700 font-bold">OBE Curricular Database Synced</td>
                         </tr>
                       </tbody>
                     </table>
@@ -4051,7 +4051,7 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                                 <div className="flex items-center gap-2">
                                   <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden border border-slate-200">
                                     <div 
-                                      className={`h-full rounded-full ${mappedCount === 0 ? 'bg-rose-500' : 'bg-emerald-500'}`}
+                                      className={`h-full rounded-full ${mappedCount === 0 ? 'bg-rose-500' : 'bg-blue-500'}`}
                                       style={{ width: `${Math.max(ratio, mappedCount > 0 ? 10 : 0)}%` }}
                                     />
                                   </div>
@@ -4120,7 +4120,7 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                             
                             {/* Bar container */}
                             <div 
-                              className="w-full bg-indigo-600 rounded-t-sm hover:bg-emerald-500 cursor-pointer transition-all duration-300"
+                              className="w-full bg-indigo-600 rounded-t-sm hover:bg-blue-500 cursor-pointer transition-all duration-300"
                               style={{ height: `${heightPct}%` }}
                             />
                             
@@ -4163,7 +4163,7 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                 <div className="space-y-4">
                   <div className="flex items-center gap-3 bg-slate-100 p-4 rounded-xl border border-slate-200">
                     {unmappedCourses.length === 0 ? (
-                      <Check className="w-8 h-8 text-emerald-600 font-black shrink-0" />
+                      <Check className="w-8 h-8 text-blue-600 font-black shrink-0" />
                     ) : (
                       <AlertCircle className="w-8 h-8 text-amber-600 shrink-0" />
                     )}
@@ -4183,7 +4183,7 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                         <p className="text-slate-500 text-[10px]">Verifies that no active course in database is left without at least 1 mapped Graduate Attribute.</p>
                       </div>
                       {unmappedCourses.length === 0 ? (
-                        <span className="font-mono text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 border border-emerald-200 rounded">
+                        <span className="font-mono text-[10px] font-bold text-blue-700 bg-blue-50 px-2.5 py-1 border border-blue-200 rounded">
                           100% COVERED
                         </span>
                       ) : (
@@ -4214,7 +4214,7 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                         <p className="text-slate-500 text-[10px]">Checks presence of registered Vision & Mission details in backend DB descriptors.</p>
                       </div>
                       {(activeDepartment?.vision && activeDepartment?.vision.length > 10) && (activeDepartment?.mission && activeDepartment?.mission.length > 10) ? (
-                        <span className="font-mono text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 border border-emerald-200 rounded">
+                        <span className="font-mono text-[10px] font-bold text-blue-700 bg-blue-50 px-2.5 py-1 border border-blue-200 rounded">
                           FULLY DRAFTED
                         </span>
                       ) : (
@@ -4578,11 +4578,11 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
         <div className="fixed bottom-5 right-5 z-[100] animate-in slide-in-from-bottom-5 duration-300 select-none">
           <div className={`flex items-center gap-2.5 px-5 py-3.5 rounded-2xl shadow-2xl border ${
             notification.type === 'success' 
-              ? 'bg-emerald-50 border-emerald-200 text-emerald-950 font-medium' 
+              ? 'bg-blue-50 border-blue-200 text-blue-950 font-medium' 
               : 'bg-rose-50 border-rose-200 text-rose-950 font-medium'
           }`}>
             {notification.type === 'success' ? (
-              <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+              <Check className="w-4 h-4 text-blue-600 shrink-0" />
             ) : (
               <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
             )}

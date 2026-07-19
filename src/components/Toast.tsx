@@ -20,11 +20,11 @@ export default function Toast({ message, type = 'success', onClose, duration = 4
   // Premium design styling based on notification type
   const styling = {
     success: {
-      border: 'border-emerald-500/20',
-      bg: 'bg-white/95 text-slate-900 shadow-emerald-500/5',
-      iconBg: 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20',
+      border: 'border-blue-500/20',
+      bg: 'bg-white/95 text-slate-900 shadow-blue-500/5',
+      iconBg: 'bg-blue-500/10 text-blue-600 border border-blue-500/20',
       icon: CheckCircle2,
-      accent: 'bg-emerald-500',
+      accent: 'bg-blue-500',
     },
     error: {
       border: 'border-rose-500/20',

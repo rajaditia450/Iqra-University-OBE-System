@@ -113,7 +113,7 @@ export default function WeightageAndStudents({
                       <td className="py-2.5 px-4 text-center bg-white border-r border-slate-150">
                         <span className={`px-2 py-0.5 rounded font-mono text-xs font-extrabold ${
                           currentTotalWeight === 100
-                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-300'
+                            ? 'bg-blue-50 text-blue-700 border border-blue-300'
                             : 'bg-rose-50 text-rose-700 border border-rose-300 animate-pulse'
                         }`}>
                           {currentTotalWeight.toFixed(2)}%
@@ -202,11 +202,11 @@ export default function WeightageAndStudents({
               </div>
             )}
             {saveStatus === 'success' && (
-              <div className="bg-emerald-50 border border-emerald-300 border-l-4 border-l-emerald-600 p-3.5 rounded-xl flex items-start gap-3 shadow-2xs animate-fade-in text-xs font-sans">
-                <Check className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+              <div className="bg-blue-50 border border-blue-300 border-l-4 border-l-blue-600 p-3.5 rounded-xl flex items-start gap-3 shadow-2xs animate-fade-in text-xs font-sans">
+                <Check className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
                 <div>
-                  <h4 className="text-xs font-extrabold text-emerald-950 uppercase tracking-wider">Saved Successfully</h4>
-                  <p className="text-[11px] text-emerald-850 mt-1 font-sans font-medium">
+                  <h4 className="text-xs font-extrabold text-blue-950 uppercase tracking-wider">Saved Successfully</h4>
+                  <p className="text-[11px] text-blue-850 mt-1 font-sans font-medium">
                     Weightage configuration updated successfully!
                   </p>
                 </div>
@@ -228,7 +228,7 @@ export default function WeightageAndStudents({
                   onClick={handleSaveAllWeightage}
                   className={`px-5 py-1.5 text-white text-xs font-bold rounded-lg shadow-md flex items-center gap-1.5 transition-all ${
                     saveStatus === 'success'
-                      ? 'bg-emerald-600 hover:bg-emerald-700 font-extrabold px-6 scale-105'
+                      ? 'bg-blue-600 hover:bg-blue-700 font-extrabold px-6 scale-105'
                       : saveStatus === 'error-over'
                       ? 'bg-rose-600 hover:bg-rose-700 scale-105'
                       : saveStatus === 'error-under'
@@ -315,7 +315,7 @@ export default function WeightageAndStudents({
                   To request student roster updates, add/remove students, or correct details, please coordinate with your department admin office or the QA focal person.
                 </p>
                 <div className="mt-4 pt-3.5 border-t border-slate-200/80 flex items-center gap-2 text-[10px] text-indigo-700 font-mono font-bold uppercase tracking-wider">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
+                  <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse shrink-0"></span>
                   Centralized OBE Sync Active
                 </div>
               </div>

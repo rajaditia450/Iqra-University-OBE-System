@@ -48,6 +48,58 @@ const getAutomaticAcademicYear = (): string => {
   return `${term}-${currentYear}`;
 };
 
+const normalizeRegNo = (reg: any): string => {
+  if (!reg) return '';
+  return String(reg).trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+};
+
+const normalizeCourseCode = (code: any): string => {
+  if (!code) return '';
+  return String(code).trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+};
+
+const areProgramsCompatible = (prog1: any, prog2: any): boolean => {
+  if (!prog1 || !prog2) return true;
+  const p1 = String(prog1).trim().toLowerCase();
+  const p2 = String(prog2).trim().toLowerCase();
+  if (p1 === p2) return true;
+  if (p1 === 'all' || p2 === 'all') return true;
+
+  if (p1.includes(p2) || p2.includes(p1)) return true;
+
+  const aliases: Record<string, string[]> = {
+    'cs': ['bscs', 'mcs', 'ms-cs', 'phd-cs', 'bs-cs', 'computer science', 'computer-science', 'bachelor of science in computer science'],
+    'se': ['bsse', 'ms-se', 'bs-se', 'software engineering', 'software-engineering', 'bachelor of science in software engineering'],
+    'ai': ['bsai', 'ms-ai', 'bs-ai', 'artificial intelligence', 'artificial-intelligence', 'bachelor of science in artificial intelligence'],
+    'it': ['bsit', 'ms-it', 'bs-it', 'information technology', 'information-technology', 'bachelor of science in information technology'],
+    'bscs': ['cs', 'computer science', 'computer-science', 'bachelor of science in computer science'],
+    'bsse': ['se', 'software engineering', 'software-engineering', 'bachelor of science in software engineering'],
+    'bsai': ['ai', 'artificial intelligence', 'artificial-intelligence', 'bachelor of science in artificial intelligence'],
+    'bsit': ['it', 'information technology', 'information-technology', 'bachelor of science in information technology']
+  };
+
+  if (aliases[p1]?.includes(p2) || aliases[p2]?.includes(p1)) return true;
+
+  const cleanTerm = (p: string) => {
+    let cp = p;
+    if (cp.startsWith('bs')) cp = cp.slice(2);
+    if (cp.startsWith('ms-') || cp.startsWith('ms')) cp = cp.slice(2);
+    if (cp.startsWith('phd-') || cp.startsWith('phd')) cp = cp.slice(3);
+    cp = cp.replace(/[-_ ]/g, '');
+    if (cp === 'computerscience') return 'cs';
+    if (cp === 'softwareengineering') return 'se';
+    if (cp === 'artificialintelligence') return 'ai';
+    if (cp === 'informationtechnology') return 'it';
+    return cp;
+  };
+
+  const c1 = cleanTerm(p1);
+  const c2 = cleanTerm(p2);
+  if (c1 === c2) return true;
+
+  return false;
+};
+
 const getAcademicYearOptions = (): string[] => {
   const currentYear = new Date().getFullYear();
   const options: string[] = [];
@@ -81,6 +133,7 @@ interface StudentCourseBinding {
 }
 
 interface TeacherCourseAssignment {
+  id?: string | number;
   teacherId: string;
   courseCode: string;
   programId?: string;
@@ -540,63 +593,8 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
       setSemesterPlans(loadedPlans);
 
       // 6. Load Student Bindings
-      const savedBindings = localStorage.getItem('IQRA_OBE_STUDENT_BINDINGS');
-      let bindingsNeedReset = loadedPlans.length === 0;
-      if (savedBindings && !bindingsNeedReset) {
-        try {
-          const parsedB = JSON.parse(savedBindings);
-          if (parsedB.some((b: any) => b.courseCode === 'SE-311' || b.courseCode === 'AI-381')) {
-            bindingsNeedReset = true;
-          } else {
-            setStudentBindings(parsedB);
-          }
-        } catch (e) {
-          bindingsNeedReset = true;
-        }
-      } else {
-        bindingsNeedReset = true;
-      }
-
-      if (bindingsNeedReset) {
-        const defaultBindings: StudentCourseBinding[] = [];
-        // Add BSCS 6th semester students
-        ['012-fa22-22012', '045-fa22-22045', '089-fa22-22089', '104-fa22-22104'].forEach(regNo => {
-          ['CMC381', 'CSC382', 'ESC311'].forEach(code => {
-            defaultBindings.push({ studentRegNo: regNo, courseCode: code });
-          });
-        });
-        // Add BSAI 4th semester students
-        ['001-fa23-23001', '002-fa23-23002'].forEach(regNo => {
-          ['CMC241', 'AIC212', 'MTE213', 'CMC252', 'MTE221', 'GER261'].forEach(code => {
-            defaultBindings.push({ studentRegNo: regNo, courseCode: code });
-          });
-        });
-        // Add BSAI 3rd semester student
-        ['003-sp24-24003'].forEach(regNo => {
-          ['CMC251', 'CMC222', 'AIC211', 'CMC261', 'MTE212'].forEach(code => {
-            defaultBindings.push({ studentRegNo: regNo, courseCode: code });
-          });
-        });
-        // Add BSAI 2nd semester student
-        ['004-fa24-24004'].forEach(regNo => {
-          ['CMC112', 'GER132', 'CMC121', 'GER142', 'GER122', 'MTE111'].forEach(code => {
-            defaultBindings.push({ studentRegNo: regNo, courseCode: code });
-          });
-        });
-
-        localStorage.setItem('IQRA_OBE_STUDENT_BINDINGS', JSON.stringify(defaultBindings));
-        setStudentBindings(defaultBindings);
-      }
-
-      // 6.5 Load Custom Student Course Statuses
-      const savedStatuses = localStorage.getItem('IQRA_OBE_STUDENT_COURSE_STATUSES');
-      if (savedStatuses) {
-        try {
-          setStudentCourseStatuses(JSON.parse(savedStatuses));
-        } catch (e) {
-          console.error("Failed to parse custom student course statuses", e);
-        }
-      }
+      let activeBindings: StudentCourseBinding[] = [];
+      let bindingsNeedReset = false;
 
       // 7. Load Teacher Course Assignments from backend or fallback to Local Storage
       let loadedAssignments: TeacherCourseAssignment[] = [];
@@ -604,15 +602,45 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
         const fetchedAssignments = await apiService.getCourseAssignments();
         if (Array.isArray(fetchedAssignments)) {
           loadedAssignments = fetchedAssignments.map((a: any) => ({
+            id: a.id,
             teacherId: a.teacherId || a.instructor || a.employeeId,
             courseCode: a.courseCode || a.course_code || a.code,
             programId: a.programId || a.program_id || a.program,
             academicYear: a.academicYear || a.academic_year || 'Fall-2024',
             status: a.status || 'active'
           }));
+
+          // Recover student-course bindings directly from assignments returned from the backend database
+          if (isBackend) {
+            const dbBindings: StudentCourseBinding[] = [];
+            fetchedAssignments.forEach((a: any) => {
+              const studentsList = a.students || a.enrolled_students || [];
+              if (Array.isArray(studentsList)) {
+                studentsList.forEach((s: any) => {
+                  const regNoClean = String(s.regNo || s.reg_no || '').trim();
+                  const cCodeClean = String(a.courseCode || a.course_code || a.code || '').trim();
+                  if (regNoClean && cCodeClean) {
+                    dbBindings.push({
+                      studentRegNo: regNoClean,
+                      courseCode: cCodeClean
+                    });
+                  }
+                });
+              }
+            });
+            console.log(`[DEBUG DeptAdmin] Recovered ${dbBindings.length} real student bindings from database assignments.`);
+            activeBindings = dbBindings;
+            setStudentBindings(dbBindings);
+            localStorage.setItem('IQRA_OBE_STUDENT_BINDINGS', JSON.stringify(dbBindings));
+          } else {
+            bindingsNeedReset = true;
+          }
+        } else {
+          bindingsNeedReset = true;
         }
       } catch (err) {
-        console.warn("Backend API for course assignments offline. Falling back to local storage.");
+        console.warn("Backend API for course assignments offline. Falling back to local storage.", err);
+        bindingsNeedReset = true;
         const savedAssignments = localStorage.getItem('IQRA_OBE_TEACHER_ASSIGNMENTS');
         if (savedAssignments) {
           try {
@@ -631,7 +659,25 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
           localStorage.setItem('IQRA_OBE_TEACHER_ASSIGNMENTS', JSON.stringify(loadedAssignments));
         }
       }
+      // Deduplicate loadedAssignments to guarantee no duplicate teacher assignments
+      const uniqueAssignmentsMap = new Map<string, TeacherCourseAssignment>();
+      loadedAssignments.forEach(a => {
+        const teacherKey = String(a.teacherId || '').trim().toLowerCase();
+        const courseKey = String(a.courseCode || '').trim().toLowerCase();
+        const programKey = String(a.programId || 'all').trim().toLowerCase();
+        const yearKey = String(a.academicYear || 'Fall-2024').trim().toLowerCase();
+        const key = `${teacherKey}_${courseKey}_${programKey}_${yearKey}`;
+        if (!uniqueAssignmentsMap.has(key)) {
+          uniqueAssignmentsMap.set(key, a);
+        }
+      });
+      loadedAssignments = Array.from(uniqueAssignmentsMap.values());
+      localStorage.setItem('IQRA_OBE_TEACHER_ASSIGNMENTS', JSON.stringify(loadedAssignments));
+
       setTeacherAssignments(loadedAssignments);
+
+      // Automatically sync to instructor courses on load of Admin dashboard
+      syncToInstructorCourses(obData.courses || [], loadedTeachers, loadedAssignments, activeBindings, studentList);
 
     } catch (err: any) {
       console.error(err);
@@ -663,7 +709,21 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
     // If a course is not assigned to any teacher, it won't appear in the instructor's courses.
     const assignmentMap = new Map<string, { teacherId: string; courseCode: string; programId?: string; academicYear?: string }>();
 
-    const updatedInstructorCourses: InstructorCourse[] = currentAssignments.map(assignment => {
+    // Deduplicate currentAssignments to avoid duplicate instructor courses
+    const uniqueAssignmentsMap = new Map<string, TeacherCourseAssignment>();
+    currentAssignments.forEach(a => {
+      const teacherKey = String(a.teacherId || '').trim().toLowerCase();
+      const courseKey = String(a.courseCode || '').trim().toLowerCase();
+      const programKey = String(a.programId || 'all').trim().toLowerCase();
+      const yearKey = String(a.academicYear || 'Fall-2024').trim().toLowerCase();
+      const key = `${teacherKey}_${courseKey}_${programKey}_${yearKey}`;
+      if (!uniqueAssignmentsMap.has(key)) {
+        uniqueAssignmentsMap.set(key, a);
+      }
+    });
+    const deduplicatedAssignments = Array.from(uniqueAssignmentsMap.values());
+
+    const updatedInstructorCourses: InstructorCourse[] = deduplicatedAssignments.map(assignment => {
       const teacher = currentTeachers.find(t => matchTeacher(t, assignment.teacherId));
       const assignmentProgClean = assignment.programId ? String(assignment.programId).trim().toLowerCase() : '';
       const course = currentCourses.find(c => c.code === assignment.courseCode && (!assignmentProgClean || String(c.programId).trim().toLowerCase() === assignmentProgClean)) || currentCourses.find(c => c.code === assignment.courseCode);
@@ -691,15 +751,16 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
 
       // Find matching students for this course based on bindings
       const studentRegs = currentBindings
-        .filter(b => b.courseCode === assignment.courseCode)
-        .map(b => b.studentRegNo);
+        .filter(b => normalizeCourseCode(b.courseCode) === normalizeCourseCode(assignment.courseCode))
+        .map(b => normalizeRegNo(b.studentRegNo));
 
       const courseStudents = currentStudents
         .filter(s => {
-          const isBound = studentRegs.includes(s.regNo);
+          const sReg = normalizeRegNo(s.regNo);
+          const isBound = studentRegs.includes(sReg);
           if (!isBound) return false;
           if (assignment.programId) {
-            return s.programId === assignment.programId;
+            return areProgramsCompatible(s.programId, assignment.programId);
           }
           return true;
         })
@@ -707,7 +768,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
           // Preserve existing marks if student was already in this course
           const existingCourse = existingInstructorCourses.find(ec => ec.id === uniqId) || 
                                  existingInstructorCourses.find(ec => ec.code === assignment.courseCode && !ec.id.includes('-'));
-          const existingStudent = existingCourse?.students.find(es => es.regNo === s.regNo);
+          const existingStudent = existingCourse?.students.find(es => normalizeRegNo(es.regNo) === normalizeRegNo(s.regNo));
           return {
             regNo: s.regNo,
             name: s.name,
@@ -793,7 +854,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
       const finalTitle = assignment.programId && matchedProg ? `${baseTitle} (${matchedProg.code.toUpperCase()})` : baseTitle;
 
       return {
-        id: existingCourse?.id || uniqId,
+        id: assignment.id ? String(assignment.id) : (existingCourse?.id || uniqId),
         code: assignment.courseCode,
         title: finalTitle,
         courseType: isLab ? 'Lab' : 'Theory',
@@ -814,7 +875,14 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
     });
 
     // Save to local storage
-    localStorage.setItem('IQRA_OBE_INSTRUCTOR_COURSES', JSON.stringify(updatedInstructorCourses));
+    if (!apiService.isBackendUser()) {
+      localStorage.setItem('IQRA_OBE_INSTRUCTOR_COURSES', JSON.stringify(updatedInstructorCourses));
+    } else {
+      // Bypassing apiService.saveInstructorCourses(updatedInstructorCourses) for Dept Admin.
+      // Admins do not have the Instructor permission to POST to /api/instructor/courses/.
+      // Assignments are managed through course assignments, and student enrollment is done via enrollStudents.
+      console.log('[DEBUG DeptAdmin] Bypassing saveInstructorCourses call in backend mode to avoid permission checks.');
+    }
 
     // Sync enrollments to backend sequentially to avoid SQLite database locks (500 errors)
     (async () => {
@@ -1492,26 +1560,32 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
       return;
     }
 
+    let assignmentId: string | number | undefined;
+
+    try {
+      const resData = await apiService.assignCourse(
+        selectedTeacherId,
+        selectedCourseCodeForTeacher,
+        selectedProgramForTeacher || undefined,
+        assignmentAcademicYear
+      );
+      if (resData && resData.id) {
+        assignmentId = resData.id;
+      }
+    } catch (err: any) {
+      console.error(err);
+      triggerNotification(err.message || "Failed to save course assignment to backend.", true);
+      return;
+    }
+
     const newAssignment: TeacherCourseAssignment = {
+      id: assignmentId,
       teacherId: selectedTeacherId,
       courseCode: selectedCourseCodeForTeacher,
       programId: selectedProgramForTeacher || undefined,
       academicYear: assignmentAcademicYear,
       status: 'active'
     };
-
-    try {
-      await apiService.assignCourse(
-        selectedTeacherId,
-        selectedCourseCodeForTeacher,
-        selectedProgramForTeacher || undefined,
-        assignmentAcademicYear
-      );
-    } catch (err: any) {
-      console.error(err);
-      triggerNotification(err.message || "Failed to save course assignment to backend.", true);
-      return;
-    }
 
     const updatedAssignments = [...teacherAssignments, newAssignment];
     setTeacherAssignments(updatedAssignments);
@@ -1715,16 +1789,20 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
     const newBindings: StudentCourseBinding[] = [...studentBindings];
 
     students.forEach(student => {
-      const sem = student.semester || '1st';
-      const prog = student.programId || 'bscs';
+      const sem = String(student.semester || '1st').trim().toLowerCase();
+      const prog = String(student.programId || 'bscs').trim().toLowerCase();
 
       // Find the predefined plan for this program and semester
-      const plan = semesterPlans.find(p => p.programId === prog && p.semester === sem);
+      const plan = semesterPlans.find(p => 
+        areProgramsCompatible(p.programId, prog) && 
+        String(p.semester || '').trim().toLowerCase() === sem
+      );
       if (plan && plan.courseCodes.length > 0) {
         plan.courseCodes.forEach(code => {
           // Check if already bound
           const alreadyBound = newBindings.some(
-            b => b.studentRegNo === student.regNo && b.courseCode === code
+            b => String(b.studentRegNo || '').trim().toLowerCase() === String(student.regNo || '').trim().toLowerCase() && 
+                 String(b.courseCode || '').trim().toLowerCase() === String(code || '').trim().toLowerCase()
           );
           if (!alreadyBound) {
             newBindings.push({ studentRegNo: student.regNo, courseCode: code });
@@ -1756,7 +1834,8 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
     }
 
     const alreadyBound = studentBindings.some(
-      b => b.studentRegNo === selectedStudentRegNo && b.courseCode === selectedCourseCodeForStudent
+      b => normalizeRegNo(b.studentRegNo) === normalizeRegNo(selectedStudentRegNo) && 
+           normalizeCourseCode(b.courseCode) === normalizeCourseCode(selectedCourseCodeForStudent)
     );
 
     if (alreadyBound) {
@@ -1775,44 +1854,46 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
 
     syncToInstructorCourses(courses, teachers, teacherAssignments, updatedBindings, students);
 
-    const studentObj = students.find(s => s.regNo === selectedStudentRegNo);
-    triggerNotification(`Manually enrolled ${studentObj?.name} in course ${selectedCourseCodeForStudent}`);
+    const studentObj = students.find(s => normalizeRegNo(s.regNo) === normalizeRegNo(selectedStudentRegNo));
+    triggerNotification(`Manually enrolled ${studentObj?.name || selectedStudentRegNo} in course ${selectedCourseCodeForStudent}`);
     setSelectedCourseCodeForStudent('');
   };
 
   const handleManualUnbindCourse = (regNo: string, code: string) => {
     const updatedBindings = studentBindings.filter(
-      b => !(b.studentRegNo === regNo && b.courseCode === code)
+      b => !(normalizeRegNo(b.studentRegNo) === normalizeRegNo(regNo) && 
+             normalizeCourseCode(b.courseCode) === normalizeCourseCode(code))
     );
     setStudentBindings(updatedBindings);
     localStorage.setItem('IQRA_OBE_STUDENT_BINDINGS', JSON.stringify(updatedBindings));
 
     syncToInstructorCourses(courses, teachers, teacherAssignments, updatedBindings, students);
 
-    const studentObj = students.find(s => s.regNo === regNo);
-    triggerNotification(`Unenrolled ${studentObj?.name} from course ${code}`);
+    const studentObj = students.find(s => normalizeRegNo(s.regNo) === normalizeRegNo(regNo));
+    triggerNotification(`Unenrolled ${studentObj?.name || regNo} from course ${code}`);
   };
 
   // Student academic pathway course status helpers
   const getCourseStatus = (studentRegNo: string, courseCode: string): 'studied' | 'studying' | 'failed' | 'later' | 'deferred' => {
-    const student = students.find(s => s.regNo === studentRegNo);
+    const student = students.find(s => normalizeRegNo(s.regNo) === normalizeRegNo(studentRegNo));
 
     // 1. Is it currently bound/enrolled? If so, check if there is an active teacher assigned to this course.
     const hasTeacherAssigned = teacherAssignments.some(
-      a => a.courseCode === courseCode && (!a.programId || a.programId === student?.programId)
+      a => normalizeCourseCode(a.courseCode) === normalizeCourseCode(courseCode) && (!a.programId || areProgramsCompatible(a.programId, student?.programId))
     );
 
     const isStudying = studentBindings.some(
-      b => b.studentRegNo === studentRegNo && b.courseCode === courseCode
+      b => normalizeRegNo(b.studentRegNo) === normalizeRegNo(studentRegNo) && 
+           normalizeCourseCode(b.courseCode) === normalizeCourseCode(courseCode)
     );
     if (isStudying && hasTeacherAssigned) return 'studying';
 
     // 2. Is there an explicit override?
-    const studentOverrides = studentCourseStatuses[studentRegNo];
-    if (studentOverrides && studentOverrides[courseCode]) {
-      const overrideStatus = studentOverrides[courseCode];
+    const studentOverrides = studentCourseStatuses[studentRegNo] || studentCourseStatuses[normalizeRegNo(studentRegNo)];
+    if (studentOverrides) {
+      const overrideStatus = studentOverrides[courseCode] || studentOverrides[normalizeCourseCode(courseCode)];
       // If override is 'studying' but it's not in bindings anymore, it means it was unenrolled, so treat as deferred/failed/etc.
-      if (overrideStatus !== 'studying') {
+      if (overrideStatus && overrideStatus !== 'studying') {
         return overrideStatus;
       }
     }
@@ -1822,7 +1903,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
 
     // Find the course's semester in the student's program plans
     const coursePlan = semesterPlans.find(
-      p => p.programId === student.programId && p.courseCodes.includes(courseCode)
+      p => areProgramsCompatible(p.programId, student.programId) && p.courseCodes.some(cc => normalizeCourseCode(cc) === normalizeCourseCode(courseCode))
     );
 
     if (!coursePlan) {
@@ -1851,7 +1932,8 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
     // 1. Update bindings based on the new status
     let updatedBindings = [...studentBindings];
     const isCurrentlyEnrolled = studentBindings.some(
-      b => b.studentRegNo === studentRegNo && b.courseCode === courseCode
+      b => normalizeRegNo(b.studentRegNo) === normalizeRegNo(studentRegNo) && 
+           normalizeCourseCode(b.courseCode) === normalizeCourseCode(courseCode)
     );
 
     if (newStatus === 'studying') {
@@ -1861,7 +1943,8 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
     } else {
       if (isCurrentlyEnrolled) {
         updatedBindings = updatedBindings.filter(
-          b => !(b.studentRegNo === studentRegNo && b.courseCode === courseCode)
+          b => !(normalizeRegNo(b.studentRegNo) === normalizeRegNo(studentRegNo) && 
+                 normalizeCourseCode(b.courseCode) === normalizeCourseCode(courseCode))
         );
       }
     }
@@ -1876,19 +1959,23 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
       [studentRegNo]: {
         ...(studentCourseStatuses[studentRegNo] || {}),
         [courseCode]: newStatus
+      },
+      [normalizeRegNo(studentRegNo)]: {
+        ...(studentCourseStatuses[normalizeRegNo(studentRegNo)] || {}),
+        [normalizeCourseCode(courseCode)]: newStatus
       }
     };
     setStudentCourseStatuses(updatedStatuses);
     localStorage.setItem('IQRA_OBE_STUDENT_COURSE_STATUSES', JSON.stringify(updatedStatuses));
 
-    const studentObj = students.find(s => s.regNo === studentRegNo);
+    const studentObj = students.find(s => normalizeRegNo(s.regNo) === normalizeRegNo(studentRegNo));
     const studentProgClean = studentObj?.programId ? String(studentObj.programId).trim().toLowerCase() : '';
-    const courseObj = courses.find(c => c.code === courseCode && (!studentProgClean || String(c.programId).trim().toLowerCase() === studentProgClean)) || courses.find(c => c.code === courseCode);
+    const courseObj = courses.find(c => normalizeCourseCode(c.code) === normalizeCourseCode(courseCode) && (!studentProgClean || String(c.programId).trim().toLowerCase() === studentProgClean)) || courses.find(c => normalizeCourseCode(c.code) === normalizeCourseCode(courseCode));
     
     // Custom notifications depending on transition
-    let msg = `Updated ${courseCode} status for ${studentObj?.name}`;
+    let msg = `Updated ${courseCode} status for ${studentObj?.name || studentRegNo}`;
     if (newStatus === 'studying') {
-      msg = `Enrolled ${studentObj?.name} in ${courseCode} - ${courseObj?.title}`;
+      msg = `Enrolled ${studentObj?.name || studentRegNo} in ${courseCode} - ${courseObj?.title || 'Course'}`;
     } else if (newStatus === 'failed') {
       msg = `Marked ${courseCode} as Failed / Backlog for ${studentObj?.name}. They need to register for this backlog course.`;
     } else if (newStatus === 'studied') {
@@ -1955,7 +2042,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
 
   // Teacher Assignments Grid (Tab 4)
   const filteredAssignments = useMemo(() => {
-    return teacherAssignments.filter(a => {
+    const list = teacherAssignments.filter(a => {
       const teacher = teachers.find(t => matchTeacher(t, a.teacherId));
       const assignmentProgClean = a.programId ? String(a.programId).trim().toLowerCase() : '';
       const course = courses.find(c => c.code === a.courseCode && (!assignmentProgClean || String(c.programId).trim().toLowerCase() === assignmentProgClean)) || courses.find(c => c.code === a.courseCode);
@@ -1969,6 +2056,19 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
         a.courseCode.toLowerCase().includes(q) || 
         (course?.title || '').toLowerCase().includes(q);
     });
+
+    const uniqueMap = new Map<string, TeacherCourseAssignment>();
+    list.forEach(a => {
+      const teacherKey = String(a.teacherId || '').trim().toLowerCase();
+      const courseKey = String(a.courseCode || '').trim().toLowerCase();
+      const programKey = String(a.programId || 'all').trim().toLowerCase();
+      const yearKey = String(a.academicYear || 'Fall-2024').trim().toLowerCase();
+      const key = `${teacherKey}_${courseKey}_${programKey}_${yearKey}`;
+      if (!uniqueMap.has(key)) {
+        uniqueMap.set(key, a);
+      }
+    });
+    return Array.from(uniqueMap.values());
   }, [teacherAssignments, teachers, courses, assignmentSearch, activeDeptId]);
 
   // Student Filter List (Tab 5)
@@ -1988,7 +2088,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
     const studentProgClean = student?.programId ? String(student.programId).trim().toLowerCase() : '';
     return studentBindings
       .filter(b => b.studentRegNo === selectedStudentRegNo)
-      .map(b => courses.find(c => c.code === b.courseCode && (!studentProgClean || String(c.programId).trim().toLowerCase() === studentProgClean)) || courses.find(c => c.code === b.courseCode))
+      .map(b => courses.find(c => c.code === b.courseCode && (!studentProgClean || areProgramsCompatible(c.programId, studentProgClean))) || courses.find(c => c.code === b.courseCode))
       .filter((c): c is Course => !!c);
   }, [selectedStudentRegNo, studentBindings, courses]);
 
@@ -2002,7 +2102,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
 
     return courses.filter(c => {
       // Must be same program or department and not already enrolled
-      const isSameProgram = c.programId === student.programId;
+      const isSameProgram = areProgramsCompatible(c.programId, student.programId);
       const isSameDept = c.departmentId === student.departmentId;
       const isNotEnrolled = !enrolledCodes.includes(c.code);
       return (isSameProgram || isSameDept) && isNotEnrolled;
@@ -2425,7 +2525,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                       <p className="text-[11px] text-slate-500 italic">No files selected. Uploading will automatically parse and display skipped counts.</p>
                     ) : importStatus.type === 'success' ? (
                       <div className="space-y-1">
-                        <p className="text-[11px] text-emerald-600 font-bold flex items-center gap-1.5">
+                        <p className="text-[11px] text-blue-600 font-bold flex items-center gap-1.5">
                           <Check className="h-4.5 w-4.5" />
                           <span>Parsing Successful!</span>
                         </p>
@@ -2498,7 +2598,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                             </td>
                             <td className="px-5 py-3.5">
                               <span className={`inline-block px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${
-                                c.courseType === 'Lab' ? 'bg-emerald-50 text-emerald-600' : 'bg-sky-50 text-sky-600'
+                                c.courseType === 'Lab' ? 'bg-blue-50 text-blue-600' : 'bg-sky-50 text-sky-600'
                               }`}>
                                 {c.courseType || 'Theory'}
                               </span>
@@ -2713,7 +2813,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                             </td>
                             <td className="px-5 py-3.5 text-center">
                               {isClosed ? (
-                                <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full text-[9px] font-black uppercase font-mono border border-emerald-200">
+                                <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full text-[9px] font-black uppercase font-mono border border-blue-200">
                                   <Lock className="w-2.5 h-2.5" />
                                   CLOSED
                                 </span>
@@ -2736,7 +2836,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                                     <span>Close Semester</span>
                                   </button>
                                 ) : (
-                                  <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1 italic bg-emerald-50/50 px-2 py-1 rounded-lg border border-emerald-100">
+                                  <span className="text-[10px] text-blue-600 font-bold flex items-center gap-1 italic bg-blue-50/50 px-2 py-1 rounded-lg border border-blue-100">
                                     <Award className="h-3.5 w-3.5" />
                                     Sealed
                                   </span>
@@ -2847,7 +2947,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                         const matchedProg = programs.find(p => String(p.id).trim().toLowerCase() === String(s.programId).trim().toLowerCase());
                         
                         // Get all curriculum courses for this program
-                        const progPlans = semesterPlans.filter(p => String(p.programId).trim().toLowerCase() === String(s.programId).trim().toLowerCase());
+                        const progPlans = semesterPlans.filter(p => areProgramsCompatible(p.programId, s.programId));
                         const curriculumCodes: string[] = Array.from(new Set(progPlans.flatMap(p => p.courseCodes))) as string[];
 
                         let studiedCount = 0;
@@ -2895,9 +2995,9 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
 
                             {/* Counters Panel */}
                             <div className="grid grid-cols-3 gap-3">
-                              <div className="bg-emerald-50/50 hover:bg-emerald-50 border border-emerald-100 rounded-xl p-3 text-center transition-all">
-                                <span className="text-[9px] font-bold text-emerald-700 uppercase tracking-wider">Completed</span>
-                                <div className="text-lg font-black text-emerald-800 mt-0.5">{studiedCount}</div>
+                              <div className="bg-blue-50/50 hover:bg-blue-50 border border-blue-100 rounded-xl p-3 text-center transition-all">
+                                <span className="text-[9px] font-bold text-blue-700 uppercase tracking-wider">Completed</span>
+                                <div className="text-lg font-black text-blue-800 mt-0.5">{studiedCount}</div>
                               </div>
                               <div className="bg-indigo-50/50 hover:bg-indigo-50 border border-indigo-100 rounded-xl p-3 text-center transition-all">
                                 <span className="text-[9px] font-bold text-indigo-700 uppercase tracking-wider">Studying</span>
@@ -2970,7 +3070,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                           onClick={() => setStudentTab('studied')}
                           className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap ${
                             studentTab === 'studied' 
-                              ? 'bg-emerald-600 text-white shadow-xs' 
+                              ? 'bg-blue-600 text-white shadow-xs' 
                               : 'text-slate-600 hover:bg-slate-100'
                           }`}
                         >
@@ -2982,10 +3082,10 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                       {/* Course Catalog List Display */}
                       <div className="space-y-4">
                         {(() => {
-                          const s = students.find(x => x.regNo === selectedStudentRegNo);
+                          const s = students.find(x => normalizeRegNo(x.regNo) === normalizeRegNo(selectedStudentRegNo));
                           if (!s) return null;
 
-                          const progPlans = semesterPlans.filter(p => p.programId === s.programId);
+                          const progPlans = semesterPlans.filter(p => areProgramsCompatible(p.programId, s.programId));
                           const curriculumCodes = Array.from(new Set(progPlans.flatMap(p => p.courseCodes))) as string[];
                           const orderedSemestersList = ["1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th"];
                           
@@ -2998,7 +3098,8 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                               // The course must be in the student's program's curriculum OR explicitly enrolled/studied
                               const inCurriculum = curriculumCodes.includes(c.code);
                               const isEnrolled = studentBindings.some(
-                                b => b.studentRegNo === s.regNo && b.courseCode === c.code
+                                b => normalizeRegNo(b.studentRegNo) === normalizeRegNo(s.regNo) && 
+                                     normalizeCourseCode(b.courseCode) === normalizeCourseCode(c.code)
                               );
                               if (!inCurriculum && !isEnrolled) return false;
                               
@@ -3041,7 +3142,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                                           <div className="flex items-center gap-1.5">
                                             <button
                                               onClick={() => updateStudentCourseStatus(s.regNo, c.code, 'studied')}
-                                              className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-1 rounded-lg border border-emerald-150 transition-all flex items-center gap-1 cursor-pointer"
+                                              className="bg-blue-50 hover:bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-1 rounded-lg border border-blue-150 transition-all flex items-center gap-1 cursor-pointer"
                                               title="Mark course as successfully passed"
                                             >
                                               <Check className="h-3 w-3" />
@@ -3078,7 +3179,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                                             </button>
                                             <button
                                               onClick={() => updateStudentCourseStatus(s.regNo, c.code, 'studied')}
-                                              className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2.5 py-1 rounded-lg border border-emerald-150 transition-all cursor-pointer"
+                                              className="bg-blue-50 hover:bg-blue-100 text-blue-700 text-[10px] font-bold px-2.5 py-1 rounded-lg border border-blue-150 transition-all cursor-pointer"
                                               title="Mark course as passed/completed"
                                             >
                                               <span>Mark Passed</span>
@@ -3098,7 +3199,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                                             </button>
                                             <button
                                               onClick={() => updateStudentCourseStatus(s.regNo, c.code, 'studied')}
-                                              className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2.5 py-1 rounded-lg border border-emerald-150 transition-all cursor-pointer"
+                                              className="bg-blue-50 hover:bg-blue-100 text-blue-700 text-[10px] font-bold px-2.5 py-1 rounded-lg border border-blue-150 transition-all cursor-pointer"
                                               title="Mark as already completed"
                                             >
                                               <span>Mark Passed</span>
@@ -3185,7 +3286,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                                                   
                                                   {/* Status badge */}
                                                   {status === 'studied' && (
-                                                    <span className="bg-emerald-50 text-emerald-700 text-[9px] font-bold px-2 py-0.5 rounded-full border border-emerald-100 flex items-center gap-0.5">
+                                                    <span className="bg-blue-50 text-blue-700 text-[9px] font-bold px-2 py-0.5 rounded-full border border-blue-100 flex items-center gap-0.5">
                                                       <Check className="h-2.5 w-2.5" /> Completed
                                                     </span>
                                                   )}
@@ -3219,7 +3320,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                                                   <>
                                                     <button
                                                       onClick={() => updateStudentCourseStatus(s.regNo, code, 'studied')}
-                                                      className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-[9px] font-bold px-2 py-1 rounded-lg border border-emerald-150 transition-all flex items-center gap-0.5 cursor-pointer"
+                                                      className="bg-blue-50 hover:bg-blue-100 text-blue-700 text-[9px] font-bold px-2 py-1 rounded-lg border border-blue-150 transition-all flex items-center gap-0.5 cursor-pointer"
                                                       title="Mark as passed"
                                                     >
                                                       <Check className="h-2.5 w-2.5" /> Pass
@@ -3252,7 +3353,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                                                     </button>
                                                     <button
                                                       onClick={() => updateStudentCourseStatus(s.regNo, code, 'studied')}
-                                                      className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-[9px] font-bold px-2 py-1 rounded-lg border border-emerald-150 transition-all cursor-pointer"
+                                                      className="bg-blue-50 hover:bg-blue-100 text-blue-700 text-[9px] font-bold px-2 py-1 rounded-lg border border-blue-150 transition-all cursor-pointer"
                                                     >
                                                       Mark Passed
                                                     </button>
@@ -3269,7 +3370,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                                                     </button>
                                                     <button
                                                       onClick={() => updateStudentCourseStatus(s.regNo, code, 'studied')}
-                                                      className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-[9px] font-bold px-2 py-1 rounded-lg border border-emerald-150 transition-all cursor-pointer"
+                                                      className="bg-blue-50 hover:bg-blue-100 text-blue-700 text-[9px] font-bold px-2 py-1 rounded-lg border border-blue-150 transition-all cursor-pointer"
                                                     >
                                                       Mark Passed
                                                     </button>

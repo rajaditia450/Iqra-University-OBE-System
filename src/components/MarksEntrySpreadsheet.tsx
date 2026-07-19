@@ -18,6 +18,7 @@ import { InstructorCourse } from '../types';
 import { apiService } from '../services/apiService';
 
 interface MarksEntrySpreadsheetProps {
+  courses: InstructorCourse[];
   selectedCourse: InstructorCourse;
   setCourses: React.Dispatch<React.SetStateAction<InstructorCourse[]>>;
   selectedCategoryName: string;
@@ -51,6 +52,7 @@ interface LeafColumn {
 }
 
 export default function MarksEntrySpreadsheet({
+  courses,
   selectedCourse,
   setCourses,
   selectedCategoryName,
@@ -80,62 +82,93 @@ export default function MarksEntrySpreadsheet({
     setIsDirty(false);
   }, [selectedCourse.id, selectedCourse.students]);
 
-  // Handler to permanently save the draft marks back to the parent state
-  const handleSaveChanges = () => {
-    setCourses(prev => prev.map(c => {
-      if (c.id === selectedCourse.id) {
-        // Also keep obeMarks in perfect sync so backend always gets question-wise marks inside obeMarks
-        const copyObeMarks = { ...(c.obeMarks || {}) };
-
-        const updatedStudents = c.students.map(std => {
-          const nextMarks = { ...(draftMarks[std.regNo] || {}) };
-          
-          if (!copyObeMarks[std.regNo]) {
-            copyObeMarks[std.regNo] = {};
-          }
-          
-          // Recompute aggregated unit total aggregates for all categories for this student
-          c.categories.forEach(cat => {
-            for (let u = 1; u <= cat.units; u++) {
-              const matchingUnit = (c.unitsData[cat.name] || []).find(unit => unit.unitNo === u);
-              const questions = matchingUnit?.questions || [];
-              if (questions.length > 0) {
-                const uTotal = questions.reduce((sum, q) => {
-                  const qKey = `q-${cat.name}-${u}-${q.id}`;
-                  const score = nextMarks[qKey] ?? 0;
-                  
-                  // Keep obeMarks updated
-                  copyObeMarks[std.regNo][q.id] = score;
-
-                  return sum + score;
-                }, 0);
-                nextMarks[`${cat.name}-${u}`] = uTotal;
-              }
-            }
-          });
-
-          return {
-            ...std,
-            marks: nextMarks
-          };
-        });
-        return {
-          ...c,
-          students: updatedStudents,
-          obeMarks: copyObeMarks
-        };
-      }
-      return c;
-    }));
-    
-    setIsDirty(false);
+  // Handler to permanently save the draft marks back to the parent state and Django backend
+  const handleSaveChanges = async () => {
+    setIsSaving(true);
     if (onShowNotification) {
-      onShowNotification('All marks saved successfully!', 'success');
+      onShowNotification('Saving marks...', 'info');
+    }
+
+    try {
+      // 1. Compute the new list of courses based on draftMarks and c.id === selectedCourse.id
+      const updatedCourses = courses.map(c => {
+        if (c.id === selectedCourse.id) {
+          // Also keep obeMarks in perfect sync so backend always gets question-wise marks inside obeMarks
+          const copyObeMarks = { ...(c.obeMarks || {}) };
+
+          const updatedStudents = c.students.map(std => {
+            const nextMarks = { ...(draftMarks[std.regNo] || {}) };
+            
+            if (!copyObeMarks[std.regNo]) {
+              copyObeMarks[std.regNo] = {};
+            }
+            
+            // Recompute aggregated unit total aggregates for all categories for this student
+            c.categories.forEach(cat => {
+              for (let u = 1; u <= cat.units; u++) {
+                const matchingUnit = (c.unitsData[cat.name] || []).find(unit => unit.unitNo === u);
+                const questions = matchingUnit?.questions || [];
+                if (questions.length > 0) {
+                  const uTotal = questions.reduce((sum, q) => {
+                    const qKey = `q-${cat.name}-${u}-${q.id}`;
+                    const score = nextMarks[qKey] ?? 0;
+                    
+                    // Keep obeMarks updated
+                    copyObeMarks[std.regNo][q.id] = score;
+
+                    return sum + score;
+                  }, 0);
+                  nextMarks[`${cat.name}-${u}`] = uTotal;
+                }
+              }
+            });
+
+            return {
+              ...std,
+              marks: nextMarks
+            };
+          });
+          return {
+            ...c,
+            students: updatedStudents,
+            obeMarks: copyObeMarks
+          };
+        }
+        return c;
+      });
+
+      // 2. Update parent state immediately (keeps local UI and localStorage in sync)
+      setCourses(updatedCourses);
+      if (!apiService.isBackendUser()) {
+        localStorage.setItem('IQRA_OBE_INSTRUCTOR_COURSES', JSON.stringify(updatedCourses));
+      }
+
+      // 3. Sync to remote Django backend
+      try {
+        await apiService.saveInstructorCourses(updatedCourses);
+        setIsDirty(false);
+        if (onShowNotification) {
+          onShowNotification('All marks saved successfully to the database!', 'success');
+        }
+      } catch (syncErr: any) {
+        console.error('[ERROR MarksEntrySpreadsheet] Remote DB save failed:', syncErr);
+        if (onShowNotification) {
+          onShowNotification(`Failed to save marks to database: ${syncErr.message || syncErr}. Please try again.`, 'error');
+        }
+      }
+    } catch (err: any) {
+      console.error('Failed to process marks:', err);
+      if (onShowNotification) {
+        onShowNotification(`Failed to save marks: ${err.message || err}. Please try again.`, 'error');
+      }
+    } finally {
+      setIsSaving(false);
     }
   };
 
   // Handler to revert draft edits back to original course marks
   const handleCancelChanges = () => {
+    if (isSaving) return;
     if (confirm('Are you sure you want to discard all unsaved changes?')) {
       const initialDraft: Record<string, Record<string, number>> = {};
       selectedCourse.students.forEach(std => {
@@ -478,7 +511,7 @@ export default function MarksEntrySpreadsheet({
             </div>
           ) : (
             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600 border border-slate-200 text-xs font-bold">
-              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+              <span className="w-2 h-2 rounded-full bg-blue-500"></span>
               <span>All marks are up-to-date and saved.</span>
             </div>
           )}
@@ -487,9 +520,9 @@ export default function MarksEntrySpreadsheet({
         <div className="flex items-center gap-2">
           <button
             onClick={handleCancelChanges}
-            disabled={!isDirty}
+            disabled={!isDirty || isSaving}
             className={`px-4 py-2 text-xs font-extrabold uppercase tracking-wider rounded-lg flex items-center gap-1.5 transition-all focus:outline-none cursor-pointer ${
-              isDirty 
+              (isDirty && !isSaving) 
                 ? 'bg-white border border-slate-350 text-slate-700 hover:bg-slate-100 hover:text-red-650 active:bg-slate-200 shadow-3xs'
                 : 'bg-slate-100 border border-slate-200 text-slate-400 cursor-not-allowed'
             }`}
@@ -500,15 +533,19 @@ export default function MarksEntrySpreadsheet({
           
           <button
             onClick={handleSaveChanges}
-            disabled={!isDirty}
+            disabled={!isDirty || isSaving}
             className={`px-5 py-2 text-xs font-extrabold uppercase tracking-wider rounded-lg flex items-center gap-1.5 transition-all focus:outline-none shadow-xs cursor-pointer ${
-              isDirty
-                ? 'bg-emerald-600 border border-emerald-700 text-white hover:bg-emerald-700 active:bg-emerald-800 font-black'
+              (isDirty && !isSaving)
+                ? 'bg-blue-600 border border-blue-700 text-white hover:bg-blue-700 active:bg-blue-800 font-black'
                 : 'bg-slate-100 border border-slate-200 text-slate-400 cursor-not-allowed'
             }`}
           >
-            <Save className="w-3.5 h-3.5 shrink-0" />
-            <span>Save Changes</span>
+            {isSaving ? (
+              <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin shrink-0" />
+            ) : (
+              <Save className="w-3.5 h-3.5 shrink-0" />
+            )}
+            <span>{isSaving ? 'Saving...' : 'Save Changes'}</span>
           </button>
         </div>
       </div>
@@ -654,7 +691,7 @@ export default function MarksEntrySpreadsheet({
                               <td 
                                 key={col.id} 
                                 className={`p-2 text-center text-xs font-black bg-indigo-50/15 font-mono border-r border-b border-slate-300 ${
-                                  isPassing ? 'text-emerald-700' : 'text-rose-600'
+                                  isPassing ? 'text-blue-700' : 'text-rose-600'
                                 }`}
                               >
                                 {studentWeighted.toFixed(1)}
@@ -809,7 +846,7 @@ export default function MarksEntrySpreadsheet({
                       : 0;
                     return (
                       <td key={col.id} className="py-2.5 bg-[#ecfdf5] text-center border-r border-b border-slate-300">
-                        <span className="text-emerald-800 block font-black text-xs font-mono">
+                        <span className="text-blue-800 block font-black text-xs font-mono">
                           {avgWeighted.toFixed(1)}%
                         </span>
                       </td>

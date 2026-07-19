@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { toPng } from 'html-to-image';
+import { jsPDF } from 'jspdf';
 import { 
   GraduationCap, 
   BookOpen, 
@@ -24,7 +26,11 @@ import {
   ChevronRight,
   ChevronLeft,
   ArrowLeft,
-  RefreshCw
+  RefreshCw,
+  Printer,
+  Download,
+  Settings,
+  X
 } from 'lucide-react';
 import { Student, Course, Program, Department, InstructorCourse, GA } from '../types';
 import { apiService } from '../services/apiService';
@@ -792,6 +798,47 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
   const [selectedSemester, setSelectedSemester] = useState<string>('all');
   const [selectedCloCourseCode, setSelectedCloCourseCode] = useState<string | null>(null);
   const [selectedGaCourseCode, setSelectedGaCourseCode] = useState<string | null>(null);
+
+  // Print & Download Transcript States
+  const [isPrintingTranscript, setIsPrintingTranscript] = useState(false);
+  const [printStudentName, setPrintStudentName] = useState('');
+  const [printFatherName, setPrintFatherName] = useState('');
+  const [printRegNo, setPrintRegNo] = useState('');
+  const [printProgramCode, setPrintProgramCode] = useState('');
+  const [printIssueDate, setPrintIssueDate] = useState('');
+  const [printStatus, setPrintStatus] = useState('INCOMPLETE');
+  const [printSerial, setPrintSerial] = useState('IU-TS-99201A');
+  const [printSemesterMapping, setPrintSemesterMapping] = useState<Record<string, string>>({});
+
+  // Helper to format date dynamically
+  const getFormattedDate = (date: Date) => {
+    const day = date.getDate();
+    const months = ["JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE", "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER"];
+    const month = months[date.getMonth()];
+    const year = date.getFullYear();
+    
+    let suffix = 'TH';
+    if (day === 1 || day === 21 || day === 31) suffix = 'ST';
+    else if (day === 2 || day === 22) suffix = 'ND';
+    else if (day === 3 || day === 23) suffix = 'RD';
+    
+    return `${day}${suffix} ${month.toUpperCase()}, ${year}`;
+  };
+
+  // Helper to guess Father's Name from Student's Full Name
+  const guessFatherName = (fullName: string) => {
+    if (!fullName) return '';
+    const parts = fullName.trim().split(/\s+/);
+    if (parts.length > 1) {
+      const bineIndex = parts.findIndex(p => ['bine', 'bin', 'bint', 'binte'].includes(p.toLowerCase()));
+      if (bineIndex !== -1 && bineIndex < parts.length - 1) {
+        return parts.slice(bineIndex + 1).join(' ').toUpperCase();
+      }
+      const last = parts[parts.length - 1];
+      return `MUHAMMAD ${last.toUpperCase()}`;
+    }
+    return 'MUHAMMAD SAIF UDDIN'; // dynamic fallback
+  };
 
   useEffect(() => {
     if (!activeRegNo) return;
@@ -1623,6 +1670,243 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
     return gpas;
   }, [coursesBySemester]);
 
+  // Merge historical and current courses for print transcript
+  const printAllCoursesBySemester = useMemo(() => {
+    const grouped: Record<string, any[]> = {};
+    
+    // 1. Add finalTranscripts (historical finalized records)
+    finalTranscripts.forEach(t => {
+      // Clean up semester key name (e.g., "1st Semester" instead of "SPRING-23")
+      const sem = t.semester || '1st Semester';
+      if (!grouped[sem]) grouped[sem] = [];
+      
+      if (!grouped[sem].some(c => c.code === t.courseCode)) {
+        grouped[sem].push({
+          code: t.courseCode,
+          title: t.courseTitle,
+          creditHours: t.creditHours || 3,
+          results: {
+            letterGrade: t.grade,
+            points: t.gradePoints ?? t.points ?? 0.0,
+            aggregate: t.finalPercentage ?? 0,
+            isCompleted: true,
+            hasAnyMarks: true
+          }
+        });
+      }
+    });
+    
+    // 2. Add enrolledCoursesWithGrades
+    enrolledCoursesWithGrades.forEach(c => {
+      const sem = getCourseSemester(c.code);
+      if (!grouped[sem]) grouped[sem] = [];
+      
+      if (!grouped[sem].some(existing => existing.code === c.code)) {
+        grouped[sem].push({
+          code: c.code,
+          title: c.title,
+          creditHours: c.creditHours || 3,
+          results: {
+            letterGrade: c.results?.letterGrade || '-',
+            points: c.results?.points ?? 0.0,
+            aggregate: c.results?.aggregate ?? 0,
+            isCompleted: c.results?.isCompleted ?? false,
+            hasAnyMarks: c.results?.hasAnyMarks ?? false
+          }
+        });
+      }
+    });
+
+    // Sort semester keys logically by semester order
+    const sortedKeys = Object.keys(grouped).sort((a, b) => {
+      const numA = parseInt(a, 10);
+      const numB = parseInt(b, 10);
+      if (!isNaN(numA) && !isNaN(numB)) {
+        return numA - numB;
+      }
+      return a.localeCompare(b);
+    });
+
+    const sortedGrouped: Record<string, any[]> = {};
+    sortedKeys.forEach(key => {
+      sortedGrouped[key] = grouped[key];
+    });
+
+    return sortedGrouped;
+  }, [enrolledCoursesWithGrades, finalTranscripts]);
+
+  // Calculate Semester GPA for print transcript
+  const printSemesterGPAs = useMemo(() => {
+    const gpas: Record<string, number> = {};
+    Object.keys(printAllCoursesBySemester).forEach(semKey => {
+      const semCourses = printAllCoursesBySemester[semKey];
+      let totalPointsProduct = 0;
+      let totalCredits = 0;
+      let hasGrades = false;
+
+      semCourses.forEach(c => {
+        const crHrs = c.creditHours || 3;
+        const pts = c.results?.points;
+        const letter = c.results?.letterGrade;
+        if (pts !== undefined && letter !== undefined && letter !== '-') {
+          totalPointsProduct += pts * crHrs;
+          totalCredits += crHrs;
+          hasGrades = true;
+        }
+      });
+
+      gpas[semKey] = hasGrades && totalCredits > 0 ? totalPointsProduct / totalCredits : 0.0;
+    });
+    return gpas;
+  }, [printAllCoursesBySemester]);
+
+  // Sum up total credit hours for print transcript
+  const printTotalEarnedCredits = useMemo(() => {
+    let total = 0;
+    Object.values(printAllCoursesBySemester).forEach((courses: any) => {
+      courses.forEach((c: any) => {
+        const grade = c.results?.letterGrade;
+        if (grade && grade !== 'F' && grade !== '-' && grade !== '') {
+          total += (c.creditHours || 3);
+        }
+      });
+    });
+    return total;
+  }, [printAllCoursesBySemester]);
+
+  // Populate print settings when activeStudent or printAllCoursesBySemester loads/changes
+  useEffect(() => {
+    if (activeStudent) {
+      setPrintStudentName(activeStudent.name || '');
+      setPrintRegNo(activeStudent.regNo || activeRegNo);
+      setPrintProgramCode((activeProgram?.code || 'BS(CS)').toUpperCase());
+      setPrintFatherName(guessFatherName(activeStudent.name || ''));
+      setPrintIssueDate(getFormattedDate(new Date()));
+      
+      const semKeys = Object.keys(printAllCoursesBySemester);
+      // Auto-generate semester mapping (1st Semester -> SPRING-23, etc.)
+      const mapping: Record<string, string> = {};
+      
+      // Determine starting year from regNo if possible (e.g., 052-23-122055 has year 23)
+      let startYear = 2023;
+      const regParts = activeStudent.regNo.split('-');
+      if (regParts.length > 1) {
+        const yearDigits = parseInt(regParts[1], 10);
+        if (!isNaN(yearDigits)) {
+          startYear = yearDigits < 50 ? 2000 + yearDigits : 1900 + yearDigits;
+        }
+      }
+      
+      semKeys.forEach((key, index) => {
+        const term = index % 2 === 0 ? 'SPRING' : 'FALL';
+        const year = startYear + Math.floor(index / 2);
+        const shortYear = String(year).slice(-2);
+        mapping[key] = `${term}-${shortYear}`;
+      });
+      setPrintSemesterMapping(mapping);
+    }
+  }, [activeStudent, activeProgram, printAllCoursesBySemester]);
+
+  const downloadTranscriptPDF = async () => {
+    const element = document.getElementById('transcript-print-area');
+    if (!element) {
+      console.error("Print area element not found");
+      return;
+    }
+
+    // Show a temporary loading indicator on the download button
+    const downloadBtns = document.querySelectorAll('button');
+    let downloadBtn: HTMLButtonElement | null = null;
+    downloadBtns.forEach(btn => {
+      if (btn.textContent?.toLowerCase().includes('download')) {
+        downloadBtn = btn as HTMLButtonElement;
+      }
+    });
+
+    const oldText = downloadBtn ? downloadBtn.innerHTML : null;
+    if (downloadBtn) {
+      downloadBtn.innerHTML = `<span class="animate-spin mr-1.5 inline-block">⏳</span> Compiling PDF...`;
+      downloadBtn.disabled = true;
+    }
+
+    // Save current layout styles of element to restore them perfectly afterward
+    const originalWidth = element.style.width;
+    const originalMaxWidth = element.style.maxWidth;
+    const originalMinHeight = element.style.minHeight;
+    const originalBoxShadow = element.style.boxShadow;
+    const originalBorder = element.style.border;
+    const originalBorderRadius = element.style.borderRadius;
+
+    try {
+      // Temporarily set the element to a standard crisp A4 portrait width (800px)
+      // This preserves exact typography and proportions without squishing or down-scaling elements.
+      element.style.setProperty('width', '800px', 'important');
+      element.style.setProperty('max-width', 'none', 'important');
+      element.style.setProperty('min-height', 'auto', 'important');
+      element.style.setProperty('box-shadow', 'none', 'important');
+      element.style.setProperty('border', 'none', 'important');
+      element.style.setProperty('border-radius', '0px', 'important');
+
+      // Force layout calculation refresh
+      const _reflow = element.offsetHeight;
+
+      // Yield a tiny execution macrotask to allow Chrome rendering thread to flush computed coordinates
+      await new Promise(resolve => setTimeout(resolve, 150));
+
+      const capturedWidth = 800;
+      const capturedHeight = element.scrollHeight || element.offsetHeight || 1130;
+
+      // Capture high-resolution image representation forcing exact 800px layout width
+      const dataUrl = await toPng(element, {
+        quality: 1.0,
+        pixelRatio: 2.5, // captures ultra-sharp vector text and values
+        backgroundColor: '#ffffff',
+        width: capturedWidth,
+        height: capturedHeight
+      });
+
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pageHeight = 297; // A4 height in mm
+      const imgWidth = 210; // A4 width in mm
+      
+      const imgHeight = (capturedHeight * imgWidth) / capturedWidth; // scales naturally to preserve original aspect ratio
+
+      let heightLeft = imgHeight;
+      let position = 0;
+
+      // Add Page 1
+      pdf.addImage(dataUrl, 'PNG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+
+      // Slice overflow contents onto successive pages natively
+      while (heightLeft >= 0) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(dataUrl, 'PNG', 0, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+      }
+
+      pdf.save(`Official_Academic_Transcript_${activeStudent?.regNo || 'Student'}.pdf`);
+    } catch (error) {
+      console.error("PDF download compilation error:", error);
+      // Fallback to native print
+      window.print();
+    } finally {
+      if (downloadBtn && oldText) {
+        downloadBtn.innerHTML = oldText;
+        downloadBtn.disabled = false;
+      }
+
+      // Restore pristine on-screen state
+      element.style.width = originalWidth;
+      element.style.maxWidth = originalMaxWidth;
+      element.style.minHeight = originalMinHeight;
+      element.style.boxShadow = originalBoxShadow;
+      element.style.border = originalBorder;
+      element.style.borderRadius = originalBorderRadius;
+    }
+  };
+
   // Determine which semester to use for displaying "Semester GPA" in the header
   const currentSemesterForGPA = useMemo(() => {
     if (selectedSemester !== 'all') {
@@ -1892,7 +2176,9 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-800 flex flex-col font-sans">
       
-      {/* HEADER BAR */}
+      {/* SCREEN CONTROLS - HIDDEN ON PRINT */}
+      <div className="flex-1 flex flex-col print:hidden">
+        {/* HEADER BAR */}
       <header className="sticky top-0 z-40 bg-white border-b border-slate-200/80 backdrop-blur-md bg-white/95 px-6 py-4 shadow-sm flex items-center justify-between">
         <div className="flex items-center gap-3">
           <img 
@@ -2053,10 +2339,19 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
                           <p className="text-[10px] text-slate-300 font-medium">Permanent snapshot ledger of finalized semesters (Snapshotted & Sealed)</p>
                         </div>
                       </div>
-                      <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-black tracking-wider uppercase px-2.5 py-1 rounded-full flex items-center gap-1.5 font-mono">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                        SEALED
-                      </span>
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => setIsPrintingTranscript(true)}
+                          className="bg-indigo-650 hover:bg-indigo-600 text-white border border-indigo-500/30 text-[10.5px] font-bold tracking-wider uppercase px-3.5 py-1.5 rounded-lg flex items-center gap-1.5 font-sans cursor-pointer transition-all active:scale-95 shadow-sm"
+                        >
+                          <Download className="h-3.5 w-3.5 text-indigo-200" />
+                          <span>Download Transcript</span>
+                        </button>
+                        <span className="bg-blue-500/20 text-blue-400 border border-blue-500/30 text-[10px] font-black tracking-wider uppercase px-2.5 py-1 rounded-full flex items-center gap-1.5 font-mono">
+                          <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
+                          SEALED
+                        </span>
+                      </div>
                     </div>
 
                     <div className="p-0 overflow-x-auto">
@@ -2108,39 +2403,51 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
                   </div>
                 ) : (
                   <div className="space-y-6">
-                    {/* Compact Professional Semester Navigation Pills */}
-                    <div className="flex flex-wrap items-center gap-2 bg-slate-100/80 p-2 rounded-xl border border-slate-200 max-w-fit shadow-xs">
-                      <span className="text-xs uppercase font-bold text-slate-500 px-2">
-                        Academic Semesters:
-                      </span>
-                      {Object.keys(coursesBySemester).map(semKey => (
+                    {/* Control Bar: Semesters and Download action */}
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                      {/* Compact Professional Semester Navigation Pills */}
+                      <div className="flex flex-wrap items-center gap-2 bg-slate-100/80 p-2 rounded-xl border border-slate-200 max-w-fit shadow-xs">
+                        <span className="text-xs uppercase font-bold text-slate-500 px-2">
+                          Academic Semesters:
+                        </span>
+                        {Object.keys(coursesBySemester).map(semKey => (
+                          <button
+                            key={semKey}
+                            onClick={() => {
+                              setSelectedSemester(semKey);
+                              setExpandedCourseCode(null);
+                            }}
+                            className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                              selectedSemester === semKey
+                                ? 'bg-indigo-600 text-white shadow-sm'
+                                : 'text-slate-600 hover:text-indigo-950 hover:bg-slate-200/50'
+                            }`}
+                          >
+                            {semKey.replace(' Semester', '')}
+                          </button>
+                        ))}
                         <button
-                          key={semKey}
                           onClick={() => {
-                            setSelectedSemester(semKey);
+                            setSelectedSemester('all');
                             setExpandedCourseCode(null);
                           }}
                           className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                            selectedSemester === semKey
+                            selectedSemester === 'all'
                               ? 'bg-indigo-600 text-white shadow-sm'
                               : 'text-slate-600 hover:text-indigo-950 hover:bg-slate-200/50'
                           }`}
                         >
-                          {semKey.replace(' Semester', '')}
+                          All Semesters
                         </button>
-                      ))}
+                      </div>
+
+                      {/* Prominent Download Official Transcript Button */}
                       <button
-                        onClick={() => {
-                          setSelectedSemester('all');
-                          setExpandedCourseCode(null);
-                        }}
-                        className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                          selectedSemester === 'all'
-                            ? 'bg-indigo-600 text-white shadow-sm'
-                            : 'text-slate-600 hover:text-indigo-950 hover:bg-slate-200/50'
-                        }`}
+                        onClick={() => setIsPrintingTranscript(true)}
+                        className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs tracking-wider uppercase px-5 py-3 rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-md transition-all active:scale-95 duration-200"
                       >
-                        All Semesters
+                        <Download className="h-4 w-4" />
+                        <span>Download Official Transcript</span>
                       </button>
                     </div>
 
@@ -2205,14 +2512,14 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
                                     <div className="grid grid-cols-3 gap-2 pt-3 border-t border-slate-100 bg-slate-50 p-2.5 rounded-lg">
                                       <div className="text-center">
                                         <p className="text-xs uppercase font-bold text-slate-400 tracking-wider">Score</p>
-                                        <p className="text-sm font-bold text-slate-800 font-mono mt-0.5">{Math.round(course.results.aggregate)}%</p>
+                                        <p className="text-sm font-bold text-slate-800 font-mono mt-0.5">{course.results.aggregate % 1 === 0 ? course.results.aggregate.toFixed(0) : course.results.aggregate.toFixed(2).replace(/\.?0+$/, '')}%</p>
                                       </div>
 
                                       <div className="text-center border-x border-slate-200">
                                         <p className="text-xs uppercase font-bold text-slate-400 tracking-wider">Grade</p>
                                         <span className={`inline-block px-2 py-0.5 text-xs font-bold rounded mt-0.5 ${
                                           hasPassed 
-                                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' 
+                                            ? 'bg-blue-100 text-blue-800 border border-blue-200' 
                                             : 'bg-red-100 text-red-800 border border-red-200'
                                         }`}>
                                           {course.results.letterGrade}
@@ -2255,7 +2562,7 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
                                                 <p className="text-xs font-bold text-indigo-950 font-mono">
                                                   {item.scored} <span className="text-slate-500">/{item.max}</span>
                                                 </p>
-                                                <p className="text-xs font-bold text-emerald-600 font-mono mt-0.5">{item.pct}%</p>
+                                                <p className="text-xs font-bold text-blue-600 font-mono mt-0.5">{item.pct}%</p>
                                               </div>
                                             </div>
                                           ))}
@@ -2316,7 +2623,7 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
                                   </span>
                                   {grade !== '-' && (
                                     <span className="text-xs font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
-                                      Grade: {grade} ({aggregate !== null ? `${Math.round(aggregate)}%` : ''})
+                                      Grade: {grade} ({aggregate !== null ? `${aggregate % 1 === 0 ? aggregate.toFixed(0) : aggregate.toFixed(2).replace(/\.?0+$/, '')}%` : ''})
                                     </span>
                                   )}
                                 </div>
@@ -2335,7 +2642,7 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
                                 <div className="w-full bg-slate-150 h-2 rounded-full overflow-hidden">
                                   <div
                                     className={`h-full rounded-full transition-all duration-500 ${
-                                      pctAttained === 100 ? 'bg-emerald-500' : pctAttained >= 50 ? 'bg-indigo-500' : 'bg-amber-500'
+                                      pctAttained === 100 ? 'bg-blue-500' : pctAttained >= 50 ? 'bg-indigo-500' : 'bg-amber-500'
                                     }`}
                                     style={{ width: `${pctAttained}%` }}
                                   />
@@ -2399,7 +2706,7 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
                                   </div>
                                   <span className={`text-xs font-black uppercase tracking-wider px-3.5 py-1.5 rounded-lg border-2 shadow-xs transition-all ${
                                     attained 
-                                      ? 'bg-emerald-100 text-emerald-800 border-emerald-300 shadow-xs' 
+                                      ? 'bg-blue-100 text-blue-800 border-blue-300 shadow-xs' 
                                       : 'bg-rose-100 text-rose-800 border-rose-300 shadow-xs'
                                   }`}>
                                     {clo.status}
@@ -2417,7 +2724,7 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
                                 </div>
                                 <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
                                   <div 
-                                    className={`h-full rounded-full transition-all duration-500 ${attained ? 'bg-emerald-500' : 'bg-amber-500'}`}
+                                    className={`h-full rounded-full transition-all duration-500 ${attained ? 'bg-blue-500' : 'bg-amber-500'}`}
                                     style={{ width: `${clo.percentage}%` }}
                                   />
                                 </div>
@@ -2468,20 +2775,20 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
                             <div
                               key={course.code}
                               onClick={() => setSelectedGaCourseCode(course.code)}
-                              className="group cursor-pointer bg-slate-50/50 hover:bg-white border border-slate-200/60 hover:border-emerald-300 hover:shadow-md p-5 rounded-2xl transition-all flex flex-col justify-between h-48 relative overflow-hidden"
+                              className="group cursor-pointer bg-slate-50/50 hover:bg-white border border-slate-200/60 hover:border-blue-300 hover:shadow-md p-5 rounded-2xl transition-all flex flex-col justify-between h-48 relative overflow-hidden"
                             >
                               <div className="space-y-1.5 z-10">
                                 <div className="flex items-center justify-between">
-                                  <span className="font-mono text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">
+                                  <span className="font-mono text-[10px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
                                     {course.code}
                                   </span>
                                   {grade !== '-' && (
                                     <span className="text-xs font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
-                                      Grade: {grade} ({aggregate !== null ? `${Math.round(aggregate)}%` : ''})
+                                      Grade: {grade} ({aggregate !== null ? `${aggregate % 1 === 0 ? aggregate.toFixed(0) : aggregate.toFixed(2).replace(/\.?0+$/, '')}%` : ''})
                                     </span>
                                   )}
                                 </div>
-                                <h4 className="text-sm font-bold text-slate-800 tracking-tight group-hover:text-emerald-900 transition leading-snug line-clamp-2">
+                                <h4 className="text-sm font-bold text-slate-800 tracking-tight group-hover:text-blue-900 transition leading-snug line-clamp-2">
                                   {course.title}
                                 </h4>
                               </div>
@@ -2489,7 +2796,7 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
                               <div className="space-y-2 pt-2 border-t border-slate-100 z-10">
                                 <div className="flex justify-between items-center text-xs text-slate-500 font-semibold">
                                   <span>Graduate Attributes:</span>
-                                  <span className="font-mono text-emerald-950 font-black">
+                                  <span className="font-mono text-blue-950 font-black">
                                     {mappedGAsCount} {mappedGAsCount === 1 ? 'Attribute' : 'Attributes'}
                                   </span>
                                 </div>
@@ -2498,14 +2805,14 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
                                     <span className="text-[9px] text-slate-400 font-bold">No GAs Mapped</span>
                                   ) : (
                                     mappedGAsFromCLOs.map((gaId) => (
-                                      <span key={gaId} className="bg-emerald-50/50 border border-emerald-100 text-emerald-700 font-mono text-[9px] font-bold px-1.5 rounded">
+                                      <span key={gaId} className="bg-blue-50/50 border border-blue-100 text-blue-700 font-mono text-[9px] font-bold px-1.5 rounded">
                                         {formatGACodeToStandard(gaId)}
                                       </span>
                                     ))
                                   )}
                                 </div>
                                 <div className="flex justify-end pt-1">
-                                  <span className="text-[10px] text-emerald-600 font-bold group-hover:translate-x-1 transition-transform flex items-center gap-1">
+                                  <span className="text-[10px] text-blue-600 font-bold group-hover:translate-x-1 transition-transform flex items-center gap-1">
                                     View GA Attainment
                                     <ChevronRight className="w-3 h-3" />
                                   </span>
@@ -2524,7 +2831,7 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
                       <div className="space-y-1">
                         <button
                           onClick={() => setSelectedGaCourseCode(null)}
-                          className="group flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-emerald-600 transition cursor-pointer mb-1 bg-slate-100/80 hover:bg-emerald-50 px-3 py-1.5 rounded-xl border border-slate-200 hover:border-emerald-200"
+                          className="group flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-blue-600 transition cursor-pointer mb-1 bg-slate-100/80 hover:bg-blue-50 px-3 py-1.5 rounded-xl border border-slate-200 hover:border-blue-200"
                         >
                           <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
                           Back to Course List
@@ -2534,7 +2841,7 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
                           return (
                             <div>
                               <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
-                                <span className="font-mono text-xs bg-emerald-50 text-emerald-700 px-2.5 py-0.5 rounded border border-emerald-200 font-black">{currentCourse?.code}</span>
+                                <span className="font-mono text-xs bg-blue-50 text-blue-700 px-2.5 py-0.5 rounded border border-blue-200 font-black">{currentCourse?.code}</span>
                                 {currentCourse?.title}
                               </h3>
                               <p className="text-xs text-slate-400">Graduate Attribute (GA) attainment details mapping for this specific course.</p>
@@ -2557,13 +2864,13 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
                               <div className="space-y-1.5">
                                 <div className="flex items-center justify-between">
                                   <div className="flex items-center gap-1.5">
-                                    <span className="font-mono text-sm font-extrabold tracking-wide text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-lg border-2 border-emerald-200/80 shadow-2xs">
+                                    <span className="font-mono text-sm font-extrabold tracking-wide text-blue-700 bg-blue-50 px-3 py-1.5 rounded-lg border-2 border-blue-200/80 shadow-2xs">
                                       {formatGACodeToStandard(ga.id)}
                                     </span>
                                   </div>
                                   <span className={`text-xs font-black uppercase tracking-wider px-3.5 py-1.5 rounded-lg border-2 shadow-xs transition-all ${
                                     attained 
-                                      ? 'bg-emerald-100 text-emerald-800 border-emerald-300 shadow-xs' 
+                                      ? 'bg-blue-100 text-blue-800 border-blue-300 shadow-xs' 
                                       : 'bg-rose-100 text-rose-800 border-rose-300 shadow-xs'
                                   }`}>
                                     {attained ? 'Attained' : 'Not Attained'}
@@ -2580,11 +2887,11 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
                               <div className="space-y-1 pt-1">
                                 <div className="flex items-center justify-between text-[11px] text-slate-500 font-bold">
                                   <span>Attainment Progress Index:</span>
-                                  <span className="font-mono text-emerald-950 font-black">{ga.score.toFixed(2)}%</span>
+                                  <span className="font-mono text-blue-950 font-black">{ga.score.toFixed(2)}%</span>
                                 </div>
                                 <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
                                   <div 
-                                    className={`h-full rounded-full transition-all duration-500 ${attained ? 'bg-emerald-500' : 'bg-amber-500'}`}
+                                    className={`h-full rounded-full transition-all duration-500 ${attained ? 'bg-blue-500' : 'bg-amber-500'}`}
                                     style={{ width: `${ga.score}%` }}
                                   />
                                 </div>
@@ -2606,7 +2913,7 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="space-y-0.5">
                 <h3 className="text-sm font-bold text-slate-100 font-mono flex items-center gap-2">
-                  <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="inline-block w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
                   API Live Connection Diagnostics
                 </h3>
                 <p className="text-[10px] text-slate-500 font-mono">
@@ -2642,7 +2949,7 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-[11px] font-mono leading-relaxed bg-slate-950/50 p-4 rounded-2xl border border-slate-850">
                   <div className="space-y-1">
-                    <span className="text-emerald-400 font-bold">Processed Courses ({instructorCourses.length}):</span>
+                    <span className="text-blue-400 font-bold">Processed Courses ({instructorCourses.length}):</span>
                     {instructorCourses.map(ic => (
                       <div key={ic.code} className="text-slate-400 pl-2">
                         • <span className="text-slate-200 font-bold">{ic.code}</span> (OBE Questions: {ic.obeQuestions?.length || 0})
@@ -2662,6 +2969,178 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
         </div>
 
       </main>
+      </div>
+
+      {/* PRINT-ONLY CSS DIRECTIVES */}
+      <style>{`
+        @media print {
+          body * {
+            visibility: hidden !important;
+          }
+          #transcript-print-area, #transcript-print-area * {
+            visibility: visible !important;
+          }
+          #transcript-print-area {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            height: auto !important;
+            display: block !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            background: white !important;
+            color: black !important;
+          }
+          @page {
+            size: portrait;
+            margin: 15mm;
+          }
+        }
+      `}</style>
+
+      {/* TRANSCRIPT PREVIEW MODAL */}
+      <AnimatePresence>
+        {isPrintingTranscript && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 z-50 overflow-hidden font-sans print:hidden">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.98 }}
+              className="bg-slate-100 border border-slate-250 rounded-2xl w-full max-w-5xl h-[95vh] flex flex-col overflow-hidden shadow-2xl"
+            >
+              {/* Top Control Bar */}
+              <div className="bg-white border-b border-slate-200 px-5 py-4 flex items-center justify-between shrink-0">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 bg-indigo-50 rounded-lg border border-indigo-100">
+                    <FileText className="w-5 h-5 text-indigo-600" />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-sm text-slate-900 uppercase tracking-tight">Official Transcript Report Builder</h3>
+                    <p className="text-[10px] text-slate-500 font-mono mt-0.5">Verify academic ledger snapshot limits and export perfectly aligned vector PDFs</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => window.print()}
+                    className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2 rounded-lg shadow-sm transition-all cursor-pointer"
+                  >
+                    <Printer className="w-4 h-4" />
+                    <span>Print</span>
+                  </button>
+                  <button
+                    onClick={downloadTranscriptPDF}
+                    className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2 rounded-lg shadow-sm transition-all cursor-pointer"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>Download</span>
+                  </button>
+                  <button
+                    onClick={() => setIsPrintingTranscript(false)}
+                    className="flex items-center gap-1.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 hover:text-slate-900 rounded-lg shadow-xs transition-colors cursor-pointer text-xs font-semibold px-3 py-2"
+                  >
+                    <X className="w-4 h-4" />
+                    <span>Close Preview</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Scrollable Viewport */}
+              <div className="flex-1 overflow-auto p-6 bg-slate-200/50">
+                <div 
+                  id="transcript-print-area" 
+                  className="max-w-[210mm] mx-auto bg-white shadow-2xl border border-slate-300 rounded-xl p-8 min-h-[297mm] text-left text-black font-sans leading-relaxed antialiased"
+                >
+                    {/* Top Header Block */}
+                    <div className="flex flex-col items-center mb-6 border-b border-black pb-4">
+                      <img 
+                        src="/iqralogo.png" 
+                        alt="Iqra University Logo" 
+                        className="h-16 w-auto object-contain mb-2"
+                        referrerPolicy="no-referrer"
+                      />
+                      <h1 className="text-lg font-black tracking-widest text-black uppercase font-mono animate-pulse">
+                        INCOMPLETE TRANSCRIPT
+                      </h1>
+                    </div>
+
+                    {/* Personal Details Row */}
+                    <div className="grid grid-cols-2 gap-4 mb-8 text-[11px] font-mono border-b border-black/20 pb-4">
+                      <div className="space-y-1.5">
+                        <div><span className="font-bold inline-block w-32 text-slate-500 text-left">STUDENT NAME:</span> <span className="font-extrabold text-black uppercase">{activeStudent?.name}</span></div>
+                        <div><span className="font-bold inline-block w-32 text-slate-500 text-left">REG NUMBER:</span> <span className="font-extrabold text-black uppercase">{activeStudent?.regNo || activeRegNo}</span></div>
+                      </div>
+                      <div className="space-y-1.5 text-right">
+                        <div><span className="font-bold inline-block w-32 text-slate-500 text-left">DEPARTMENT:</span> <span className="font-extrabold text-black uppercase">{activeDepartment?.name || 'Department of Computing'}</span></div>
+                        <div><span className="font-bold inline-block w-32 text-slate-500 text-left">PROGRAM:</span> <span className="font-extrabold text-black uppercase">{activeProgram?.name || 'BS (Computer Science)'}</span></div>
+                      </div>
+                    </div>
+
+                    {/* Courses Table */}
+                    <table className="w-full border-collapse text-[10px] font-mono leading-normal">
+                      <thead>
+                        <tr className="border-b-2 border-black text-left">
+                          <th className="py-2 pr-4 font-bold uppercase w-[100px]">Course Code</th>
+                          <th className="py-2 pr-4 font-bold uppercase">Course Name</th>
+                          <th className="py-2 pr-4 font-bold uppercase w-[100px] text-center">Credit Hours</th>
+                          <th className="py-2 font-bold uppercase w-[80px] text-right">Grade</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {Object.keys(printAllCoursesBySemester).map(semKey => {
+                          const coursesInSem = printAllCoursesBySemester[semKey] || [];
+                          const semGPA = printSemesterGPAs[semKey] || 0;
+                          const printedLabel = printSemesterMapping[semKey] || semKey;
+                          
+                          return (
+                            <React.Fragment key={semKey}>
+                              {/* Semester Sub-header Row */}
+                              <tr className="bg-slate-100 border-t border-b border-black/30">
+                                <td colSpan={4} className="py-1 px-2 font-black uppercase text-[10px] tracking-wider">
+                                  {printedLabel}
+                                </td>
+                              </tr>
+                              {coursesInSem.map((course: any) => (
+                                <tr key={course.code} className="border-b border-black/10">
+                                  <td className="py-1.5 pr-4 font-bold">{course.code}</td>
+                                  <td className="py-1.5 pr-4 uppercase">{course.title}</td>
+                                  <td className="py-1.5 pr-4 text-center">{course.creditHours || 3}</td>
+                                  <td className="py-1.5 text-right font-bold">{course.results?.letterGrade || '-'}</td>
+                                </tr>
+                              ))}
+                              {/* Semester GPA Row */}
+                              <tr className="border-b border-black/20">
+                                <td colSpan={3} className="py-1.5 text-right pr-4 font-bold uppercase text-[9px] text-slate-500">
+                                  Semester GPA:
+                                </td>
+                                <td className="py-1.5 text-right font-black text-[10px]">
+                                  {semGPA.toFixed(2)}
+                                </td>
+                              </tr>
+                            </React.Fragment>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+
+                    {/* Bottom Total Credits & CGPA Footer */}
+                    <div className="mt-8 pt-6 border-t-2 border-black flex justify-between items-start text-[11px] font-mono font-bold">
+                      <div className="space-y-1 animate-pulse">
+                        <div>TOTAL EARNED CREDITS: {printTotalEarnedCredits}</div>
+                        <div className="text-xs">CGPA: {GPAStats.cgpa.toFixed(2)}</div>
+                      </div>
+                      <div className="text-right text-[8px] text-slate-500 font-mono">
+                        * IQRA UNIVERSITY OFFICIAL PORTAL TRANSCRIPT SYSTEM *
+                        <br />
+                        DATE PRINTED: {new Date().toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' }).toUpperCase()}
+                      </div>
+                    </div>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

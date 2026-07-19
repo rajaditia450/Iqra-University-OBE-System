@@ -668,6 +668,7 @@ const normalizeCourse = (c: any): Course => {
   // The backend does not have a separate theory/lab subtype, or uses subtype/course_subtype
   let frontendSubtype: 'Theory' | 'Lab' = 'Theory';
   const titleLower = String(c.title || '').trim().toLowerCase();
+
   if (code.endsWith('L') || titleLower.includes('lab')) {
     frontendSubtype = 'Lab';
   } else {
@@ -781,10 +782,35 @@ const mapInstructorCourseToBackend = (c: InstructorCourse): any => {
 };
 
 const mapCourseToBackend = (c: Course): any => {
+  let finalTitle = c.title ? String(c.title).trim() : '';
+  let finalCode = c.code ? String(c.code).toUpperCase().trim() : '';
+
+  if (c.courseType === 'Lab') {
+    // Ensure the title contains "Lab" (case-insensitive) or code ends with "L"
+    if (!finalTitle.toLowerCase().includes('lab') && !finalCode.endsWith('L')) {
+      finalTitle = `${finalTitle} Lab`;
+    }
+  } else if (c.courseType === 'Theory') {
+    // Strip " Lab" / " (Lab)" / "(Lab)" / " lab" from title if present, and "L" from code
+    if (finalTitle.toLowerCase().endsWith(' lab')) {
+      finalTitle = finalTitle.substring(0, finalTitle.length - 4).trim();
+    } else if (finalTitle.toLowerCase().endsWith(' (lab)')) {
+      finalTitle = finalTitle.substring(0, finalTitle.length - 6).trim();
+    } else if (finalTitle.toLowerCase().endsWith('(lab)')) {
+      finalTitle = finalTitle.substring(0, finalTitle.length - 5).trim();
+    } else if (finalTitle.toLowerCase().endsWith('lab')) {
+      finalTitle = finalTitle.substring(0, finalTitle.length - 3).trim();
+    }
+    
+    if (finalCode.endsWith('L') && finalCode.length > 3) {
+      finalCode = finalCode.substring(0, finalCode.length - 1);
+    }
+  }
+
   return {
     id: c.id,
-    code: c.code,
-    title: c.title,
+    code: finalCode,
+    title: finalTitle,
     type: c.type === 'elective' ? 'elective' : 'core',
     mapped_gas: c.mappedGAs || [],
     mappedGAs: c.mappedGAs || [],
@@ -933,10 +959,10 @@ export const apiService = {
 
   // Save Course Mapping (allows updating course to GA tick marks in local storage / server mock fallback!)
   async updateCourse(id: string, data: Partial<Course>, programId?: string): Promise<Course> {
+    const queryProg = programId || data.programId;
     try {
       const isBackend = isBackendUser();
       const mappedData = mapCourseToBackend({ ...data, id } as Course);
-      const queryProg = programId || data.programId;
       let url = `${BASE_URL}/courses/${id}/`;
       if (queryProg) {
         const cleanProg = String(queryProg).trim();
@@ -1123,6 +1149,47 @@ export const apiService = {
     }
     const data = await response.json();
     if (Array.isArray(data)) {
+      // Reconcile instructor courses with the general courses database
+      try {
+        const coursesRes = await fetchWithTimeout(`${BASE_URL}/courses/`, { headers: getHeaders() }, 10000);
+        if (coursesRes.ok) {
+          const coursesData = await coursesRes.json();
+          const generalCourses = Array.isArray(coursesData) ? coursesData.map(normalizeCourse) : [];
+          if (generalCourses.length > 0) {
+            data.forEach((ic: any) => {
+              // Match by exact ID or course code (with loose matching for trailing 'L')
+              const match = generalCourses.find(gc => {
+                const gcId = gc.id ? String(gc.id).toLowerCase().trim() : '';
+                const icId = ic.id ? String(ic.id).toLowerCase().trim() : '';
+                if (gcId && icId && gcId === icId) return true;
+
+                const gcCode = gc.code ? String(gc.code).toUpperCase().trim() : '';
+                const icCode = ic.code ? String(ic.code).toUpperCase().trim() : '';
+                
+                if (gcCode && icCode) {
+                  if (gcCode === icCode) return true;
+                  // Strip trailing 'L' for loose matching
+                  const cleanGc = gcCode.endsWith('L') ? gcCode.slice(0, -1) : gcCode;
+                  const cleanIc = icCode.endsWith('L') ? icCode.slice(0, -1) : icCode;
+                  if (cleanGc === cleanIc) return true;
+                }
+                return false;
+              });
+              if (match) {
+                ic.code = match.code;
+                ic.title = match.title;
+                ic.courseType = match.courseType;
+                ic.course_subtype = match.courseType;
+                ic.courseSubtype = match.courseType;
+                ic.subtype = match.courseType;
+              }
+            });
+          }
+        }
+      } catch (e) {
+        console.warn("Could not fetch general courses to reconcile with instructor courses:", e);
+      }
+
       const isBackend = isBackendUser();
       if (!isBackend) {
         const deletedKeysStr = localStorage.getItem('IQRA_OBE_DELETED_COURSES');

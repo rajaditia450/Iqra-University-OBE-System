@@ -50,6 +50,11 @@ import html2pdf from 'html2pdf.js';
 import { toPng } from 'html-to-image';
 import { jsPDF } from 'jspdf';
 
+const areRegNosEqual = (reg1: string, reg2: string): boolean => {
+  if (!reg1 || !reg2) return false;
+  return reg1.trim().toLowerCase().replace(/[^a-z0-9]/g, '') === reg2.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+};
+
 interface InstructorDashboardProps {
   onLogout: () => void;
   instructorName?: string;
@@ -151,7 +156,7 @@ export const getCourseLetterGrade = (marks: number, course?: any): string => {
   if (system === 'ready1') {
     return getLetterGrade(marks);
   }
-  
+
   if (system === 'ready2') {
     if (marks >= 90) return 'A+';
     if (marks >= 85) return 'A';
@@ -606,14 +611,16 @@ const normalizeCourse = (course: InstructorCourse): InstructorCourse => {
   const customGradingSystem = course.customGradingSystem || (course as any).custom_grading_system || [];
 
   const rawObeMarks = course.obeMarks || (course as any).obe_marks || {};
-  const rawStudents = course.students || (course as any).students || [];
+  const rawStudents = [...(course.students || (course as any).students || [])];
+
   const normalizedStudents = rawStudents.map((s: any) => {
     const regNo = s.regNo || s.reg_no || '';
     const name = s.name || '';
     const marks = { ...(s.marks || s.obtained_marks || s.obtainedMarks || {}) };
 
     // Inject individual OBE question marks from rawObeMarks (from OBEStudentMark DB model)
-    const studentObeMarks = rawObeMarks[regNo] || {};
+    const matchedKey = Object.keys(rawObeMarks || {}).find(k => areRegNosEqual(k, regNo));
+    const studentObeMarks = matchedKey ? rawObeMarks[matchedKey] : {};
     Object.entries(studentObeMarks).forEach(([qId, score]) => {
       // Find the corresponding question metadata to reconstruct the exact frontend key:
       // q-${categoryName}-${unitNo}-${questionId}
@@ -1210,9 +1217,9 @@ const MarksheetDocument = ({
                       <td className="border-r border-black p-1.5 text-left font-sans text-slate-900 font-bold uppercase text-[11px] w-[32%] min-w-[180px] max-w-[220px] break-words">{item.student.name}</td>
                       <td className="border-r border-black p-1.5 text-center text-slate-800 font-semibold uppercase text-[11px] w-[15%] min-w-[80px] font-sans">{getDegreeDisplay(course)}</td>
                       <td className="border-r border-black p-1.5 font-extrabold text-[#4f46e5] text-[12px] text-center w-[18%] min-w-[90px] font-sans">
-                        {Math.round(item.aggregate)}
+                        {item.aggregate % 1 === 0 ? item.aggregate.toFixed(0) : item.aggregate.toFixed(2).replace(/\.?0+$/, '')}
                       </td>
-                      <td className="p-1.5 font-black text-emerald-800 text-[12.5px] bg-emerald-50/5 text-center w-[12%] min-w-[60px] font-sans">{item.grade}</td>
+                      <td className="p-1.5 font-black text-blue-800 text-[12.5px] bg-blue-50/5 text-center w-[12%] min-w-[60px] font-sans">{item.grade}</td>
                     </tr>
                   ))}
                   {/* Pad table with empty template rows just like in the reference image */}
@@ -1301,7 +1308,7 @@ const MarksheetDocument = ({
                     <td className="border-r border-black p-1.5 font-extrabold text-[#4f46e5] text-[12px] text-center w-[10%] min-w-[70px] font-sans">
                       {item.aggregate.toFixed(2)}
                     </td>
-                    <td className="p-1.5 font-black text-emerald-800 text-[12.5px] bg-emerald-50/5 text-center w-[6%] min-w-[40px] font-sans">{item.grade}</td>
+                    <td className="p-1.5 font-black text-blue-800 text-[12.5px] bg-blue-50/5 text-center w-[6%] min-w-[40px] font-sans">{item.grade}</td>
                   </tr>
                 ))}
                 {/* Pad table with empty template rows just like in the reference image */}
@@ -1775,7 +1782,7 @@ const MarksheetDocument = ({
                     </th>
                   ))}
                   <th className="border-r border-black p-1.5 text-indigo-805 font-bold w-[8%] min-w-[60px] text-center">Total Weightage</th>
-                  <th className="p-1.5 text-emerald-850 font-bold w-[6%] min-w-[40px] text-center bg-emerald-50/5 select-none">Grade</th>
+                  <th className="p-1.5 text-blue-850 font-bold w-[6%] min-w-[40px] text-center bg-blue-50/5 select-none">Grade</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-black/40 font-mono text-[11px]">
@@ -1795,7 +1802,7 @@ const MarksheetDocument = ({
                     <td className="border-r border-black p-1.5 font-extrabold text-[#4f46e5] text-[12px] text-center w-[8%] min-w-[60px]">
                       {item.aggregate.toFixed(1)}
                     </td>
-                    <td className="p-1.5 font-black text-emerald-800 text-[12.5px] bg-emerald-50/5 text-center w-[6%] min-w-[40px]">{item.grade}</td>
+                    <td className="p-1.5 font-black text-blue-800 text-[12.5px] bg-blue-50/5 text-center w-[6%] min-w-[40px]">{item.grade}</td>
                   </tr>
                 ))}
                 {course.students.length === 0 && (
@@ -2032,7 +2039,9 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
         obeQuestionsCount: (c.obeQuestions || []).length,
         unitsDataKeys: c.unitsData ? Object.keys(c.unitsData) : null
       })));
-      localStorage.setItem('IQRA_OBE_INSTRUCTOR_COURSES', JSON.stringify(courses));
+      if (!apiService.isBackendUser()) {
+        localStorage.setItem('IQRA_OBE_INSTRUCTOR_COURSES', JSON.stringify(courses));
+      }
       if (isFirstLoadRef.current) {
         console.log('[DEBUG auto-save useEffect] Skipping initial load save');
         isFirstLoadRef.current = false;
@@ -3037,11 +3046,12 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
     setCourses(prev => prev.map(c => {
       if (c.id === selectedCourse.id) {
         const copyMarks = { ...(c.obeMarks || {}) };
-        if (!copyMarks[regNo]) {
-          copyMarks[regNo] = {};
+        const matchedObeKey = Object.keys(copyMarks).find(k => areRegNosEqual(k, regNo)) || regNo;
+        if (!copyMarks[matchedObeKey]) {
+          copyMarks[matchedObeKey] = {};
         }
-        copyMarks[regNo] = {
-          ...copyMarks[regNo],
+        copyMarks[matchedObeKey] = {
+          ...copyMarks[matchedObeKey],
           [qId]: value
         };
 
@@ -3051,7 +3061,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
         if (question) {
           const { categoryName, unitNo } = question;
           updatedStudents = c.students.map(std => {
-            if (std.regNo === regNo) {
+            if (areRegNosEqual(std.regNo, regNo)) {
               const nextMarks = { ...(std.marks || {}) };
               const qKey = `q-${categoryName}-${unitNo}-${qId}`;
               nextMarks[qKey] = value;
@@ -3089,7 +3099,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
     setCourses(prev => prev.map(c => {
       if (c.id === selectedCourse.id) {
         const updatedStudents = c.students.map(std => {
-          if (std.regNo === regNo) {
+          if (areRegNosEqual(std.regNo, regNo)) {
             const nextMarks = { ...(std.marks || {}) };
             const qKey = `q-${categoryName}-${unitNo}-${qId}`;
             nextMarks[qKey] = value;
@@ -3116,11 +3126,12 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
 
         // Also keep obeMarks in perfect sync so backend always gets question-wise marks inside obeMarks
         const copyMarks = { ...(c.obeMarks || {}) };
-        if (!copyMarks[regNo]) {
-          copyMarks[regNo] = {};
+        const matchedObeKey = Object.keys(copyMarks).find(k => areRegNosEqual(k, regNo)) || regNo;
+        if (!copyMarks[matchedObeKey]) {
+          copyMarks[matchedObeKey] = {};
         }
-        copyMarks[regNo] = {
-          ...copyMarks[regNo],
+        copyMarks[matchedObeKey] = {
+          ...copyMarks[matchedObeKey],
           [qId]: value
         };
 
@@ -3140,7 +3151,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
     setCourses(prev => prev.map(c => {
       if (c.id === selectedCourse.id) {
         const updatedStudents = c.students.map(std => {
-          if (std.regNo === regNo) {
+          if (areRegNosEqual(std.regNo, regNo)) {
             const nextMarks = { ...(std.marks || {}) };
             nextMarks[`${categoryName}-${unitNo}`] = value;
             return {
@@ -3799,10 +3810,10 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
     if (!selectedCourse || !newStudentReg) return;
 
     const stdName = newStudentName.trim() || `Student ${selectedCourse.students.length + 1}`;
-    const cleanReg = newStudentReg.toUpperCase().trim();
+    const cleanReg = newStudentReg.trim();
 
     // Check duplicate
-    if (selectedCourse.students.some(s => s.regNo === cleanReg)) {
+    if (selectedCourse.students.some(s => areRegNosEqual(s.regNo, cleanReg))) {
       showNotification(`Student with registration number "${cleanReg}" already enrolled!`);
       return;
     }
@@ -3828,7 +3839,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
       if (c.id === selectedCourse.id) {
         return {
           ...c,
-          students: c.students.filter(s => s.regNo !== reg)
+          students: c.students.filter(s => !areRegNosEqual(s.regNo, reg))
         };
       }
       return c;
@@ -3850,7 +3861,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
   const handleUpdateStudentDetail = (oldRegNo: string) => {
     if (!selectedCourse) return;
 
-    const cleanNewRegNo = editStudentRegVal.trim().toUpperCase();
+    const cleanNewRegNo = editStudentRegVal.trim();
     const cleanNewName = editStudentNameVal.trim();
 
     if (!cleanNewRegNo) {
@@ -3863,8 +3874,8 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
     }
 
     // Check duplication if they changed registration number
-    if (cleanNewRegNo !== oldRegNo) {
-      const exists = selectedCourse.students.some(s => s.regNo === cleanNewRegNo);
+    if (!areRegNosEqual(cleanNewRegNo, oldRegNo)) {
+      const exists = selectedCourse.students.some(s => areRegNosEqual(s.regNo, cleanNewRegNo));
       if (exists) {
         showNotification(`Student with registration number "${cleanNewRegNo}" already exists!`);
         return;
@@ -3876,7 +3887,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
         return {
           ...c,
           students: c.students.map(s => {
-            if (s.regNo === oldRegNo) {
+            if (areRegNosEqual(s.regNo, oldRegNo)) {
               return {
                 ...s,
                 regNo: cleanNewRegNo,
@@ -3997,7 +4008,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
     const addedList: CourseStudent[] = [];
     parsedStudents.forEach(item => {
       // Avoid duplicate enrollment within the course
-      if (!selectedCourse.students.some(s => s.regNo === item.regNo) && !addedList.some(s => s.regNo === item.regNo)) {
+      if (!selectedCourse.students.some(s => areRegNosEqual(s.regNo, item.regNo)) && !addedList.some(s => areRegNosEqual(s.regNo, item.regNo))) {
         addedList.push(item);
       }
     });
@@ -4031,7 +4042,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
         return {
           ...c,
           students: c.students.map(s => {
-            if (s.regNo === studentRegNo) {
+            if (areRegNosEqual(s.regNo, studentRegNo)) {
               return {
                 ...s,
                 marks: {
@@ -4641,8 +4652,8 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
         )}
         
         {successMsg && successMsg !== 'Weightage configuration updated successfully!' && (
-          <div className="bg-emerald-900/30 border border-emerald-500/40 text-emerald-300 px-4 py-3 rounded-lg flex items-center gap-3 animate-in fade-in duration-200 text-sm">
-            <Check className="w-5 h-5 text-emerald-400 shrink-0" />
+          <div className="bg-blue-900/30 border border-blue-500/40 text-blue-300 px-4 py-3 rounded-lg flex items-center gap-3 animate-in fade-in duration-200 text-sm">
+            <Check className="w-5 h-5 text-blue-400 shrink-0" />
             <span>{successMsg}</span>
           </div>
         )}
@@ -5278,7 +5289,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                         }}
                         className={`w-full py-1.5 px-3 text-xs font-bold rounded-xl transition-all font-sans cursor-pointer ${
                           selectedCourse.selectedGradingSystem === 'custom'
-                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-100 cursor-default'
+                            ? 'bg-blue-50 text-blue-700 border border-blue-100 cursor-default'
                             : 'bg-slate-100 text-slate-700 hover:bg-indigo-50 border border-slate-200'
                         }`}
                       >
@@ -5328,7 +5339,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                               </th>
                             ))}
                             <th className="py-2.5 px-4 text-center font-bold text-indigo-650 font-sans sticky top-0 bg-slate-50 z-20">Total (100)</th>
-                            <th className="py-2.5 px-4 text-center font-bold text-emerald-700 font-sans sticky top-0 bg-slate-50 z-20">Grade</th>
+                            <th className="py-2.5 px-4 text-center font-bold text-blue-700 font-sans sticky top-0 bg-slate-50 z-20">Grade</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-200 font-mono text-slate-700">
@@ -5384,7 +5395,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                                 <td className="py-3 px-4 text-center font-bold text-indigo-755 bg-indigo-50/50">
                                   {aggregate.toFixed(1)} / 100
                                 </td>
-                                <td className="py-3 px-4 text-center font-extrabold text-emerald-700 bg-emerald-50/20">
+                                <td className="py-3 px-4 text-center font-extrabold text-blue-700 bg-blue-50/20">
                                   {getCourseLetterGrade(aggregate, selectedCourse)}
                                 </td>
                               </tr>
@@ -5411,6 +5422,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                 <div className="space-y-6">
                   {/* SPLIT_PRE */}
                   <MarksEntrySpreadsheet
+                    courses={courses}
                     selectedCourse={selectedCourse}
                     setCourses={setCourses}
                     selectedCategoryName={selectedMarksCategoryName}
@@ -5529,7 +5541,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                                       {isActive ? (
                                         <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>
                                       ) : isComplete ? (
-                                        <span className="text-[9px] font-black bg-emerald-100 border border-emerald-200 text-emerald-800 rounded px-1.5 py-0.2 select-none font-mono">
+                                        <span className="text-[9px] font-black bg-blue-100 border border-blue-200 text-blue-800 rounded px-1.5 py-0.2 select-none font-mono">
                                           Done
                                         </span>
                                       ) : ass.gradedCount > 0 ? (
@@ -5582,7 +5594,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                                     </span>
                                     <span className={`text-[9px] font-bold px-2.5 py-0.5 rounded-full flex items-center gap-1 ${
                                       unitQuestions.length > 0 
-                                        ? 'text-emerald-700 bg-emerald-50 border border-emerald-150' 
+                                        ? 'text-blue-700 bg-blue-50 border border-blue-150' 
                                         : 'text-amber-700 bg-amber-50 border border-amber-150'
                                     }`}>
                                       {unitQuestions.length > 0 ? '✨ OBE Mode (CLO Question-Level)' : '⚠️ Direct Score Mode'}
@@ -5660,8 +5672,8 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                                     </div>
                                     <div className="border-l border-slate-150 pl-4">
                                       <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block font-sans">Success Rate</span>
-                                      <span className="text-[14px] font-black text-emerald-600 font-mono">
-                                        {localPassRate.toFixed(0)}%
+                                      <span className="text-[14px] font-black text-blue-600 font-mono">
+                                        {localPassRate % 1 === 0 ? localPassRate.toFixed(0) : localPassRate.toFixed(2).replace(/\.?0+$/, '')}%
                                       </span>
                                     </div>
                                   </div>
@@ -5797,7 +5809,8 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                                               
                                               const localPassLimit = matchingUnit ? matchingUnit.passing : (totalMarksMax * 0.5);
                                               const isPassed = obtainedScore >= localPassLimit;
-                                              const scorePercent = totalMarksMax > 0 ? ((obtainedScore / totalMarksMax) * 100).toFixed(0) : '0';
+                                              const rawScorePercent = totalMarksMax > 0 ? ((obtainedScore / totalMarksMax) * 100) : 0;
+                                              const scorePercent = rawScorePercent % 1 === 0 ? rawScorePercent.toFixed(0) : rawScorePercent.toFixed(2).replace(/\.?0+$/, '');
 
                                               return (
                                                 <tr key={student.regNo} className="group hover:bg-slate-50/30 divide-x divide-slate-300 border-b border-slate-300">
@@ -5888,7 +5901,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                                                   <td className="p-2 text-center">
                                                     <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-black border ${
                                                       isPassed 
-                                                        ? 'bg-emerald-50 border-emerald-250 text-emerald-800' 
+                                                        ? 'bg-blue-50 border-blue-250 text-blue-800' 
                                                         : 'bg-rose-50 border-rose-200 text-rose-700'
                                                     }`}>
                                                       {isPassed ? 'Pass' : 'Fail'}
@@ -5919,7 +5932,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                                               return (
                                                 <td key={q.id} className="py-2.5 bg-white border-r border-b border-slate-300">
                                                   <span className="text-slate-955 block font-black text-xs">{avg.toFixed(1)}</span>
-                                                  <span className="text-[9px] text-slate-400 font-normal">{avgPercent.toFixed(0)}% avg</span>
+                                                  <span className="text-[9px] text-slate-400 font-normal">{avgPercent % 1 === 0 ? avgPercent.toFixed(0) : avgPercent.toFixed(2).replace(/\.?0+$/, '')}% avg</span>
                                                 </td>
                                               );
                                             })}
@@ -5939,7 +5952,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                                                     {overallAverage.toFixed(1)} / {totalMarksMax}
                                                   </td>
                                                   <td className="py-2.5 bg-slate-50 text-center font-bold text-slate-650 border-r border-b border-slate-300">
-                                                    {overallAveragePct.toFixed(0)}%
+                                                    {overallAveragePct % 1 === 0 ? overallAveragePct.toFixed(0) : overallAveragePct.toFixed(2).replace(/\.?0+$/, '')}%
                                                   </td>
                                                   <td className="py-2.5 bg-slate-50 border-b border-slate-300"></td>
                                                 </>
@@ -6214,7 +6227,8 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
 
                                                 const localPassLimit = matchingUnit ? matchingUnit.passing : (totalMarksMax * 0.5);
                                                 const isPassed = rawPoints >= localPassLimit;
-                                                const scorePercentStr = totalMarksMax > 0 ? ((rawPoints / totalMarksMax) * 100).toFixed(0) : '0';
+                                                const rawScorePercent = totalMarksMax > 0 ? ((rawPoints / totalMarksMax) * 100) : 0;
+                                                const scorePercentStr = rawScorePercent % 1 === 0 ? rawScorePercent.toFixed(0) : rawScorePercent.toFixed(2).replace(/\.?0+$/, '');
 
                                                 return (
                                                   <tr key={student.regNo} className="group hover:bg-slate-50/30 divide-x divide-slate-300 border-b border-slate-300">
@@ -6281,7 +6295,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                                                     <td className="p-2 text-center bg-white border-b border-slate-300">
                                                       <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-black border ${
                                                         isPassed 
-                                                          ? 'bg-emerald-50 border-emerald-250 text-emerald-805' 
+                                                          ? 'bg-blue-50 border-blue-250 text-blue-805' 
                                                           : 'bg-rose-50 border-rose-200 text-rose-700'
                                                       }`}>
                                                         {isPassed ? 'Pass' : 'Fail'}
@@ -6314,7 +6328,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                                                       {average.toFixed(1)} <span className="text-[10px] text-slate-400 font-normal">/ {totalMarksMax}</span>
                                                     </td>
                                                     <td className="py-2.5 bg-white text-slate-600 text-center border-r border-b border-slate-300">
-                                                      {avgPercent.toFixed(0)}%
+                                                      {avgPercent % 1 === 0 ? avgPercent.toFixed(0) : avgPercent.toFixed(2).replace(/\.?0+$/, '')}%
                                                     </td>
                                                     <td className="py-2.5 bg-white border-b border-slate-300"></td>
                                                   </>
@@ -6996,13 +7010,13 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                                     <div className="space-y-1">
                                       <div className="flex justify-between text-xs font-semibold text-slate-500">
                                         <span>Class Attainment (≥50%):</span>
-                                        <span className={`font-bold font-mono ${clo.attainmentRate >= 60 ? 'text-emerald-700' : 'text-amber-700'}`}>
+                                        <span className={`font-bold font-mono ${clo.attainmentRate >= 60 ? 'text-blue-700' : 'text-amber-700'}`}>
                                           {clo.attainmentRate.toFixed(1)}%
                                         </span>
                                       </div>
                                       <div className="w-full bg-slate-200 rounded-full h-1.5">
                                         <div
-                                          className={`h-1.5 rounded-full transition-all duration-500 ${clo.attainmentRate >= 60 ? 'bg-emerald-500' : 'bg-amber-500'}`}
+                                          className={`h-1.5 rounded-full transition-all duration-500 ${clo.attainmentRate >= 60 ? 'bg-blue-500' : 'bg-amber-500'}`}
                                           style={{ width: `${Math.min(100, clo.attainmentRate)}%` }}
                                         ></div>
                                       </div>
@@ -7077,7 +7091,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                                           return (
                                             <td key={clo} className="py-2 px-3 text-center border-r border-slate-200">
                                               {pctVal !== null ? (
-                                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${attained ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}`}>
+                                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${attained ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}`}>
                                                   {pctVal.toFixed(1)}%
                                                 </span>
                                               ) : (
@@ -7096,7 +7110,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                                             {cellRender}
                                             <td className="py-2.5 px-3 text-center font-sans">
                                               {clCountWithData > 0 ? (
-                                                <span className={`px-3 py-1 rounded-full text-[10px] font-bold inline-flex items-center gap-1 ${isComprehensiveAttained ? 'bg-emerald-600 text-white shadow-xs' : 'bg-amber-100 text-amber-800'}`}>
+                                                <span className={`px-3 py-1 rounded-full text-[10px] font-bold inline-flex items-center gap-1 ${isComprehensiveAttained ? 'bg-blue-600 text-white shadow-xs' : 'bg-amber-100 text-amber-800'}`}>
                                                   {isComprehensiveAttained ? '✔ EXCELLENT / ATTAINED' : '⚠ CLO UNDER CRITERION'}
                                                 </span>
                                               ) : (
@@ -7233,13 +7247,13 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                                     <div className="space-y-1">
                                       <div className="flex justify-between text-xs font-semibold text-slate-500">
                                         <span>Class Attainment (≥50%):</span>
-                                        <span className={`font-bold font-mono ${ga.attainmentRate >= 60 ? 'text-emerald-700' : 'text-amber-700'}`}>
+                                        <span className={`font-bold font-mono ${ga.attainmentRate >= 60 ? 'text-blue-700' : 'text-amber-700'}`}>
                                           {ga.attainmentRate.toFixed(1)}%
                                         </span>
                                       </div>
                                       <div className="w-full bg-slate-200 rounded-full h-1.5">
                                         <div
-                                          className={`h-1.5 rounded-full transition-all duration-500 ${ga.attainmentRate >= 60 ? 'bg-emerald-500' : 'bg-amber-500'}`}
+                                          className={`h-1.5 rounded-full transition-all duration-500 ${ga.attainmentRate >= 60 ? 'bg-blue-500' : 'bg-amber-500'}`}
                                           style={{ width: `${Math.min(100, ga.attainmentRate)}%` }}
                                         ></div>
                                       </div>
@@ -7461,11 +7475,11 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
 
                 {/* Success banner inside the modal */}
                 {unitSaveSuccessMsg && (
-                  <div className="bg-emerald-50 border border-emerald-300 border-l-4 border-l-emerald-600 p-3.5 rounded-xl flex items-start gap-3 shadow-2xs animate-fade-in">
-                    <Check className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+                  <div className="bg-blue-50 border border-blue-300 border-l-4 border-l-blue-600 p-3.5 rounded-xl flex items-start gap-3 shadow-2xs animate-fade-in">
+                    <Check className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
                     <div>
-                      <h4 className="text-xs font-extrabold text-emerald-950 uppercase tracking-wider">Saved Successfully</h4>
-                      <p className="text-[11px] text-emerald-850 mt-1 font-sans">
+                      <h4 className="text-xs font-extrabold text-blue-950 uppercase tracking-wider">Saved Successfully</h4>
+                      <p className="text-[11px] text-blue-850 mt-1 font-sans">
                         {unitSaveSuccessMsg}
                       </p>
                     </div>
@@ -7580,7 +7594,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                             ? "text-rose-600 font-extrabold animate-pulse" 
                             : totalUnitWeightSum < 100 
                               ? "text-amber-600 font-bold" 
-                              : "text-emerald-600 font-extrabold pb-0.5 px-1 bg-emerald-50 border border-emerald-200 rounded"
+                              : "text-blue-600 font-extrabold pb-0.5 px-1 bg-blue-50 border border-blue-200 rounded"
                         }>
                           {totalUnitWeightSum}%
                         </strong>
@@ -8195,8 +8209,8 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
               {/* Top Control Bar */}
               <div className="bg-white border-b border-slate-200 px-5 py-4 flex items-center justify-between shrink-0">
                 <div className="flex items-center gap-2">
-                  <div className="p-1.5 bg-emerald-50 rounded-lg border border-emerald-100">
-                    <FileSpreadsheet className="w-5 h-5 text-emerald-600" />
+                  <div className="p-1.5 bg-blue-50 rounded-lg border border-blue-100">
+                    <FileSpreadsheet className="w-5 h-5 text-blue-600" />
                   </div>
                   <div>
                     <h3 className="font-extrabold text-sm text-slate-900 uppercase tracking-tight">Academic Mark Sheet Report Builder</h3>
@@ -8213,7 +8227,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                   </button>
                   <button
                     onClick={handleDownloadPDF}
-                    className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2 rounded-lg shadow-sm transition-all cursor-pointer"
+                    className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2 rounded-lg shadow-sm transition-all cursor-pointer"
                   >
                     <Download className="w-4 h-4" />
                     <span>Download</span>
@@ -8244,7 +8258,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                         type="text"
                         value={reportCampus}
                         onChange={(e) => setReportCampus(e.target.value)}
-                        className="w-full text-xs bg-slate-50 hover:bg-slate-100 border border-slate-300 rounded-lg p-2 text-slate-950 font-sans font-medium focus:ring-2 focus:ring-emerald-100 outline-none transition-all"
+                        className="w-full text-xs bg-slate-50 hover:bg-slate-100 border border-slate-300 rounded-lg p-2 text-slate-950 font-sans font-medium focus:ring-2 focus:ring-blue-100 outline-none transition-all"
                         placeholder="Iqra University Chak Shahzad Campus Islamabad"
                       />
                     </div>
@@ -8255,7 +8269,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                         type="text"
                         value={reportSession}
                         onChange={(e) => setReportSession(e.target.value)}
-                        className="w-full text-xs bg-slate-50 hover:bg-slate-100 border border-slate-300 rounded-lg p-2 text-slate-950 font-sans font-medium focus:ring-2 focus:ring-emerald-100 outline-none transition-all"
+                        className="w-full text-xs bg-slate-50 hover:bg-slate-100 border border-slate-300 rounded-lg p-2 text-slate-950 font-sans font-medium focus:ring-2 focus:ring-blue-100 outline-none transition-all"
                         placeholder="B.Sc Electrical Engineering (Fall-Morning)"
                       />
                     </div>
@@ -8266,7 +8280,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                         type="text"
                         value={reportSemester}
                         onChange={(e) => setReportSemester(e.target.value)}
-                        className="w-full text-xs bg-slate-50 hover:bg-slate-100 border border-slate-300 rounded-lg p-2 text-slate-950 font-sans font-bold focus:ring-2 focus:ring-emerald-100 outline-none transition-all"
+                        className="w-full text-xs bg-slate-50 hover:bg-slate-100 border border-slate-300 rounded-lg p-2 text-slate-950 font-sans font-bold focus:ring-2 focus:ring-blue-100 outline-none transition-all"
                         placeholder="SPRING 2026"
                       />
                     </div>
@@ -8278,7 +8292,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                           type="text"
                           value={reportSection}
                           onChange={(e) => setReportSection(e.target.value)}
-                          className="w-full text-xs bg-slate-50 hover:bg-slate-100 border border-slate-300 rounded-lg p-2 text-slate-950 font-sans font-bold text-center focus:ring-2 focus:ring-emerald-100 outline-none transition-all"
+                          className="w-full text-xs bg-slate-50 hover:bg-slate-100 border border-slate-300 rounded-lg p-2 text-slate-950 font-sans font-bold text-center focus:ring-2 focus:ring-blue-100 outline-none transition-all"
                           placeholder="A"
                         />
                       </div>
@@ -8288,7 +8302,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                           type="date"
                           value={reportDated}
                           onChange={(e) => setReportDated(e.target.value)}
-                          className="w-full text-xs bg-slate-50 hover:bg-slate-100 border border-slate-300 rounded-lg p-2 text-slate-950 font-sans focus:ring-2 focus:ring-emerald-100 outline-none transition-all"
+                          className="w-full text-xs bg-slate-50 hover:bg-slate-100 border border-slate-300 rounded-lg p-2 text-slate-950 font-sans focus:ring-2 focus:ring-blue-100 outline-none transition-all"
                         />
                       </div>
                     </div>
@@ -8299,7 +8313,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                         type="text"
                         value={reportInstructor}
                         onChange={(e) => setReportInstructor(e.target.value)}
-                        className="w-full text-xs bg-slate-50 hover:bg-slate-100 border border-slate-300 rounded-lg p-2 text-slate-950 font-sans font-bold focus:ring-2 focus:ring-emerald-100 outline-none transition-all"
+                        className="w-full text-xs bg-slate-50 hover:bg-slate-100 border border-slate-300 rounded-lg p-2 text-slate-950 font-sans font-bold focus:ring-2 focus:ring-blue-100 outline-none transition-all"
                         placeholder="Prof. Dr. Jameel Ahmed"
                       />
                     </div>
