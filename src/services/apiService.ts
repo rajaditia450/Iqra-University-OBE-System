@@ -889,12 +889,21 @@ export const apiService = {
       }
     }
 
-    return {
+    const resultData = {
       departments: Array.isArray(depts) ? depts : [],
       programs: Array.isArray(programs) ? programs : [],
       gas: Array.isArray(gas) ? gas : [],
       courses: filteredCourses,
     };
+
+    // Keep the local fallback database completely updated with real server data
+    try {
+      localStorage.setItem('IQRA_OBE_FALLBACK_DB', JSON.stringify(resultData));
+    } catch (e) {
+      console.warn("Failed to update IQRA_OBE_FALLBACK_DB in localStorage", e);
+    }
+
+    return resultData;
   },
 
   async updateDepartment(id: string, data: Partial<Department>): Promise<Department> {
@@ -959,10 +968,19 @@ export const apiService = {
 
   // Save Course Mapping (allows updating course to GA tick marks in local storage / server mock fallback!)
   async updateCourse(id: string, data: Partial<Course>, programId?: string): Promise<Course> {
-    const queryProg = programId || data.programId;
+    // Merge data with existing course details to avoid missing required fields like title, code, etc.
+    const localData = getLocalStorageData();
+    const existingCourse = localData.courses.find(c => c.id === id);
+    const mergedCourse = {
+      ...existingCourse,
+      ...data,
+      id
+    } as Course;
+
+    const queryProg = programId || mergedCourse.programId;
     try {
       const isBackend = isBackendUser();
-      const mappedData = mapCourseToBackend({ ...data, id } as Course);
+      const mappedData = mapCourseToBackend(mergedCourse);
       let url = `${BASE_URL}/courses/${id}/`;
       if (queryProg) {
         const cleanProg = String(queryProg).trim();
@@ -976,11 +994,11 @@ export const apiService = {
       if (response.ok) {
         const responseData = await response.json();
         const normalized = normalizeCourse(responseData);
-        if (!isBackend) {
-          const localData = getLocalStorageData();
-          const updatedCourses = localData.courses.map(c => c.id === id ? normalized : c);
-          saveLocalStorageData({ ...localData, courses: updatedCourses });
-        }
+        
+        // Keep local cache always in sync with backend normalized data
+        const updatedCourses = localData.courses.map(c => c.id === id ? normalized : c);
+        saveLocalStorageData({ ...localData, courses: updatedCourses });
+        
         return normalized;
       }
       const errData = await response.json().catch(() => ({}));
@@ -990,10 +1008,9 @@ export const apiService = {
         throw err;
       }
     }
-    const localData = getLocalStorageData();
     const updatedCourses = localData.courses.map(c => {
       if (c.id === id) {
-        return normalizeCourse({ ...c, ...data });
+        return normalizeCourse(mergedCourse);
       }
       return c;
     });
@@ -1149,6 +1166,21 @@ export const apiService = {
     }
     const data = await response.json();
     if (Array.isArray(data)) {
+      // Normalize enrolled students from backend to a standard frontend structure
+      data.forEach((ic: any) => {
+        const rawStuds = ic.students || ic.enrolled_students || ic.enrolledStudents || ic.student_list || ic.studentList || ic.enrolled_student_list || ic.enrolledStudentList || [];
+        if (Array.isArray(rawStuds)) {
+          ic.students = rawStuds.map((s: any) => {
+            const regNo = s.regNo || s.reg_no || s.registration_no || s.registrationNo || '';
+            const name = s.name || s.student_name || s.studentName || '';
+            const marks = s.marks || s.obtained_marks || s.obtainedMarks || {};
+            return { regNo, name, marks };
+          });
+        } else {
+          ic.students = [];
+        }
+      });
+
       // Reconcile instructor courses with the general courses database
       try {
         const coursesRes = await fetchWithTimeout(`${BASE_URL}/courses/`, { headers: getHeaders() }, 10000);
@@ -1390,7 +1422,7 @@ export const apiService = {
         const data = await response.json();
         const normalizedData = normalizeStudent(data);
         const current = await this.getStudents();
-        const updated = current.map(s => s.regNo === regNo ? { ...s, ...normalizedData } : s);
+        const updated = current.map(s => s.regNo.toLowerCase().trim() === regNo.toLowerCase().trim() ? { ...s, ...normalizedData } : s);
         localStorage.setItem('IQRA_OBE_STUDENTS', JSON.stringify(updated));
         return normalizedData;
       } else {
@@ -1409,10 +1441,10 @@ export const apiService = {
       console.warn("Backend API for students offline. Updating student in local storage.", err);
     }
     const current = await this.getStudents();
-    const matched = current.find(s => s.regNo === regNo);
+    const matched = current.find(s => s.regNo.toLowerCase().trim() === regNo.toLowerCase().trim());
     if (!matched) throw new Error("Student not found");
     const updatedStudent = { ...matched, ...studentData };
-    const updated = current.map(s => s.regNo === regNo ? updatedStudent : s);
+    const updated = current.map(s => s.regNo.toLowerCase().trim() === regNo.toLowerCase().trim() ? updatedStudent : s);
     localStorage.setItem('IQRA_OBE_STUDENTS', JSON.stringify(updated));
     return updatedStudent;
   },

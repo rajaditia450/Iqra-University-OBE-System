@@ -50,9 +50,24 @@ import html2pdf from 'html2pdf.js';
 import { toPng } from 'html-to-image';
 import { jsPDF } from 'jspdf';
 
-const areRegNosEqual = (reg1: string, reg2: string): boolean => {
+const areRegNosEqual = (reg1: string | null | undefined, reg2: string | null | undefined): boolean => {
   if (!reg1 || !reg2) return false;
-  return reg1.trim().toLowerCase().replace(/[^a-z0-9]/g, '') === reg2.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+  const r1 = String(reg1).trim().toLowerCase();
+  const r2 = String(reg2).trim().toLowerCase();
+  if (r1 === r2) return true;
+
+  const norm1 = r1.replace(/[^a-z0-9]/g, '');
+  const norm2 = r2.replace(/[^a-z0-9]/g, '');
+  if (norm1 === norm2) return true;
+
+  // Handle cases where one registration number might miss a prefix or department code (e.g., 052-SP23-22144 vs SP23-22144)
+  // We only match if one normalized registration number is a suffix of the other.
+  if (norm1.endsWith(norm2) || norm2.endsWith(norm1)) {
+    const minLen = Math.min(norm1.length, norm2.length);
+    if (minLen >= 4) return true;
+  }
+
+  return false;
 };
 
 interface InstructorDashboardProps {
@@ -611,11 +626,21 @@ const normalizeCourse = (course: InstructorCourse): InstructorCourse => {
   const customGradingSystem = course.customGradingSystem || (course as any).custom_grading_system || [];
 
   const rawObeMarks = course.obeMarks || (course as any).obe_marks || {};
-  const rawStudents = [...(course.students || (course as any).students || [])];
+  const rawStudents = [
+    ...(course.students || 
+        (course as any).students || 
+        (course as any).enrolled_students || 
+        (course as any).enrolledStudents || 
+        (course as any).enrolled_student_list || 
+        (course as any).enrolledStudentList || 
+        (course as any).student_list || 
+        (course as any).studentList || 
+        [])
+  ];
 
   const normalizedStudents = rawStudents.map((s: any) => {
-    const regNo = s.regNo || s.reg_no || '';
-    const name = s.name || '';
+    const regNo = s.regNo || s.reg_no || s.registration_no || s.registrationNo || '';
+    const name = s.name || s.student_name || s.studentName || '';
     const marks = { ...(s.marks || s.obtained_marks || s.obtainedMarks || {}) };
 
     // Inject individual OBE question marks from rawObeMarks (from OBEStudentMark DB model)
@@ -1146,6 +1171,13 @@ const MarksheetDocument = ({
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
           }
+          .ga-highlight-cell-fail {
+            background-color: #e0e7ff !important;
+            color: #b91c1c !important;
+            font-weight: 900 !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
           .ga-highlight-header {
             background-color: #c7d2fe !important;
             color: #1e1b4b !important;
@@ -1156,6 +1188,11 @@ const MarksheetDocument = ({
         .ga-highlight-cell {
           background-color: #e0e7ff !important;
           color: #1e1b4b !important;
+        }
+        .ga-highlight-cell-fail {
+          background-color: #e0e7ff !important;
+          color: #b91c1c !important;
+          font-weight: 900 !important;
         }
         .ga-highlight-header {
           background-color: #c7d2fe !important;
@@ -1558,7 +1595,7 @@ const MarksheetDocument = ({
                                   {list.map((_, aIdx) => (
                                     <td key={`empty-ass-cell-${aIdx}`} className={`border-r border-black ${ds.cellClass}`} style={ds.assStyle}></td>
                                   ))}
-                                  <td className={`border-r border-black bg-slate-50 ${ds.cellClass}`} style={ds.totStyle}></td>
+                                  <td className={`border-r border-black ga-highlight-cell ${ds.cellClass}`} style={ds.totStyle}></td>
                                 </React.Fragment>
                               );
                             })}
@@ -1620,7 +1657,7 @@ const MarksheetDocument = ({
                           </th>
                         ))}
                         <th 
-                          className="border-r border-black font-sans text-center font-bold bg-slate-100/50"
+                          className="border-r border-black font-sans text-center font-black ga-highlight-header"
                           style={ds.totStyle}
                         >
                           Total
@@ -1649,7 +1686,7 @@ const MarksheetDocument = ({
                           </td>
                         ))}
                         <td 
-                          className="border-r border-black font-sans text-center font-bold bg-slate-100"
+                          className="border-r border-black font-sans text-center font-black ga-highlight-header"
                           style={ds.totStyle}
                         >
                           100%
@@ -1728,7 +1765,7 @@ const MarksheetDocument = ({
                               return (
                                 <td
                                   className={`border-r border-black text-center font-bold font-sans ${ds.cellClass} ${
-                                    isFailed ? 'bg-slate-200 text-red-700 font-black' : 'bg-slate-50'
+                                    isFailed ? 'ga-highlight-cell-fail font-black' : 'ga-highlight-cell'
                                   }`}
                                   style={ds.totStyle}
                                 >
@@ -1759,7 +1796,7 @@ const MarksheetDocument = ({
                             {list.map((_, aIdx) => (
                               <td key={`empty-${code}-ass-${aIdx}`} className={`border-r border-black ${ds.cellClass}`} style={ds.assStyle}></td>
                             ))}
-                            <td className={`border-r border-black bg-slate-50 ${ds.cellClass}`} style={ds.totStyle}></td>
+                            <td className={`border-r border-black ga-highlight-cell ${ds.cellClass}`} style={ds.totStyle}></td>
                           </React.Fragment>
                         );
                       })}
@@ -2054,6 +2091,58 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
           obeQuestionsCount: (c.obeQuestions || []).length,
           unitsDataKeys: c.unitsData ? Object.keys(c.unitsData) : null
         })) : null);
+
+        if (Array.isArray(res)) {
+          setCourses(prev => {
+            let changed = false;
+            const next = prev.map(localC => {
+              const backendC = res.find(bc => bc.id === localC.id);
+              if (!backendC) return localC;
+
+              const localStudents = localC.students || [];
+              const backendStudents = backendC.students || [];
+
+              const localMap = new Map(localStudents.map(s => [s.regNo, s]));
+              const mergedStudents: CourseStudent[] = [];
+              let studentsChanged = false;
+
+              backendStudents.forEach(bs => {
+                const ls = localMap.get(bs.regNo);
+                if (ls) {
+                  if (ls.name !== bs.name) {
+                    studentsChanged = true;
+                  }
+                  mergedStudents.push({
+                    ...ls,
+                    name: bs.name
+                  });
+                } else {
+                  studentsChanged = true;
+                  mergedStudents.push({
+                    regNo: bs.regNo,
+                    name: bs.name,
+                    marks: {}
+                  });
+                }
+              });
+
+              if (localStudents.length !== mergedStudents.length) {
+                studentsChanged = true;
+              }
+
+              if (studentsChanged) {
+                changed = true;
+                return {
+                  ...localC,
+                  students: mergedStudents
+                };
+              }
+              return localC;
+            });
+
+            return changed ? next : prev;
+          });
+        }
       }).catch(err => {
         console.warn("[DEBUG auto-save useEffect] Failed to sync instructor courses to backend", err);
       });
@@ -4510,9 +4599,9 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                       setActiveModal('marksheet-report');
                       setOpenMenu(null);
                     }}
-                    className="w-full text-left px-3.5 py-1.5 text-xs text-slate-900 hover:bg-slate-50 hover:text-indigo-900 flex items-center gap-2 rounded font-bold"
+                    className="w-full text-left px-3.5 py-1.5 text-xs text-slate-900 hover:bg-slate-50 hover:text-black flex items-center gap-2 rounded font-bold"
                   >
-                    <Award className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                    <FileSpreadsheet className="w-3.5 h-3.5 text-slate-700 shrink-0" />
                     <span className="text-slate-900 font-bold">GA Based Result (PDF)</span>
                   </button>
 

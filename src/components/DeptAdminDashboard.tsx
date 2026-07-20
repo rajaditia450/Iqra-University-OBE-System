@@ -53,6 +53,26 @@ const normalizeRegNo = (reg: any): string => {
   return String(reg).trim().toLowerCase().replace(/[^a-z0-9]/g, '');
 };
 
+const areRegNosEqual = (reg1: string | null | undefined, reg2: string | null | undefined): boolean => {
+  if (!reg1 || !reg2) return false;
+  const r1 = String(reg1).trim().toLowerCase();
+  const r2 = String(reg2).trim().toLowerCase();
+  if (r1 === r2) return true;
+
+  const norm1 = r1.replace(/[^a-z0-9]/g, '');
+  const norm2 = r2.replace(/[^a-z0-9]/g, '');
+  if (norm1 === norm2) return true;
+
+  // Handle cases where one registration number might miss a prefix or department code (e.g., 052-SP23-22144 vs SP23-22144)
+  // We only match if one normalized registration number is a suffix of the other.
+  if (norm1.endsWith(norm2) || norm2.endsWith(norm1)) {
+    const minLen = Math.min(norm1.length, norm2.length);
+    if (minLen >= 4) return true;
+  }
+
+  return false;
+};
+
 const normalizeCourseCode = (code: any): string => {
   if (!code) return '';
   return String(code).trim().toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -237,6 +257,90 @@ const DEFAULT_SEMESTER_PLANS: SemesterPlan[] = [
   },
   {
     programId: 'bsai',
+    semester: '8th',
+    courseCodes: ['GER463', 'CMC492']
+  },
+
+  // BSSE Plans
+  {
+    programId: 'bsse',
+    semester: '1st',
+    courseCodes: ['CMC111', 'GER111', 'GER121', 'GER131', 'GER141', 'GER151']
+  },
+  {
+    programId: 'bsse',
+    semester: '2nd',
+    courseCodes: ['MTE111', 'CMC112', 'CMC121', 'GER122', 'GER132', 'GER142']
+  },
+  {
+    programId: 'bsse',
+    semester: '3rd',
+    courseCodes: ['MTE212', 'CMC222', 'CMC251', 'CSC252', 'CMC261']
+  },
+  {
+    programId: 'bsse',
+    semester: '4th',
+    courseCodes: ['MTE213', 'MTE221', 'CSC223', 'CMC241', 'CMC253', 'GER261']
+  },
+  {
+    programId: 'bsse',
+    semester: '5th',
+    courseCodes: ['CMC331', 'CSC354', 'CMC362', 'CMC371', 'CSC332']
+  },
+  {
+    programId: 'bsse',
+    semester: '6th',
+    courseCodes: ['CMC381', 'CSC382', 'ESC311']
+  },
+  {
+    programId: 'bsse',
+    semester: '7th',
+    courseCodes: ['CSC442', 'GER462', 'CMC491', 'GER443']
+  },
+  {
+    programId: 'bsse',
+    semester: '8th',
+    courseCodes: ['GER463', 'CMC492']
+  },
+
+  // BSCY Plans
+  {
+    programId: 'bscy',
+    semester: '1st',
+    courseCodes: ['CMC111', 'GER111', 'GER121', 'GER131', 'GER141', 'GER151']
+  },
+  {
+    programId: 'bscy',
+    semester: '2nd',
+    courseCodes: ['MTE111', 'CMC112', 'CMC121', 'GER122', 'GER132', 'GER142']
+  },
+  {
+    programId: 'bscy',
+    semester: '3rd',
+    courseCodes: ['MTE212', 'CMC222', 'CMC251', 'CSC252', 'CMC261']
+  },
+  {
+    programId: 'bscy',
+    semester: '4th',
+    courseCodes: ['MTE213', 'MTE221', 'CSC223', 'CMC241', 'CMC253', 'GER261']
+  },
+  {
+    programId: 'bscy',
+    semester: '5th',
+    courseCodes: ['CMC331', 'CSC354', 'CMC362', 'CMC371', 'CSC332']
+  },
+  {
+    programId: 'bscy',
+    semester: '6th',
+    courseCodes: ['CMC381', 'CSC382', 'ESC311']
+  },
+  {
+    programId: 'bscy',
+    semester: '7th',
+    courseCodes: ['CSC442', 'GER462', 'CMC491', 'GER443']
+  },
+  {
+    programId: 'bscy',
     semester: '8th',
     courseCodes: ['GER463', 'CMC492']
   }
@@ -594,7 +698,15 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
 
       // 6. Load Student Bindings
       let activeBindings: StudentCourseBinding[] = [];
-      let bindingsNeedReset = false;
+      const localBindingsStr = localStorage.getItem('IQRA_OBE_STUDENT_BINDINGS');
+      if (localBindingsStr) {
+        try {
+          activeBindings = JSON.parse(localBindingsStr);
+        } catch (e) {
+          activeBindings = [];
+        }
+      }
+      setStudentBindings(activeBindings);
 
       // 7. Load Teacher Course Assignments from backend or fallback to Local Storage
       let loadedAssignments: TeacherCourseAssignment[] = [];
@@ -602,7 +714,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
         const fetchedAssignments = await apiService.getCourseAssignments();
         if (Array.isArray(fetchedAssignments)) {
           loadedAssignments = fetchedAssignments.map((a: any) => ({
-            id: a.id,
+            id: a.id || a.assignment_id || a.assignmentId,
             teacherId: a.teacherId || a.instructor || a.employeeId,
             courseCode: a.courseCode || a.course_code || a.code,
             programId: a.programId || a.program_id || a.program,
@@ -614,7 +726,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
           if (isBackend) {
             const dbBindings: StudentCourseBinding[] = [];
             fetchedAssignments.forEach((a: any) => {
-              const studentsList = a.students || a.enrolled_students || [];
+              const studentsList = a.students || a.enrolled_students || a.enrolledStudents || a.student_list || a.studentList || [];
               if (Array.isArray(studentsList)) {
                 studentsList.forEach((s: any) => {
                   const regNoClean = String(s.regNo || s.reg_no || '').trim();
@@ -629,18 +741,22 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
               }
             });
             console.log(`[DEBUG DeptAdmin] Recovered ${dbBindings.length} real student bindings from database assignments.`);
-            activeBindings = dbBindings;
-            setStudentBindings(dbBindings);
-            localStorage.setItem('IQRA_OBE_STUDENT_BINDINGS', JSON.stringify(dbBindings));
-          } else {
-            bindingsNeedReset = true;
+            
+            // Merge dbBindings into activeBindings (ensuring no duplicates, matching with areRegNosEqual)
+            const combined = [...activeBindings];
+            dbBindings.forEach(dbb => {
+              const exists = combined.some(cb => areRegNosEqual(cb.studentRegNo, dbb.studentRegNo) && cb.courseCode.toLowerCase().trim() === dbb.courseCode.toLowerCase().trim());
+              if (!exists) {
+                combined.push(dbb);
+              }
+            });
+            activeBindings = combined;
+            setStudentBindings(activeBindings);
+            localStorage.setItem('IQRA_OBE_STUDENT_BINDINGS', JSON.stringify(activeBindings));
           }
-        } else {
-          bindingsNeedReset = true;
         }
       } catch (err) {
         console.warn("Backend API for course assignments offline. Falling back to local storage.", err);
-        bindingsNeedReset = true;
         const savedAssignments = localStorage.getItem('IQRA_OBE_TEACHER_ASSIGNMENTS');
         if (savedAssignments) {
           try {
@@ -750,25 +866,19 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
       });
 
       // Find matching students for this course based on bindings
-      const studentRegs = currentBindings
-        .filter(b => normalizeCourseCode(b.courseCode) === normalizeCourseCode(assignment.courseCode))
-        .map(b => normalizeRegNo(b.studentRegNo));
-
       const courseStudents = currentStudents
         .filter(s => {
-          const sReg = normalizeRegNo(s.regNo);
-          const isBound = studentRegs.includes(sReg);
-          if (!isBound) return false;
-          if (assignment.programId) {
-            return areProgramsCompatible(s.programId, assignment.programId);
-          }
-          return true;
+          const isBound = currentBindings.some(b => 
+            normalizeCourseCode(b.courseCode) === normalizeCourseCode(assignment.courseCode) &&
+            areRegNosEqual(b.studentRegNo, s.regNo)
+          );
+          return isBound;
         })
         .map(s => {
           // Preserve existing marks if student was already in this course
           const existingCourse = existingInstructorCourses.find(ec => ec.id === uniqId) || 
                                  existingInstructorCourses.find(ec => ec.code === assignment.courseCode && !ec.id.includes('-'));
-          const existingStudent = existingCourse?.students.find(es => normalizeRegNo(es.regNo) === normalizeRegNo(s.regNo));
+          const existingStudent = existingCourse?.students.find(es => areRegNosEqual(es.regNo, s.regNo));
           return {
             regNo: s.regNo,
             name: s.name,
@@ -1801,8 +1911,8 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
         plan.courseCodes.forEach(code => {
           // Check if already bound
           const alreadyBound = newBindings.some(
-            b => String(b.studentRegNo || '').trim().toLowerCase() === String(student.regNo || '').trim().toLowerCase() && 
-                 String(b.courseCode || '').trim().toLowerCase() === String(code || '').trim().toLowerCase()
+            b => areRegNosEqual(b.studentRegNo, student.regNo) && 
+                 normalizeCourseCode(b.courseCode) === normalizeCourseCode(code)
           );
           if (!alreadyBound) {
             newBindings.push({ studentRegNo: student.regNo, courseCode: code });
@@ -1834,7 +1944,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
     }
 
     const alreadyBound = studentBindings.some(
-      b => normalizeRegNo(b.studentRegNo) === normalizeRegNo(selectedStudentRegNo) && 
+      b => areRegNosEqual(b.studentRegNo, selectedStudentRegNo) && 
            normalizeCourseCode(b.courseCode) === normalizeCourseCode(selectedCourseCodeForStudent)
     );
 
@@ -1854,14 +1964,14 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
 
     syncToInstructorCourses(courses, teachers, teacherAssignments, updatedBindings, students);
 
-    const studentObj = students.find(s => normalizeRegNo(s.regNo) === normalizeRegNo(selectedStudentRegNo));
+    const studentObj = students.find(s => areRegNosEqual(s.regNo, selectedStudentRegNo));
     triggerNotification(`Manually enrolled ${studentObj?.name || selectedStudentRegNo} in course ${selectedCourseCodeForStudent}`);
     setSelectedCourseCodeForStudent('');
   };
 
   const handleManualUnbindCourse = (regNo: string, code: string) => {
     const updatedBindings = studentBindings.filter(
-      b => !(normalizeRegNo(b.studentRegNo) === normalizeRegNo(regNo) && 
+      b => !(areRegNosEqual(b.studentRegNo, regNo) && 
              normalizeCourseCode(b.courseCode) === normalizeCourseCode(code))
     );
     setStudentBindings(updatedBindings);
@@ -1869,13 +1979,13 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
 
     syncToInstructorCourses(courses, teachers, teacherAssignments, updatedBindings, students);
 
-    const studentObj = students.find(s => normalizeRegNo(s.regNo) === normalizeRegNo(regNo));
+    const studentObj = students.find(s => areRegNosEqual(s.regNo, regNo));
     triggerNotification(`Unenrolled ${studentObj?.name || regNo} from course ${code}`);
   };
 
   // Student academic pathway course status helpers
   const getCourseStatus = (studentRegNo: string, courseCode: string): 'studied' | 'studying' | 'failed' | 'later' | 'deferred' => {
-    const student = students.find(s => normalizeRegNo(s.regNo) === normalizeRegNo(studentRegNo));
+    const student = students.find(s => areRegNosEqual(s.regNo, studentRegNo));
 
     // 1. Is it currently bound/enrolled? If so, check if there is an active teacher assigned to this course.
     const hasTeacherAssigned = teacherAssignments.some(
@@ -1883,7 +1993,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
     );
 
     const isStudying = studentBindings.some(
-      b => normalizeRegNo(b.studentRegNo) === normalizeRegNo(studentRegNo) && 
+      b => areRegNosEqual(b.studentRegNo, studentRegNo) && 
            normalizeCourseCode(b.courseCode) === normalizeCourseCode(courseCode)
     );
     if (isStudying && hasTeacherAssigned) return 'studying';
@@ -1932,7 +2042,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
     // 1. Update bindings based on the new status
     let updatedBindings = [...studentBindings];
     const isCurrentlyEnrolled = studentBindings.some(
-      b => normalizeRegNo(b.studentRegNo) === normalizeRegNo(studentRegNo) && 
+      b => areRegNosEqual(b.studentRegNo, studentRegNo) && 
            normalizeCourseCode(b.courseCode) === normalizeCourseCode(courseCode)
     );
 
@@ -1943,7 +2053,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
     } else {
       if (isCurrentlyEnrolled) {
         updatedBindings = updatedBindings.filter(
-          b => !(normalizeRegNo(b.studentRegNo) === normalizeRegNo(studentRegNo) && 
+          b => !(areRegNosEqual(b.studentRegNo, studentRegNo) && 
                  normalizeCourseCode(b.courseCode) === normalizeCourseCode(courseCode))
         );
       }
@@ -1968,7 +2078,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
     setStudentCourseStatuses(updatedStatuses);
     localStorage.setItem('IQRA_OBE_STUDENT_COURSE_STATUSES', JSON.stringify(updatedStatuses));
 
-    const studentObj = students.find(s => normalizeRegNo(s.regNo) === normalizeRegNo(studentRegNo));
+    const studentObj = students.find(s => areRegNosEqual(s.regNo, studentRegNo));
     const studentProgClean = studentObj?.programId ? String(studentObj.programId).trim().toLowerCase() : '';
     const courseObj = courses.find(c => normalizeCourseCode(c.code) === normalizeCourseCode(courseCode) && (!studentProgClean || String(c.programId).trim().toLowerCase() === studentProgClean)) || courses.find(c => normalizeCourseCode(c.code) === normalizeCourseCode(courseCode));
     
@@ -2084,18 +2194,18 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
   // Selected student's current bindings
   const selectedStudentCurrentCourses = useMemo(() => {
     if (!selectedStudentRegNo) return [];
-    const student = students.find(s => s.regNo === selectedStudentRegNo);
+    const student = students.find(s => areRegNosEqual(s.regNo, selectedStudentRegNo));
     const studentProgClean = student?.programId ? String(student.programId).trim().toLowerCase() : '';
     return studentBindings
-      .filter(b => b.studentRegNo === selectedStudentRegNo)
+      .filter(b => areRegNosEqual(b.studentRegNo, selectedStudentRegNo))
       .map(b => courses.find(c => c.code === b.courseCode && (!studentProgClean || areProgramsCompatible(c.programId, studentProgClean))) || courses.find(c => c.code === b.courseCode))
       .filter((c): c is Course => !!c);
-  }, [selectedStudentRegNo, studentBindings, courses]);
+  }, [selectedStudentRegNo, studentBindings, courses, students]);
 
   // Available courses to bind manually for selected student (of their department/program)
   const availableCoursesForSelectedStudent = useMemo(() => {
     if (!selectedStudentRegNo) return [];
-    const student = students.find(s => s.regNo === selectedStudentRegNo);
+    const student = students.find(s => areRegNosEqual(s.regNo, selectedStudentRegNo));
     if (!student) return [];
 
     const enrolledCodes = selectedStudentCurrentCourses.map(c => c.code);
@@ -2942,7 +3052,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                     <div className="space-y-6">
                       {/* Student Details Card */}
                       {(() => {
-                        const s = students.find(x => x.regNo === selectedStudentRegNo);
+                        const s = students.find(x => areRegNosEqual(x.regNo, selectedStudentRegNo));
                         if (!s) return null;
                         const matchedProg = programs.find(p => String(p.id).trim().toLowerCase() === String(s.programId).trim().toLowerCase());
                         
@@ -3082,7 +3192,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                       {/* Course Catalog List Display */}
                       <div className="space-y-4">
                         {(() => {
-                          const s = students.find(x => normalizeRegNo(x.regNo) === normalizeRegNo(selectedStudentRegNo));
+                          const s = students.find(x => areRegNosEqual(x.regNo, selectedStudentRegNo));
                           if (!s) return null;
 
                           const progPlans = semesterPlans.filter(p => areProgramsCompatible(p.programId, s.programId));
@@ -3098,7 +3208,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                               // The course must be in the student's program's curriculum OR explicitly enrolled/studied
                               const inCurriculum = curriculumCodes.includes(c.code);
                               const isEnrolled = studentBindings.some(
-                                b => normalizeRegNo(b.studentRegNo) === normalizeRegNo(s.regNo) && 
+                                b => areRegNosEqual(b.studentRegNo, s.regNo) && 
                                      normalizeCourseCode(b.courseCode) === normalizeCourseCode(c.code)
                               );
                               if (!inCurriculum && !isEnrolled) return false;

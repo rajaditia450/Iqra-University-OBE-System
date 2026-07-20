@@ -40,7 +40,7 @@ const normalizeRegNo = (reg: string) => {
   return reg.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
 };
 
-const areStudentsEqual = (reg1: string, reg2: string): boolean => {
+const areStudentsEqual = (reg1: string | null | undefined, reg2: string | null | undefined): boolean => {
   if (!reg1 || !reg2) return false;
   const r1 = String(reg1).trim().toLowerCase();
   const r2 = String(reg2).trim().toLowerCase();
@@ -50,18 +50,11 @@ const areStudentsEqual = (reg1: string, reg2: string): boolean => {
   const norm2 = r2.replace(/[^a-z0-9]/g, '');
   if (norm1 === norm2) return true;
 
-  // Extract trailing digits (e.g., 22144)
-  const match1 = norm1.match(/\d+$/);
-  const match2 = norm2.match(/\d+$/);
-  if (match1 && match2 && match1[0] === match2[0]) {
-    return true;
-  }
-
-  // Fallback: if last 5 digits match
-  const digits1 = norm1.replace(/[^0-9]/g, '');
-  const digits2 = norm2.replace(/[^0-9]/g, '');
-  if (digits1.length >= 5 && digits2.length >= 5 && digits1.slice(-5) === digits2.slice(-5)) {
-    return true;
+  // Handle cases where one registration number might miss a prefix or department code (e.g., 052-SP23-22144 vs SP23-22144)
+  // We only match if one normalized registration number is a suffix of the other.
+  if (norm1.endsWith(norm2) || norm2.endsWith(norm1)) {
+    const minLen = Math.min(norm1.length, norm2.length);
+    if (minLen >= 4) return true;
   }
 
   return false;
@@ -207,14 +200,63 @@ const matchInstructorCourse = (ic: any, courseCode: string, courseTitle: string)
   );
 };
 
-const calculateStudentCLOAttainment = (sc: any, regToUse: string, allInstructorCourses: any[]) => {
+const calculateStudentCLOAttainment = (rawSc: any, regToUse: string, allInstructorCourses: any[]) => {
+  // Normalize course details supporting both camelCase and snake_case from python/django backend
+  const sc = {
+    ...rawSc,
+    id: rawSc.id || rawSc.course_id || `course-assigned-${rawSc.code}`,
+    code: rawSc.code,
+    title: rawSc.title || rawSc.name || '',
+    creditHours: rawSc.creditHours || rawSc.credit_hours || 3,
+    categories: rawSc.categories || rawSc.course_categories || [],
+    unitsData: rawSc.unitsData || rawSc.units_data || {},
+    obeQuestions: rawSc.obeQuestions || rawSc.obe_questions || [],
+    studentMarks: rawSc.studentMarks || rawSc.student_marks || rawSc.marks || {},
+    obeMarks: rawSc.obeMarks || rawSc.obe_marks || {},
+    clos: rawSc.clos || rawSc.courseCLOs || rawSc.course_clos || [],
+    selectedGradingSystem: rawSc.selectedGradingSystem || rawSc.selected_grading_system || 'ready1',
+    totalPercentage: rawSc.totalPercentage ?? rawSc.total_percentage ?? rawSc.finalPercentage ?? rawSc.final_percentage ?? rawSc.percentage ?? rawSc.score ?? 0,
+    grade: rawSc.grade ?? rawSc.letterGrade ?? rawSc.letter_grade ?? rawSc.grade_name ?? rawSc.gradeName ?? '-',
+    gradePoints: rawSc.gradePoints ?? rawSc.grade_points ?? rawSc.points ?? rawSc.gpa ?? 0,
+    cloAttainments: rawSc.cloAttainments || rawSc.clo_at_attainments || rawSc.clo_attainment || rawSc.clo_attainments || []
+  };
+
   const codeStr = String(sc.code || '').trim().toUpperCase();
   const cleanReg = (regToUse || '').trim().toLowerCase();
   
   // 1. Find the matching instructor course first
-  const matchedIC = allInstructorCourses.find(ic => 
-    matchInstructorCourse(ic, sc.code, sc.name || sc.title)
+  let matchedIC = allInstructorCourses.find(ic => 
+    matchInstructorCourse(ic, sc.code, sc.title)
   );
+
+  // If no matched instructor course found, but the student course itself has categories/marks details,
+  // we can use sc as the matchedIC to calculate CLO attainments!
+  if (!matchedIC && sc && (sc.studentMarks || sc.obeMarks)) {
+    matchedIC = {
+      ...sc,
+      students: [
+        {
+          regNo: regToUse,
+          marks: sc.studentMarks || {}
+        }
+      ],
+      obeMarks: sc.obeMarks ? { [regToUse]: sc.obeMarks } : {}
+    };
+  } else if (matchedIC) {
+    // Ensure matchedIC is also fully normalized to avoid camelCase vs snake_case mismatches
+    matchedIC = {
+      ...matchedIC,
+      categories: matchedIC.categories || matchedIC.course_categories || [],
+      unitsData: matchedIC.unitsData || matchedIC.units_data || {},
+      obeQuestions: matchedIC.obeQuestions || matchedIC.obe_questions || [],
+      obeMarks: matchedIC.obeMarks || matchedIC.obe_marks || {},
+      students: (matchedIC.students || []).map((s: any) => ({
+        ...s,
+        regNo: s.regNo || s.reg_no,
+        marks: s.marks || s.student_marks || {}
+      }))
+    };
+  }
 
   // Check if we have dynamic OBE questions and student marks entered on the instructor side
   let checkStudentHasOBEMarks = false;
@@ -243,61 +285,7 @@ const calculateStudentCLOAttainment = (sc: any, regToUse: string, allInstructorC
 
   const hasDynamicData = matchedIC && checkStudentHasOBEMarks && checkCourseHasQuestions;
 
-  // Fallback to static values for Web Engineering ONLY if there is no dynamic marks/questions entered yet on the instructor side
-  if (!hasDynamicData) {
-    if (codeStr.includes('CS-312') || codeStr.includes('SD-231') || String(sc.name || sc.title || '').toLowerCase().includes('web engineering')) {
-      return [
-        {
-          code: 'CLO-1',
-          cloCode: 'CLO-1',
-          percentage: 4.20,
-          attained: false,
-          status: "Not Attained",
-          description: "Understand core programming paradigms.",
-          mappedGA: {
-            gaId: "GA-1",
-            gaTitle: "Academic Education"
-          }
-        },
-        {
-          code: 'CLO-2',
-          cloCode: 'CLO-2',
-          percentage: 41.90,
-          attained: false,
-          status: "Not Attained",
-          description: "Design modular algorithms and control structures.",
-          mappedGA: {
-            gaId: "GA-2",
-            gaTitle: "Knowledge for Solving Computing Problems"
-          }
-        },
-        {
-          code: 'CLO-3',
-          cloCode: 'CLO-3',
-          percentage: 82.46,
-          attained: true,
-          status: "Attained",
-          description: "Analyze complexity and execute verification loops.",
-          mappedGA: {
-            gaId: "GA-1",
-            gaTitle: "Academic Education"
-          }
-        },
-        {
-          code: 'CLO-4',
-          cloCode: 'CLO-4',
-          percentage: 2.00,
-          attained: false,
-          status: "Not Attained",
-          description: "Implement object-oriented paradigms and diagnostic testing.",
-          mappedGA: {
-            gaId: "GA-8",
-            gaTitle: "Computing Professionalism and Society"
-          }
-        }
-      ];
-    }
-  }
+  // Get data dynamically from the backend instructor-entered course records
 
   if (!matchedIC) {
     return sc.cloAttainments || sc.clos || [];
@@ -417,43 +405,7 @@ const calculateStudentCLOAttainment = (sc: any, regToUse: string, allInstructorC
     }
   });
 
-  if (matchedIC && matchedStudentInIC) {
-    return courseCLOs.map((cloObj: any) => {
-      const cloCode = (cloObj.code || cloObj.cloCode || '').trim().toUpperCase();
-      const list = cloAssessments[cloCode] || [];
-      let cloTotalScore = 0;
-
-      list.forEach(ass => {
-        let obtainedMark = 0;
-        if (ass.questionId) {
-          obtainedMark = matchedStudentInIC.marks?.[`q-${ass.categoryName}-${ass.unitNo}-${ass.questionId}`] ?? 0;
-          if (obtainedMark === 0) {
-            obtainedMark = matchedStudentInIC.marks?.[`${ass.categoryName}-${ass.unitNo}`] ?? 0;
-          }
-        } else {
-          obtainedMark = matchedStudentInIC.marks?.[`${ass.categoryName}-${ass.unitNo}`] ?? 0;
-        }
-        const pct = ass.maxMarks > 0 ? (Number(obtainedMark) / ass.maxMarks) : 0;
-        const weightedScore = pct * ass.relativeWeight;
-        cloTotalScore += weightedScore;
-      });
-
-      const percentage = parseFloat(cloTotalScore.toFixed(2));
-      const attained = percentage >= 50;
-      const mappedGAObj = standardizeMappedGAObj(cloObj.mappedGA || cloObj.mapped_ga || null, cloCode);
-
-      return {
-        code: cloCode,
-        cloCode: cloCode,
-        percentage,
-        attained,
-        status: attained ? "Attained" : "Not Attained",
-        description: cloObj.description || `Course Learning Outcome ${cloCode}`,
-        mappedGA: mappedGAObj
-      };
-    });
-  }
-
+  // Let the logic fall through to the robust fuzzy-matching calculation block below
   const studentMarks = sc.studentMarks || sc.marks || {};
   
   let studentObeMarks = {};
@@ -992,7 +944,7 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
             } catch (e) {}
           }
 
-          // Attempt to fetch ALL instructor courses from server first ONLY if not a student user
+          // Attempt to fetch ALL instructor courses from server to calculate complete CLO/GA results ONLY if not a student user
           let serverInstructorCourses: InstructorCourse[] = [];
           if (!isStudentUser) {
             try {
@@ -1066,12 +1018,13 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
           // Enrich student courses with report CLO attainments
           studentCourses = studentCourses.map((sc: any) => {
             const reportCLOs = calculateStudentCLOAttainment(sc, regToUse, allInstructorCourses);
+            const finalCLOAttainments = (sc.cloAttainments && sc.cloAttainments.length > 0) ? sc.cloAttainments : reportCLOs;
             return {
               ...sc,
-              cloAttainments: reportCLOs,
-              courseCLOs: reportCLOs,
-              course_clos: reportCLOs,
-              clos: reportCLOs
+              cloAttainments: finalCLOAttainments,
+              courseCLOs: finalCLOAttainments,
+              course_clos: finalCLOAttainments,
+              clos: finalCLOAttainments
             };
           });
 
@@ -1170,15 +1123,20 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
               const dept = loadedDepts.find((d: any) => d.id === dId);
               const dName = dept ? dept.name : 'Department of Computing and Technology';
 
-              const studentMarksToUse = sc.studentMarks || sc.marks || matchedIC?.students?.find(s => areStudentsEqual(s.regNo, regToUse))?.marks || {};
+              const localStudentMarks = matchedIC?.students?.find(s => areStudentsEqual(s.regNo, regToUse))?.marks || {};
+              const studentMarksToUse = {
+                ...localStudentMarks,
+                ...(sc.studentMarks || sc.marks || {})
+              };
               
-              let obeMarksToUse = sc.obeMarks || {};
+              let obeMarksToUse = {};
               if (matchedIC?.obeMarks) {
                 const matchedKey = Object.keys(matchedIC.obeMarks).find(k => areStudentsEqual(k, regToUse));
                 if (matchedKey) {
-                  obeMarksToUse = { ...obeMarksToUse, ...matchedIC.obeMarks[matchedKey] };
+                  obeMarksToUse = { ...matchedIC.obeMarks[matchedKey] };
                 }
               }
+              obeMarksToUse = { ...obeMarksToUse, ...(sc.obeMarks || {}) };
 
               console.log(`[STUDENT_MARKS_DEBUG] Course ${codeStr} - "${sc.title}" details mapped from backend/local:`, {
                 id: sc.id,
@@ -1215,7 +1173,13 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
                   [regToUse]: obeMarksToUse
                 },
                 clos: sc.clos || sc.courseCLOs || sc.course_clos || [],
-                selectedGradingSystem: sc.selectedGradingSystem || matchedIC?.selectedGradingSystem || 'ready1'
+                selectedGradingSystem: sc.selectedGradingSystem || matchedIC?.selectedGradingSystem || 'ready1',
+                totalPercentage: sc.totalPercentage,
+                grade: sc.grade,
+                gradePoints: sc.gradePoints,
+                cloAttainments: sc.cloAttainments,
+                weightedMarks: sc.weightedMarks,
+                categoryBreakdown: sc.categoryBreakdown
               };
             });
           } else {
@@ -1227,9 +1191,20 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
           mappedInstructorCourses = [];
         }
         setInstructorCourses(mappedInstructorCourses);
+        // CRITICAL: Ensure allInstructorCoursesState also has these mapped courses so that computeStudentCourseResult can access them.
+        setAllInstructorCoursesState(prev => {
+          const combined = [...prev];
+          mappedInstructorCourses.forEach(sc => {
+            if (!combined.some(c => c.code?.toUpperCase() === sc.code?.toUpperCase())) {
+              combined.push(sc);
+            }
+          });
+          return combined;
+        });
       } catch (err) {
         console.warn("Instructor courses not loaded directly, using empty set.", err);
         setInstructorCourses([]);
+        setAllInstructorCoursesState([]);
       }
 
     } catch (err) {
@@ -1338,18 +1313,80 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
   // Helper to retrieve realistic grades/attainments based on the student's registration ID and backend responses
   const computeStudentCourseResult = (stdRegNo: string, courseCode: string) => {
     // Get course from /api/student/courses/ response (stored in state rawStudentCourses)
-    const course = rawStudentCourses?.find(
+    const rawCourse = rawStudentCourses?.find(
       (c: any) => c.code?.toUpperCase() === courseCode?.toUpperCase()
     );
 
-    if (!course) {
+    if (!rawCourse) {
       return { aggregate: 0, letterGrade: '-', points: 0, clos: [], hasAnyMarks: false };
     }
+
+    // NORMALIZE COURSE: support both camelCase and snake_case from python/django backend
+    const course = {
+      ...rawCourse,
+      id: rawCourse.id || rawCourse.course_id || `course-assigned-${rawCourse.code}`,
+      code: rawCourse.code,
+      title: rawCourse.title || rawCourse.name || '',
+      creditHours: rawCourse.creditHours || rawCourse.credit_hours || 3,
+      categories: rawCourse.categories || rawCourse.course_categories || [],
+      unitsData: rawCourse.unitsData || rawCourse.units_data || {},
+      obeQuestions: rawCourse.obeQuestions || rawCourse.obe_questions || [],
+      studentMarks: rawCourse.studentMarks || rawCourse.student_marks || rawCourse.marks || {},
+      obeMarks: rawCourse.obeMarks || rawCourse.obe_marks || {},
+      clos: rawCourse.clos || rawCourse.courseCLOs || rawCourse.course_clos || [],
+      selectedGradingSystem: rawCourse.selectedGradingSystem || rawCourse.selected_grading_system || 'ready1',
+      totalPercentage: rawCourse.totalPercentage ?? rawCourse.total_percentage ?? rawCourse.finalPercentage ?? rawCourse.final_percentage ?? rawCourse.percentage ?? rawCourse.score ?? 0,
+      grade: rawCourse.grade ?? rawCourse.letterGrade ?? rawCourse.letter_grade ?? rawCourse.grade_name ?? rawCourse.gradeName ?? '-',
+      gradePoints: rawCourse.gradePoints ?? rawCourse.grade_points ?? rawCourse.points ?? rawCourse.gpa ?? 0,
+      cloAttainments: rawCourse.cloAttainments || rawCourse.clo_at_attainments || rawCourse.clo_attainment || rawCourse.clo_attainments || []
+    };
 
     const courseCLOs = allCoursesCLOs[courseCode] || [];
     
     // Dynamically calculate CLO attainments for THIS active student in real-time
     const dynamicCLOs = calculateStudentCLOAttainment(course, stdRegNo, allInstructorCoursesState);
+
+    // Check if there is a match in finalTranscripts (from instructor's reports)
+    const matchedTranscript = finalTranscripts?.find(
+      (t: any) => (t.courseCode || t.course_code || '').toUpperCase() === courseCode?.toUpperCase()
+    );
+
+    if (matchedTranscript) {
+      course.totalPercentage = matchedTranscript.finalPercentage ?? matchedTranscript.totalPercentage ?? matchedTranscript.percentage ?? matchedTranscript.score ?? course.totalPercentage;
+      course.grade = matchedTranscript.grade ?? matchedTranscript.letterGrade ?? matchedTranscript.letter_grade ?? course.grade;
+      course.gradePoints = matchedTranscript.gradePoints ?? matchedTranscript.grade_points ?? matchedTranscript.points ?? matchedTranscript.gpa ?? course.gradePoints;
+      
+      if (matchedTranscript.cloAttainments || matchedTranscript.clo_at_attainments || matchedTranscript.clo_attainment || matchedTranscript.clos) {
+        course.cloAttainments = matchedTranscript.cloAttainments || matchedTranscript.clo_at_attainments || matchedTranscript.clo_attainment || matchedTranscript.clos;
+      }
+    }
+
+    const hasBackendPrecalculated = (course.totalPercentage !== undefined && course.totalPercentage !== null && course.totalPercentage > 0) || (course.grade !== undefined && course.grade !== '-' && course.grade !== '');
+
+    if (hasBackendPrecalculated) {
+      const displayCLOs = course.cloAttainments && course.cloAttainments.length > 0
+        ? course.cloAttainments
+        : dynamicCLOs;
+
+      return {
+        aggregate: course.totalPercentage,
+        letterGrade: course.grade || '-',
+        points: course.gradePoints ?? 0,
+        hasAnyMarks: (course.totalPercentage ?? 0) > 0 || (course.grade && course.grade !== '-'),
+        isCompleted: (course.status === 'closed') || (course.grade !== 'F' && course.grade !== '-' && course.grade !== ''),
+        clos: (displayCLOs ?? []).map((c: any) => {
+          const matchingDef = courseCLOs.find((def: any) => (def.code || def.cloCode || '').toUpperCase() === (c.code || c.cloCode || '').toUpperCase());
+          const rawMappedGA = matchingDef?.mappedGA || matchingDef?.mapped_ga || c.mappedGA || null;
+          return {
+            code: c.code || c.cloCode,
+            percentage: c.percentage ?? c.attainment ?? c.obtained_attainment ?? 0,
+            status: c.status ?? c.attainment_status ?? ((c.percentage ?? 0) >= 50 ? 'Attained' : 'Not Attained'),
+            description: matchingDef?.description || c.description || c.desc || `Course Learning Outcome ${c.code}`,
+            mappedGA: standardizeMappedGAObj(rawMappedGA, c.code, gas)
+          };
+        })
+      };
+    }
 
     // Dynamic aggregate, grade, and grade points calculation from instructor-entered marks
     let finalAggregate = course.totalPercentage ?? 0;
@@ -1357,9 +1394,39 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
     let finalPoints = course.gradePoints ?? 0;
     let hasAnyMarks = (course.totalPercentage ?? 0) > 0;
 
-    const matchedIC = allInstructorCoursesState.find((ic: any) =>
-      matchInstructorCourse(ic, courseCode, course.name || course.title)
+    let matchedIC = (instructorCourses || []).find((ic: any) =>
+      matchInstructorCourse(ic, courseCode, course.title)
+    ) || allInstructorCoursesState.find((ic: any) =>
+      matchInstructorCourse(ic, courseCode, course.title)
     );
+
+    // If no matched instructor course found in states, fallback to a virtual matchedIC built from course itself
+    if (!matchedIC && course && (course.studentMarks || course.obeMarks)) {
+      matchedIC = {
+        ...course,
+        students: [
+          {
+            regNo: stdRegNo,
+            marks: course.studentMarks || {}
+          }
+        ],
+        obeMarks: course.obeMarks ? { [stdRegNo]: course.obeMarks } : {}
+      };
+    } else if (matchedIC) {
+      // Ensure matchedIC is also fully normalized to avoid camelCase vs snake_case mismatches
+      matchedIC = {
+        ...matchedIC,
+        categories: matchedIC.categories || matchedIC.course_categories || [],
+        unitsData: matchedIC.unitsData || matchedIC.units_data || {},
+        obeQuestions: matchedIC.obeQuestions || matchedIC.obe_questions || [],
+        obeMarks: matchedIC.obeMarks || matchedIC.obe_marks || {},
+        students: (matchedIC.students || []).map((s: any) => ({
+          ...s,
+          regNo: s.regNo || s.reg_no,
+          marks: s.marks || s.student_marks || {}
+        }))
+      };
+    }
 
     let isCompleted = !matchedIC;
 
@@ -1367,7 +1434,8 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
       const matchedStudentInIC = matchedIC.students?.find((s: any) =>
         areStudentsEqual(s.regNo, stdRegNo)
       );
-      if (matchedStudentInIC && matchedStudentInIC.marks) {
+
+      if (matchedStudentInIC) {
         let studentObeMarks = {};
         if (matchedIC.obeMarks) {
           const matchedKey = Object.keys(matchedIC.obeMarks).find(k => areStudentsEqual(k, stdRegNo));
@@ -1375,6 +1443,7 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
             studentObeMarks = matchedIC.obeMarks[matchedKey] || {};
           }
         }
+
         const combinedMarks = {
           ...studentObeMarks,
           ...(matchedStudentInIC.marks || {})
@@ -1387,13 +1456,13 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
 
         activeCats.forEach((cat: any) => {
           if (cat.units > 0) {
-            let totalMaxMarks = 0;
-            let studentObtainedSum = 0;
             let catHasAnyMarks = false;
-            const existingUnits = matchedIC.unitsData?.[cat.name] || [];
+            let catTotalWeightage = 0;
+            let studentObtainedSum = 0;
+            let totalMaxMarks = 0;
 
             for (let u = 1; u <= cat.units; u++) {
-              const matchingUnit = existingUnits.find((unit: any) => unit.unitNo === u);
+              const matchingUnit = (matchedIC.unitsData?.[cat.name] || []).find((un: any) => un.unitNo === u);
               const questions = matchingUnit?.questions || [];
 
               if (questions.length > 0) {
@@ -1422,29 +1491,28 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
               }
             }
 
-            if (catHasAnyMarks) {
+            if (catHasAnyMarks && totalMaxMarks > 0) {
+              const catContribution = (studentObtainedSum / totalMaxMarks) * cat.percentage;
+              aggregate += catContribution;
               hasRealMarks = true;
               gradedWeightSum += cat.percentage;
             }
-
-            const catContribution = totalMaxMarks > 0
-              ? (studentObtainedSum / totalMaxMarks) * cat.percentage
-              : 0;
-
-            aggregate += catContribution;
           }
         });
 
         if (hasRealMarks) {
-          finalAggregate = parseFloat(aggregate.toFixed(1));
-          
-          // Compute letter grade
+          if (gradedWeightSum > 0 && gradedWeightSum < 100) {
+            finalAggregate = Math.round((aggregate / gradedWeightSum) * 100);
+          } else {
+            finalAggregate = Math.round(aggregate);
+          }
+
           const system = matchedIC.selectedGradingSystem || 'ready1';
           if (system === 'ready1') {
-            if (finalAggregate >= 88) finalGrade = 'A';
-            else if (finalAggregate >= 81) finalGrade = 'B+';
-            else if (finalAggregate >= 74) finalGrade = 'B';
-            else if (finalAggregate >= 67) finalGrade = 'C+';
+            if (finalAggregate >= 80) finalGrade = 'A';
+            else if (finalAggregate >= 75) finalGrade = 'B+';
+            else if (finalAggregate >= 70) finalGrade = 'B';
+            else if (finalAggregate >= 65) finalGrade = 'C+';
             else if (finalAggregate >= 60) finalGrade = 'C';
             else finalGrade = 'F';
           } else if (system === 'ready2') {
@@ -1460,23 +1528,22 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
             else finalGrade = 'F';
           } else if (system === 'custom') {
             const list = matchedIC.customGradingSystem || [];
-            let found = false;
-            for (const tier of list) {
-              const range = parsePercentRange(tier.percentage);
-              if (finalAggregate >= range.min && finalAggregate <= range.max) {
-                finalGrade = tier.grade;
-                found = true;
+            let matchedGrade = 'F';
+            const sorted = [...list].sort((a, b) => parseFloat(b.threshold || '0') - parseFloat(a.threshold || '0'));
+            for (const t of sorted) {
+              if (finalAggregate >= parseFloat(t.threshold || '0')) {
+                matchedGrade = t.grade;
                 break;
               }
             }
-            if (!found) {
-              if (finalAggregate >= 88) finalGrade = 'A';
-              else if (finalAggregate >= 81) finalGrade = 'B+';
-              else if (finalAggregate >= 74) finalGrade = 'B';
-              else if (finalAggregate >= 67) finalGrade = 'C+';
-              else if (finalAggregate >= 60) finalGrade = 'C';
-              else finalGrade = 'F';
-            }
+            finalGrade = matchedGrade;
+          } else {
+            if (finalAggregate >= 80) finalGrade = 'A';
+            else if (finalAggregate >= 75) finalGrade = 'B+';
+            else if (finalAggregate >= 70) finalGrade = 'B';
+            else if (finalAggregate >= 65) finalGrade = 'C+';
+            else if (finalAggregate >= 60) finalGrade = 'C';
+            else finalGrade = 'F';
           }
 
           // Compute grade points
@@ -1548,30 +1615,24 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
 
   // Get student's enrolled courses with dynamic calculations attached
   const enrolledCoursesWithGrades = useMemo(() => {
-    const studentCodes = studentBindings
-      .filter(b => b.studentRegNo === activeRegNo)
-      .map(b => b.courseCode);
-    
-    const matched = courses
-      .filter(c => studentCodes.includes(c.code))
-      .map(c => {
-        const results = computeStudentCourseResult(activeRegNo, c.code);
-        const apiCourse = rawStudentCourses?.find(
-          (rc: any) => rc.code?.toUpperCase() === c.code?.toUpperCase()
-        );
-        return {
-          ...c,
-          ...apiCourse,
-          results
-        };
-      });
+    const matched = (rawStudentCourses || []).map((rc: any) => {
+      const globalCourse = courses.find(c => c.code?.toUpperCase() === rc.code?.toUpperCase());
+      const results = computeStudentCourseResult(activeRegNo, rc.code);
+      return {
+        ...globalCourse,
+        ...rc,
+        results
+      };
+    });
 
     const seen = new Set<string>();
     return matched.filter(c => {
-      if (seen.has(c.code)) {
+      if (!c.code) return false;
+      const uCode = c.code.toUpperCase();
+      if (seen.has(uCode)) {
         return false;
       }
-      seen.add(c.code);
+      seen.add(uCode);
       return true;
     });
   }, [courses, studentBindings, activeRegNo, instructorCourses, rawStudentCourses, allInstructorCoursesState]);

@@ -42,6 +42,32 @@ interface QADashboardProps {
 
 type ActiveViewModule = 'allocation' | 'po_mapping' | 'vision_mission' | 'po_configure' | 'attainment_reports' | 'semester_reports';
 
+const areRegNosEqual = (reg1: string | null | undefined, reg2: string | null | undefined): boolean => {
+  if (!reg1 || !reg2) return false;
+  const r1 = String(reg1).trim().toLowerCase();
+  const r2 = String(reg2).trim().toLowerCase();
+  if (r1 === r2) return true;
+
+  const norm1 = r1.replace(/[^a-z0-9]/g, '');
+  const norm2 = r2.replace(/[^a-z0-9]/g, '');
+  if (norm1 === norm2) return true;
+
+  // Handle cases where one registration number might miss a prefix or department code (e.g., 052-SP23-22144 vs SP23-22144)
+  // We only match if one normalized registration number is a suffix of the other.
+  if (norm1.endsWith(norm2) || norm2.endsWith(norm1)) {
+    const minLen = Math.min(norm1.length, norm2.length);
+    if (minLen >= 4) return true;
+  }
+
+  return false;
+};
+
+const getStudentMarks = (obeMarks: any, regNo: string) => {
+  if (!obeMarks) return undefined;
+  const matchedKey = Object.keys(obeMarks).find(k => areRegNosEqual(k, regNo));
+  return matchedKey ? obeMarks[matchedKey] : undefined;
+};
+
 function naturalCompare(s1: string, s2: string): number {
   const aParts = s1.split(/(\d+)/);
   const bParts = s2.split(/(\d+)/);
@@ -115,6 +141,7 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
   const [serverBatchReportData, setServerBatchReportData] = useState<any | null>(null);
   const [loadingServerBatchReport, setLoadingServerBatchReport] = useState<boolean>(false);
   const [serverBatchReportError, setServerBatchReportError] = useState<string | null>(null);
+  const [isServerBatchReportFallback, setIsServerBatchReportFallback] = useState<boolean>(false);
 
   // Semester GA Reports States
   const [semesterReportData, setSemesterReportData] = useState<any | null>(null);
@@ -437,9 +464,11 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
           programId
         );
         setServerBatchReportData(result);
+        setIsServerBatchReportFallback(false);
       } catch (err: any) {
         console.error("Failed to load server-side batch GA report:", err);
-        setServerBatchReportError(err?.message || "Failed to load server-side batch GA report.");
+        setIsServerBatchReportFallback(true);
+        setServerBatchReportError(null);
       } finally {
         setLoadingServerBatchReport(false);
       }
@@ -628,7 +657,7 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
       if (batchStudents.length > 0) {
         batchStudents.forEach((student: any) => {
           if (maxMarks > 0) {
-            const score = cloQs.reduce((acc: number, q: any) => acc + (marks[student.regNo]?.[q.id] ?? 0), 0);
+            const score = cloQs.reduce((acc: number, q: any) => acc + (getStudentMarks(marks, student.regNo)?.[q.id] ?? 0), 0);
             const pct = (score / maxMarks) * 100;
             assessedCount++;
             if (pct >= 50) passedCount++;
@@ -645,7 +674,7 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
       if (assessedCount === 0 && instCourse.students?.length > 0) {
         instCourse.students.forEach((student: any) => {
           if (maxMarks > 0) {
-            const score = cloQs.reduce((acc: number, q: any) => acc + (marks[student.regNo]?.[q.id] ?? 0), 0);
+            const score = cloQs.reduce((acc: number, q: any) => acc + (getStudentMarks(marks, student.regNo)?.[q.id] ?? 0), 0);
             const pct = (score / maxMarks) * 100;
             assessedCount++;
             if (pct >= 50) passedCount++;
@@ -1634,18 +1663,6 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
               )}
             </div>
 
-            {/* SEMESTER GA REPORTS V2 TAB */}
-            <button
-              onClick={() => {
-                setActiveModule('semester_reports');
-                setOpenMenu(null);
-              }}
-              className={`px-3 py-1 text-xs font-sans font-semibold text-indigo-750 hover:bg-indigo-100 hover:text-indigo-950 rounded cursor-pointer transition-all flex items-center gap-1.5 border border-indigo-200/50 ${activeModule === 'semester_reports' ? 'bg-indigo-900 text-white border-indigo-900 font-bold shadow-sm' : 'bg-indigo-50/40'}`}
-            >
-              <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></span>
-              <span>Semester GA Reports V2</span>
-            </button>
-
             {/* ABOUT MENU */}
             <div className="relative">
               <button
@@ -2587,7 +2604,10 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                         <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Compiler Engine</label>
                         <div className="flex bg-slate-100 p-1 rounded-xl shadow-inner border border-slate-200">
                           <button
-                            onClick={() => setSelectedDataSource('client')}
+                            onClick={() => {
+                              setSelectedDataSource('client');
+                              setIsServerBatchReportFallback(false);
+                            }}
                             className={`px-3 py-1.5 text-[10px] font-black rounded-lg transition-all flex items-center gap-1 cursor-pointer ${selectedDataSource === 'client' ? 'bg-white text-indigo-950 shadow-xs' : 'text-slate-500 hover:text-slate-900'}`}
                           >
                             <Cpu className="w-3.5 h-3.5 text-indigo-650" />
@@ -2629,6 +2649,45 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                     <span>CLO Course-Wise Attainment</span>
                   </button>
                 </div>
+
+                {isServerBatchReportFallback && !loadingReports && !(selectedDataSource === 'server' && loadingServerBatchReport) && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-3xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm animate-in fade-in slide-in-from-top-4 duration-300">
+                    <div className="flex items-center gap-3.5 text-left">
+                      <div className="bg-amber-100 border border-amber-200 p-2.5 rounded-2xl text-amber-700 shrink-0">
+                        <AlertCircle className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h5 className="text-xs font-black text-amber-900 uppercase tracking-wide">Live Server Offline (Displaying Client Calculations)</h5>
+                        <p className="text-[10px] text-amber-700 font-bold mt-0.5 leading-relaxed">
+                          The remote database is currently unreachable or timed out. Falling back to secure, real-time client-side calculations automatically.
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        setLoadingServerBatchReport(true);
+                        setIsServerBatchReportFallback(false);
+                        try {
+                          const programId = selectedReportProgramId === 'all' ? undefined : selectedReportProgramId;
+                          const result = await apiService.getProgramGAAttainmentBatch(
+                            selectedReportBatch,
+                            activeDeptId,
+                            programId
+                          );
+                          setServerBatchReportData(result);
+                        } catch (err: any) {
+                          console.error("Retry failed:", err);
+                          setIsServerBatchReportFallback(true);
+                        } finally {
+                          setLoadingServerBatchReport(false);
+                        }
+                      }}
+                      className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer self-start md:self-center shrink-0 active:scale-95"
+                    >
+                      Retry Server Connection
+                    </button>
+                  </div>
+                )}
 
                 {loadingReports || (selectedDataSource === 'server' && loadingServerBatchReport) ? (
                   <div className="bg-white border border-slate-200 rounded-3xl p-16 text-center space-y-4 shadow-xs">
@@ -2896,7 +2955,7 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                                                     let passCount = 0;
 
                                                     batchStudents.forEach((student: any) => {
-                                                      const score = marksData[student.regNo]?.[q.id];
+                                                      const score = getStudentMarks(marksData, student.regNo)?.[q.id];
                                                       if (score !== undefined) {
                                                         sum += score;
                                                         count++;
