@@ -289,7 +289,7 @@ const DEFAULT_FALLBACK_DATA: OBEData = {
     { id: 'C5', code: 'GER141', title: 'Islamic Studies', type: 'core', mappedGAs: ['GA-1', 'GA-6', 'GA-8', 'GA-9'], departmentId: 'computing' },
     { id: 'C6', code: 'GER151', title: 'Natural Science (Applied Physics)', type: 'core', mappedGAs: ['GA-1', 'GA-2'], departmentId: 'computing' },
     { id: 'C7', code: 'MTE111', title: 'Multivariable Calculus', type: 'core', mappedGAs: ['GA-1', 'GA-2', 'GA-3'], departmentId: 'computing' },
-    { id: 'C8', code: 'CMC112', title: 'Object Oriented Programming', type: 'core', mappedGAs: ['GA-1', 'GA-2', 'GA-4'], departmentId: 'computing' },
+    { id: 'C8', code: 'OP216', title: 'Object Oriented Programming', type: 'core', mappedGAs: ['GA-1', 'GA-2', 'GA-4'], departmentId: 'computing' },
     { id: 'C9', code: 'CMC121', title: 'Digital Logic Design', type: 'core', mappedGAs: ['GA-1', 'GA-2', 'GA-3'], departmentId: 'computing' },
     { id: 'C10', code: 'GER122', title: 'Expository Writing', type: 'core', mappedGAs: ['GA-1', 'GA-6', 'GA-7'], departmentId: 'computing' },
     { id: 'C11', code: 'GER132', title: 'Discrete Structures', type: 'core', mappedGAs: ['GA-1', 'GA-2', 'GA-3'], departmentId: 'computing' },
@@ -749,13 +749,20 @@ const mapInstructorCourseToBackend = (c: InstructorCourse): any => {
   }
 
   // Map students to both camelCase and snake_case
-  const mappedStudents = (c.students || []).map((s: any) => ({
-    regNo: s.regNo,
-    reg_no: s.regNo,
-    name: s.name,
-    marks: s.marks || {},
-    obtained_marks: s.marks || {}
-  }));
+  const mappedStudents = (c.students || []).map((s: any) => {
+    const studentMarks = s.student_marks || s.marks || s.obtained_marks || s.studentMarks || {};
+    return {
+      regNo: s.regNo || s.reg_no,
+      reg_no: s.regNo || s.reg_no,
+      name: s.name,
+      student_marks: studentMarks,
+      studentMarks: studentMarks,
+      marks: studentMarks,
+      obtained_marks: studentMarks
+    };
+  });
+
+  const obeMarks = c.obe_marks || c.obeMarks || {};
 
   return {
     ...c,
@@ -775,8 +782,8 @@ const mapInstructorCourseToBackend = (c: InstructorCourse): any => {
     obeQuestions: mappedObeQuestions,
     units_data: mappedUnitsData,
     unitsData: mappedUnitsData,
-    obe_marks: c.obeMarks || {},
-    obeMarks: c.obeMarks || {},
+    obe_marks: obeMarks,
+    obeMarks: obeMarks,
     students: mappedStudents
   };
 };
@@ -1166,19 +1173,21 @@ export const apiService = {
     }
     const data = await response.json();
     if (Array.isArray(data)) {
-      // Normalize enrolled students from backend to a standard frontend structure
+      // Normalize enrolled students and obe_marks from backend to standard frontend structure
       data.forEach((ic: any) => {
         const rawStuds = ic.students || ic.enrolled_students || ic.enrolledStudents || ic.student_list || ic.studentList || ic.enrolled_student_list || ic.enrolledStudentList || [];
         if (Array.isArray(rawStuds)) {
           ic.students = rawStuds.map((s: any) => {
             const regNo = s.regNo || s.reg_no || s.registration_no || s.registrationNo || '';
             const name = s.name || s.student_name || s.studentName || '';
-            const marks = s.marks || s.obtained_marks || s.obtainedMarks || {};
-            return { regNo, name, marks };
+            const marks = s.student_marks || s.marks || s.obtained_marks || s.obtainedMarks || s.studentMarks || {};
+            return { regNo, reg_no: regNo, name, marks, student_marks: marks, studentMarks: marks };
           });
         } else {
           ic.students = [];
         }
+        ic.obe_marks = ic.obe_marks || ic.obeMarks || {};
+        ic.obeMarks = ic.obe_marks;
       });
 
       // Reconcile instructor courses with the general courses database
@@ -1276,8 +1285,23 @@ export const apiService = {
 
       const data = await response.json();
       console.log('[DEBUG apiService.saveInstructorCourses] Received response from server:', data);
-      if (Array.isArray(data)) return data;
-      return data.courses || courses;
+      const resList = Array.isArray(data) ? data : (data.courses || courses);
+      if (Array.isArray(resList)) {
+        resList.forEach((ic: any) => {
+          const rawStuds = ic.students || ic.enrolled_students || ic.enrolledStudents || ic.student_list || ic.studentList || ic.enrolled_student_list || ic.enrolledStudentList || [];
+          if (Array.isArray(rawStuds)) {
+            ic.students = rawStuds.map((s: any) => {
+              const regNo = s.regNo || s.reg_no || s.registration_no || s.registrationNo || '';
+              const name = s.name || s.student_name || s.studentName || '';
+              const marks = s.student_marks || s.marks || s.obtained_marks || s.obtainedMarks || s.studentMarks || {};
+              return { regNo, reg_no: regNo, name, marks, student_marks: marks, studentMarks: marks };
+            });
+          }
+          ic.obe_marks = ic.obe_marks || ic.obeMarks || {};
+          ic.obeMarks = ic.obe_marks;
+        });
+      }
+      return resList;
     } catch (err) {
       throw err;
     }

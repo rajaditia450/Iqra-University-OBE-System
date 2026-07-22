@@ -93,11 +93,11 @@ export default function MarksEntrySpreadsheet({
       // 1. Compute the new list of courses based on draftMarks and c.id === selectedCourse.id
       const updatedCourses = courses.map(c => {
         if (c.id === selectedCourse.id) {
-          // Also keep obeMarks in perfect sync so backend always gets question-wise marks inside obeMarks
-          const copyObeMarks = { ...(c.obeMarks || {}) };
+          // Also keep obe_marks and obeMarks in perfect sync so backend always gets question-wise marks inside obe_marks
+          const copyObeMarks = { ...(c.obe_marks || c.obeMarks || {}) };
 
           const updatedStudents = c.students.map(std => {
-            const nextMarks = { ...(draftMarks[std.regNo] || {}) };
+            const nextMarks = { ...(draftMarks[std.regNo] || std.student_marks || std.marks || {}) };
             
             if (!copyObeMarks[std.regNo]) {
               copyObeMarks[std.regNo] = {};
@@ -125,13 +125,15 @@ export default function MarksEntrySpreadsheet({
 
             return {
               ...std,
-              marks: nextMarks
+              marks: nextMarks,
+              student_marks: nextMarks
             };
           });
           return {
             ...c,
             students: updatedStudents,
-            obeMarks: copyObeMarks
+            obeMarks: copyObeMarks,
+            obe_marks: copyObeMarks
           };
         }
         return c;
@@ -656,7 +658,7 @@ export default function MarksEntrySpreadsheet({
                     : 0;
 
                   return (
-                    <tr key={student.regNo} className="hover:bg-slate-50/40 divide-x divide-slate-300 border-b border-slate-300">
+                    <tr key={`${student.regNo || 'std'}-${stdIdx}`} className="hover:bg-slate-50/40 divide-x divide-slate-300 border-b border-slate-300">
                       
                       {/* S.# */}
                       <td className="p-2 text-center text-slate-500 bg-slate-50 sticky left-0 z-10 font-bold select-none border-r-2 border-r-slate-300 border-b border-b-slate-300">

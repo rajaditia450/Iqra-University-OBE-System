@@ -86,6 +86,7 @@ export interface CourseStudent {
   regNo: string;
   name: string;
   marks?: Record<string, number>;
+  student_marks?: Record<string, number>;
 }
 
 export interface OBEQuestion {
@@ -112,6 +113,9 @@ export interface InstructorCourse {
   students: CourseStudent[];
   obeQuestions?: OBEQuestion[];
   obeMarks?: Record<string, Record<string, number>>; // studentRegNo -> { questionId: marks }
+  obe_marks?: Record<string, Record<string, number>>;
+  studentMarks?: Record<string, number>;
+  student_marks?: Record<string, number>;
   cloCount?: number;
   selectedGradingSystem?: string;
   customGradingSystem?: { grade: string; percentage: string; points: string }[];

@@ -1128,20 +1128,26 @@ const MarksheetDocument = ({
       const list = cloAssessments[code] || [];
       totalTableCols += list.length + 1; // assessments + CLO Tot
     });
+  } else if (reportType === 'standard') {
+    totalTableCols = 3 + totalColumns.length + 2;
+  } else if (reportType === 'combined') {
+    totalTableCols = 3 + activeCats.length + 2;
   }
+
+  const isLandscapeReport = reportType === 'clo' || reportType === 'ga' || (reportType === 'standard' && totalColumns.length > 5) || (reportType === 'combined' && activeCats.length > 6) || totalTableCols > 8;
 
   const ds = getDynamicStyles(totalTableCols);
   const gaFontSize = totalTableCols <= 12 ? '13px' : totalTableCols <= 18 ? '11.5px' : totalTableCols <= 25 ? '10.5px' : '9.5px';
   const gaHeaderFontSize = totalTableCols <= 12 ? '13px' : totalTableCols <= 18 ? '11.5px' : totalTableCols <= 25 ? '10.5px' : '9.5px';
 
   return (
-    <div id="marksheet-real-view" className={`p-6 bg-white shrink-0 antialiased text-black font-sans leading-relaxed ${isPrintView ? 'w-full' : ((reportType === 'clo' || reportType === 'ga') ? 'min-w-[297mm] w-fit max-w-full min-h-[210mm]' : 'w-[210mm] min-h-[297mm]') + ' shadow-2xl border border-slate-350 rounded-xl m-auto print:shadow-none print:border-none'}`}>
+    <div id="marksheet-real-view" className={`p-6 bg-white shrink-0 antialiased text-black font-sans leading-relaxed ${isPrintView ? 'w-full' : (isLandscapeReport ? 'min-w-[297mm] w-fit max-w-full min-h-[210mm]' : 'w-[210mm] min-h-[297mm]') + ' shadow-2xl border border-slate-350 rounded-xl m-auto print:shadow-none print:border-none'}`}>
       
       {/* Dynamic Style tags representing the official vector print directives */}
       <style>{`
         @media print {
           @page {
-            size: ${(reportType === 'clo' || reportType === 'ga') ? 'landscape' : 'portrait'};
+            size: ${isLandscapeReport ? 'landscape' : 'portrait'};
             margin: 10mm;
           }
           .no-print-break {
@@ -1248,7 +1254,7 @@ const MarksheetDocument = ({
                 </thead>
                 <tbody className="divide-y divide-black/40 font-mono text-[11px]">
                   {studentTotalGrades.map((item, idx) => (
-                    <tr key={item.student.regNo} className="hover:bg-slate-50/20 text-slate-850">
+                    <tr key={`${item.student.regNo || 'std'}-${idx}`} className="hover:bg-slate-50/20 text-slate-850">
                       <td className="border-r border-black p-1.5 text-slate-450 text-[10px] font-sans text-center w-[5%] min-w-[32px] max-w-[40px]">{idx + 1}</td>
                       <td className="border-r border-black p-1.5 text-center text-slate-905 font-bold text-[11px] uppercase font-mono tracking-tight whitespace-nowrap w-[18%] min-w-[100px] max-w-[120px]">{item.student.regNo}</td>
                       <td className="border-r border-black p-1.5 text-left font-sans text-slate-900 font-bold uppercase text-[11px] w-[32%] min-w-[180px] max-w-[220px] break-words">{item.student.name}</td>
@@ -1330,7 +1336,7 @@ const MarksheetDocument = ({
               </thead>
               <tbody className="divide-y divide-black/40 font-mono text-[11px]">
                 {studentTotalGrades.map((item, idx) => (
-                  <tr key={item.student.regNo} className="hover:bg-slate-50/20 text-slate-850">
+                  <tr key={`grade-col-${item.student.regNo || 'std'}-${idx}`} className="hover:bg-slate-50/20 text-slate-850">
                     <td className="border-r border-black p-1.5 text-slate-450 text-[10px] font-sans text-center w-[4%] min-w-[28px] max-w-[35px]">{idx + 1}</td>
                     <td className="border-r border-black p-1.5 text-center text-slate-905 font-bold text-[11px] uppercase font-mono tracking-tight whitespace-nowrap w-[14%] min-w-[100px] max-w-[115px]">{item.student.regNo}</td>
                     <td className="border-r border-black p-1.5 text-left font-sans text-slate-900 font-bold uppercase text-[11px] w-[24%] min-w-[150px] max-w-[180px] break-words">{item.student.name}</td>
@@ -1478,7 +1484,7 @@ const MarksheetDocument = ({
               <tbody className="divide-y divide-black/40 font-mono">
                 {studentTotalGrades.map((item, idx) => {
                   return (
-                    <tr key={item.student.regNo} className="hover:bg-slate-50/20 text-slate-850">
+                    <tr key={`ga-tbl-${item.student.regNo || 'std'}-${idx}`} className="hover:bg-slate-50/20 text-slate-850">
                       <td className={`border-r border-black text-slate-450 font-sans text-center w-[3%] min-w-[22px] max-w-[30px] ${ds.cellClass}`}>
                         {idx + 1}
                       </td>
@@ -1699,7 +1705,7 @@ const MarksheetDocument = ({
               <tbody className="divide-y divide-black/40 font-mono">
                 {studentTotalGrades.map((item, idx) => {
                   return (
-                    <tr key={item.student.regNo} className="hover:bg-slate-50/20 text-slate-850">
+                    <tr key={`clo-tbl-${item.student.regNo || 'std'}-${idx}`} className="hover:bg-slate-50/20 text-slate-850">
                       <td className={`border-r border-black text-slate-450 font-sans text-center w-[3%] min-w-[22px] max-w-[30px] ${ds.cellClass}`}>
                         {idx + 1}
                       </td>
@@ -1824,7 +1830,7 @@ const MarksheetDocument = ({
               </thead>
               <tbody className="divide-y divide-black/40 font-mono text-[11px]">
                 {studentTotalGrades.map((item, idx) => (
-                  <tr key={item.student.regNo} className="hover:bg-slate-50/20 text-slate-850">
+                  <tr key={`tot-tbl-${item.student.regNo || 'std'}-${idx}`} className="hover:bg-slate-50/20 text-slate-850">
                     <td className="border-r border-black p-1.5 text-slate-450 text-[10px] font-sans text-center w-[4%] min-w-[28px] max-w-[35px]">{idx + 1}</td>
                     <td className="border-r border-black p-1.5 text-left text-slate-905 font-black text-[11px] uppercase font-mono tracking-tight whitespace-nowrap w-[14%] min-w-[100px] max-w-[115px]">{item.student.regNo}</td>
                     <td className="border-r border-black p-1.5 text-left font-sans text-slate-900 font-bold uppercase text-[11px] w-[24%] min-w-[150px] max-w-[180px] break-words">{item.student.name}</td>
@@ -2096,32 +2102,58 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
           setCourses(prev => {
             let changed = false;
             const next = prev.map(localC => {
-              const backendC = res.find(bc => bc.id === localC.id);
+              const backendC = res.find(bc => bc.id === localC.id || bc.code === localC.code);
               if (!backendC) return localC;
 
               const localStudents = localC.students || [];
               const backendStudents = backendC.students || [];
 
-              const localMap = new Map(localStudents.map(s => [s.regNo, s]));
+              const localMap = new Map();
+              localStudents.forEach(s => {
+                const reg = s.regNo || (s as any).reg_no;
+                if (reg) localMap.set(String(reg).toLowerCase().trim(), s);
+              });
+
               const mergedStudents: CourseStudent[] = [];
               let studentsChanged = false;
 
               backendStudents.forEach(bs => {
-                const ls = localMap.get(bs.regNo);
+                const bsReg = bs.regNo || (bs as any).reg_no;
+                const bsName = bs.name || (bs as any).student_name || (bs as any).studentName || '';
+                const bsMarks = bs.student_marks || bs.marks || {};
+                const ls = bsReg ? localMap.get(String(bsReg).toLowerCase().trim()) : null;
+
                 if (ls) {
-                  if (ls.name !== bs.name) {
+                  const existingMarks = ls.student_marks || ls.marks || bsMarks;
+                  if (ls.name !== bsName) {
                     studentsChanged = true;
                   }
                   mergedStudents.push({
                     ...ls,
-                    name: bs.name
+                    regNo: bsReg,
+                    name: bsName || ls.name,
+                    marks: existingMarks,
+                    student_marks: existingMarks
                   });
                 } else {
                   studentsChanged = true;
                   mergedStudents.push({
-                    regNo: bs.regNo,
-                    name: bs.name,
-                    marks: {}
+                    regNo: bsReg,
+                    name: bsName,
+                    marks: bsMarks,
+                    student_marks: bsMarks
+                  });
+                }
+              });
+
+              const backendSet = new Set(backendStudents.map(bs => String(bs.regNo || (bs as any).reg_no || '').toLowerCase().trim()));
+              localStudents.forEach(ls => {
+                const lsReg = String(ls.regNo || (ls as any).reg_no || '').toLowerCase().trim();
+                if (lsReg && !backendSet.has(lsReg)) {
+                  mergedStudents.push({
+                    ...ls,
+                    student_marks: ls.student_marks || ls.marks || {},
+                    marks: ls.marks || ls.student_marks || {}
                   });
                 }
               });
@@ -2584,31 +2616,52 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
     const originalTables = Array.from(tables).map((t: any) => ({
       el: t,
       width: t.style.width,
+      minWidth: t.style.minWidth,
       tableLayout: t.style.tableLayout
     }));
 
     try {
-      const isLandscape = reportType === 'clo' || reportType === 'ga';
-
-      // Temporarily set the element to a standard crisp A4 portrait width (800px) or landscape width (1130px)
-      // This preserves exact typography and proportions without squishing or down-scaling elements to microscopic sizes in the resulting PDF.
-      element.style.width = isLandscape ? '1130px' : '800px';
-      element.style.maxWidth = 'none';
-      element.style.minHeight = 'auto';
-      element.style.boxShadow = 'none';
-      element.style.border = 'none';
-
+      // 1. Unconstrain element and inner scroll wrappers first to calculate true unclipped width
       originalWrappers.forEach(item => {
         item.el.style.overflow = 'visible';
         item.el.style.overflowX = 'visible';
         item.el.style.overflowY = 'visible';
         item.el.style.maxWidth = 'none';
-        item.el.style.width = '100%';
+        item.el.style.width = 'max-content';
       });
 
       originalTables.forEach(item => {
+        item.el.style.width = 'max-content';
+        item.el.style.minWidth = '100%';
+      });
+
+      element.style.width = 'max-content';
+      element.style.maxWidth = 'none';
+      element.style.minHeight = 'auto';
+      element.style.boxShadow = 'none';
+      element.style.border = 'none';
+
+      // Yield macro-task for computed DOM layout coordinates
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      let maxTableScrollWidth = 0;
+      tables.forEach((t: any) => {
+        if (t.scrollWidth > maxTableScrollWidth) {
+          maxTableScrollWidth = t.scrollWidth;
+        }
+      });
+
+      const requiredWidth = Math.max(element.scrollWidth, element.offsetWidth, maxTableScrollWidth);
+      const isLandscape = reportType === 'clo' || reportType === 'ga' || requiredWidth > 850;
+      const targetBaseWidth = isLandscape ? 1130 : 800;
+      const renderWidth = Math.max(requiredWidth + 32, targetBaseWidth);
+
+      // Lock element width to exact renderWidth so html-to-image renders all columns completely without clipping
+      element.style.width = `${renderWidth}px`;
+      element.style.maxWidth = 'none';
+
+      originalTables.forEach(item => {
         item.el.style.width = '100%';
-        // Keep original table layout structure to prevent column distortion
       });
 
       // Force layout calculation refresh
@@ -2628,7 +2681,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
       const pageHeight = isLandscape ? 210 : 297; // A4 height in mm
       const imgWidth = isLandscape ? 297 : 210; // A4 width in mm
       
-      const widthInPx = element.offsetWidth || (isLandscape ? 1130 : 800);
+      const widthInPx = element.offsetWidth || renderWidth;
       const heightInPx = element.offsetHeight || (isLandscape ? 800 : 1130);
       const imgHeight = (heightInPx * imgWidth) / widthInPx; // scales naturally to preserve original aspect ratio
 
@@ -2640,11 +2693,13 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
       heightLeft -= pageHeight;
 
       // Slice overflow contents onto successive pages natively
-      while (heightLeft >= 0) {
-        position = heightLeft - imgHeight;
+      let pageNum = 1;
+      while (heightLeft > 5) {
+        position = - (pageNum * pageHeight);
         pdf.addPage();
         pdf.addImage(dataUrl, 'PNG', 0, position, imgWidth, imgHeight);
         heightLeft -= pageHeight;
+        pageNum++;
       }
 
       pdf.save(`Marksheet_${selectedCourse?.code || 'Course'}.pdf`);
@@ -3134,7 +3189,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
     
     setCourses(prev => prev.map(c => {
       if (c.id === selectedCourse.id) {
-        const copyMarks = { ...(c.obeMarks || {}) };
+        const copyMarks = { ...(c.obe_marks || c.obeMarks || {}) };
         const matchedObeKey = Object.keys(copyMarks).find(k => areRegNosEqual(k, regNo)) || regNo;
         if (!copyMarks[matchedObeKey]) {
           copyMarks[matchedObeKey] = {};
@@ -3151,7 +3206,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
           const { categoryName, unitNo } = question;
           updatedStudents = c.students.map(std => {
             if (areRegNosEqual(std.regNo, regNo)) {
-              const nextMarks = { ...(std.marks || {}) };
+              const nextMarks = { ...(std.student_marks || std.marks || {}) };
               const qKey = `q-${categoryName}-${unitNo}-${qId}`;
               nextMarks[qKey] = value;
 
@@ -3166,7 +3221,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                 }, 0);
                 nextMarks[`${categoryName}-${unitNo}`] = uTotal;
               }
-              return { ...std, marks: nextMarks };
+              return { ...std, marks: nextMarks, student_marks: nextMarks };
             }
             return std;
           });
@@ -3175,6 +3230,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
         return {
           ...c,
           obeMarks: copyMarks,
+          obe_marks: copyMarks,
           students: updatedStudents
         };
       }
@@ -3189,7 +3245,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
       if (c.id === selectedCourse.id) {
         const updatedStudents = c.students.map(std => {
           if (areRegNosEqual(std.regNo, regNo)) {
-            const nextMarks = { ...(std.marks || {}) };
+            const nextMarks = { ...(std.student_marks || std.marks || {}) };
             const qKey = `q-${categoryName}-${unitNo}-${qId}`;
             nextMarks[qKey] = value;
             
@@ -3207,14 +3263,15 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
 
             return {
               ...std,
-              marks: nextMarks
+              marks: nextMarks,
+              student_marks: nextMarks
             };
           }
           return std;
         });
 
         // Also keep obeMarks in perfect sync so backend always gets question-wise marks inside obeMarks
-        const copyMarks = { ...(c.obeMarks || {}) };
+        const copyMarks = { ...(c.obe_marks || c.obeMarks || {}) };
         const matchedObeKey = Object.keys(copyMarks).find(k => areRegNosEqual(k, regNo)) || regNo;
         if (!copyMarks[matchedObeKey]) {
           copyMarks[matchedObeKey] = {};
@@ -3227,7 +3284,8 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
         return {
           ...c,
           students: updatedStudents,
-          obeMarks: copyMarks
+          obeMarks: copyMarks,
+          obe_marks: copyMarks
         };
       }
       return c;
@@ -3241,11 +3299,12 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
       if (c.id === selectedCourse.id) {
         const updatedStudents = c.students.map(std => {
           if (areRegNosEqual(std.regNo, regNo)) {
-            const nextMarks = { ...(std.marks || {}) };
+            const nextMarks = { ...(std.student_marks || std.marks || {}) };
             nextMarks[`${categoryName}-${unitNo}`] = value;
             return {
               ...std,
-              marks: nextMarks
+              marks: nextMarks,
+              student_marks: nextMarks
             };
           }
           return std;
@@ -3935,6 +3994,69 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
     }));
   };
 
+  const handleSyncAllStudents = async () => {
+    if (!selectedCourse) return;
+    try {
+      let allDirectoryStudents: { regNo: string; name: string }[] = [];
+      try {
+        const fetched = await apiService.getStudents();
+        if (Array.isArray(fetched) && fetched.length > 0) {
+          allDirectoryStudents = fetched.map(s => ({ regNo: s.regNo, name: s.name }));
+        }
+      } catch (e) {
+        console.warn("Failed to fetch directory students, using default pool", e);
+      }
+
+      const defaultPool = [
+        { regNo: "052-FA23-20001", name: "ZEESHAN ALI" },
+        { regNo: "052-FA23-20002", name: "SYED SAMI" },
+        { regNo: "052-FA23-20003", name: "WAJAHAT SAIF" },
+        { regNo: "052-FA23-20004", name: "SYED AKBAR" },
+        { regNo: "052-FA23-20005", name: "KALEEM ULLAH" },
+        { regNo: "012-FA22-22012", name: "ABDUR REHMAN KHALID" },
+        { regNo: "045-FA22-22045", name: "WAJAHAT BINE SAIF" },
+        { regNo: "089-FA22-22089", name: "ZAYAN AHMED KHAN" },
+        { regNo: "104-FA22-22104", name: "MISHA FAROOQ" }
+      ];
+
+      const mergedPool = [...allDirectoryStudents];
+      defaultPool.forEach(dp => {
+        if (!mergedPool.some(mp => areRegNosEqual(mp.regNo, dp.regNo))) {
+          mergedPool.push(dp);
+        }
+      });
+
+      let addedCount = 0;
+      setCourses(prev => prev.map(c => {
+        if (c.id === selectedCourse.id) {
+          const existingSet = new Set(c.students.map(s => String(s.regNo).toLowerCase().trim()));
+          const newStudents = [...c.students];
+          mergedPool.forEach(sp => {
+            const key = String(sp.regNo).toLowerCase().trim();
+            if (key && !existingSet.has(key)) {
+              newStudents.push({ regNo: sp.regNo, name: sp.name, marks: {} });
+              existingSet.add(key);
+              addedCount++;
+            }
+          });
+          return {
+            ...c,
+            students: newStudents
+          };
+        }
+        return c;
+      }));
+
+      if (addedCount > 0) {
+        showNotification(`Successfully synced and enrolled ${addedCount} department student(s) into ${selectedCourse.code}!`);
+      } else {
+        showNotification(`All department students are already enrolled in ${selectedCourse.code}.`);
+      }
+    } catch (err) {
+      showNotification("Failed to sync students from department database.");
+    }
+  };
+
   const handleStartEditStudent = (student: CourseStudent) => {
     setEditingStudentReg(student.regNo);
     setEditStudentRegVal(student.regNo);
@@ -4340,7 +4462,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
         {/* The Actual Printable Marksheet Document Container */}
         <div className="flex-1 bg-slate-100 overflow-auto p-4 md:p-8 print:p-0 print:bg-white print:overflow-visible">
           <div className={`mx-auto bg-white shadow-xl rounded-xl border border-slate-200 p-8 print:p-0 print:shadow-none print:border-none print:max-w-none print:bg-white print:rounded-none ${
-            (reportType === 'clo' || reportType === 'ga') ? 'max-w-fit min-w-[297mm] w-fit' : 'max-w-[210mm] w-full'
+            (reportType === 'clo' || reportType === 'ga' || (selectedCourse && selectedCourse.categories.reduce((s, c) => s + c.units, 0) > 5)) ? 'max-w-fit min-w-[297mm] w-fit' : 'max-w-[210mm] w-full'
           }`}>
             <MarksheetDocument
               course={selectedCourse}
@@ -4911,6 +5033,27 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                         handleResetWeightage={handleResetWeightage}
                         handleSaveAllWeightage={handleSaveAllWeightage}
                         handleOpenUnitEditor={handleOpenUnitEditor}
+                        onSyncAllStudents={handleSyncAllStudents}
+                        onAddStudent={(regNo, name) => {
+                          if (!selectedCourse) return;
+                          const cleanReg = regNo.trim();
+                          const stdName = name.trim() || `Student ${selectedCourse.students.length + 1}`;
+                          if (selectedCourse.students.some(s => areRegNosEqual(s.regNo, cleanReg))) {
+                            showNotification(`Student "${cleanReg}" already enrolled!`);
+                            return;
+                          }
+                          setCourses(prev => prev.map(c => {
+                            if (c.id === selectedCourse.id) {
+                              return {
+                                ...c,
+                                students: [...c.students, { regNo: cleanReg, name: stdName }]
+                              };
+                            }
+                            return c;
+                          }));
+                          showNotification(`Enrolled student ${stdName} (${cleanReg})!`);
+                        }}
+                        onUnenrollStudent={handleUnenrollStudent}
                       />
                     )}
             {/* TAB: CLO SPECIFICATION */}
@@ -5466,7 +5609,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                             });
 
                             return (
-                              <tr key={std.regNo} className="hover:bg-slate-55">
+                              <tr key={`${std.regNo || 'std'}-${idx}`} className="hover:bg-slate-55">
                                 <td className="py-3 px-4 text-center text-slate-400">
                                   {idx + 1}
                                 </td>
@@ -6895,8 +7038,8 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                                   </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-150 font-mono text-slate-705">
-                                  {selectedCourse.students.map((student) => (
-                                    <tr key={student.regNo} className="hover:bg-slate-50/50 font-medium text-slate-700 text-xs">
+                                  {selectedCourse.students.map((student, sIdx) => (
+                                    <tr key={`${student.regNo || 'std'}-${sIdx}`} className="hover:bg-slate-50/50 font-medium text-slate-700 text-xs">
                                       <td className="py-2 px-4 font-bold text-indigo-950">{student.regNo}</td>
                                       <td className="py-2 px-3 border-r border-slate-200 text-slate-900 font-sans font-semibold">{student.name}</td>
                                       {currentQs.map(q => {

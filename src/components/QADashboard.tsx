@@ -606,12 +606,13 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
               }
             });
           } else {
+            const stdMarks = student.student_marks || student.marks || {};
             const dKey = `${cat.name}-${u}`;
-            if (student.marks?.[dKey] !== undefined) {
-              unitObtained += student.marks[dKey];
+            if (stdMarks[dKey] !== undefined) {
+              unitObtained += stdMarks[dKey];
               hasAnyMarks = true;
-            } else if (student.marks?.[cat.name] !== undefined && u === 1) {
-              unitObtained += student.marks[cat.name];
+            } else if (stdMarks[cat.name] !== undefined && u === 1) {
+              unitObtained += stdMarks[cat.name];
               hasAnyMarks = true;
             }
           }
@@ -645,7 +646,7 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
 
     const cloCount = instCourse.cloCount || 4;
     const qs = instCourse.obeQuestions || [];
-    const marks = instCourse.obeMarks || {};
+    const marks = instCourse.obe_marks || instCourse.obeMarks || {};
 
     return Array.from({ length: cloCount }, (_, i) => `CLO-${i + 1}`).map(clo => {
       const cloQs = qs.filter((q: any) => q.mappedCLOs?.includes(clo));
@@ -2828,7 +2829,7 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                                 );
                               }
 
-                              return filtered.map(course => {
+                              return filtered.map((course, cIdx) => {
                                 const cloAttainments = getCourseCLOAttainment(course.code);
                                 const assessedCloCount = cloAttainments.filter(a => a.percentage !== null).length;
                                 const avgAttainment = assessedCloCount > 0 
@@ -2843,7 +2844,7 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                                 const isExpanded = expandedReportCourse === course.code;
 
                                 return (
-                                  <Fragment key={course.code}>
+                                  <Fragment key={`${course.id || course.code}-${cIdx}`}>
                                     <tr className={`hover:bg-slate-50/55 transition-colors ${isExpanded ? 'bg-indigo-50/15' : ''}`}>
                                       <td className="px-5 py-3.5 text-center">
                                         <button
@@ -2869,11 +2870,11 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                                       </td>
                                       <td className="px-5 py-3.5">
                                         <div className="flex gap-1.5 justify-center">
-                                          {cloAttainments.map(clo => {
+                                          {cloAttainments.map((clo, cloIdx) => {
                                             const pct = clo.percentage;
                                             return (
                                               <div 
-                                                key={clo.code}
+                                                key={`${clo.code}-${cloIdx}`}
                                                 className={`flex-1 flex flex-col items-center p-1.5 rounded-lg border text-center relative group min-w-[56px] transition-all ${
                                                   pct === null 
                                                     ? 'bg-slate-50 border-slate-200 text-slate-400' 
@@ -2949,7 +2950,7 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
                                               return (
                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                   {questions.map((q: any) => {
-                                                    const marksData = instCourse.obeMarks || {};
+                                                    const marksData = instCourse.obe_marks || instCourse.obeMarks || {};
                                                     let sum = 0;
                                                     let count = 0;
                                                     let passCount = 0;

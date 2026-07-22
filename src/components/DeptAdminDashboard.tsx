@@ -186,7 +186,7 @@ const DEFAULT_SEMESTER_PLANS: SemesterPlan[] = [
   {
     programId: 'bscs',
     semester: '2nd',
-    courseCodes: ['MTE111', 'CMC112', 'CMC121', 'GER122', 'GER132', 'GER142']
+    courseCodes: ['MTE111', 'OP216', 'CMC121', 'GER122', 'GER132', 'GER142']
   },
   {
     programId: 'bscs',
@@ -228,7 +228,7 @@ const DEFAULT_SEMESTER_PLANS: SemesterPlan[] = [
   {
     programId: 'bsai',
     semester: '2nd',
-    courseCodes: ['CMC112', 'GER132', 'CMC121', 'GER142', 'GER122', 'MTE111']
+    courseCodes: ['OP216', 'GER132', 'CMC121', 'GER142', 'GER122', 'MTE111']
   },
   {
     programId: 'bsai',
@@ -270,7 +270,7 @@ const DEFAULT_SEMESTER_PLANS: SemesterPlan[] = [
   {
     programId: 'bsse',
     semester: '2nd',
-    courseCodes: ['MTE111', 'CMC112', 'CMC121', 'GER122', 'GER132', 'GER142']
+    courseCodes: ['MTE111', 'OP216', 'CMC121', 'GER122', 'GER132', 'GER142']
   },
   {
     programId: 'bsse',
@@ -312,7 +312,7 @@ const DEFAULT_SEMESTER_PLANS: SemesterPlan[] = [
   {
     programId: 'bscy',
     semester: '2nd',
-    courseCodes: ['MTE111', 'CMC112', 'CMC121', 'GER122', 'GER132', 'GER142']
+    courseCodes: ['MTE111', 'OP216', 'CMC121', 'GER122', 'GER132', 'GER142']
   },
   {
     programId: 'bscy',
