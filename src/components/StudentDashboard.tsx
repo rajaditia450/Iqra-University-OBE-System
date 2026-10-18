@@ -99,16 +99,7 @@ const findOriginalGA = (id: string, gasList?: any[]) => {
     if (matched) return matched;
   }
 
-  // 2. Check in local storage fallback DB
-  try {
-    const localData = apiService.getLocalStorageData();
-    if (localData && Array.isArray(localData.gas)) {
-      const matched = localData.gas.find(g => (g.id || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '') === cleanId);
-      if (matched) return matched;
-    }
-  } catch (e) {
-    console.warn("Error looking up original GA:", e);
-  }
+  // No hardcoded/offline GA fallback
 
   return null;
 };
@@ -124,16 +115,7 @@ const standardizeMappedGAObj = (mappedGAVal: any, cloCode: string = '', gasList?
       if (matched) return (matched as any).name || (matched as any).title || '';
     }
 
-    // 2. Try to find in global fallback DB from localStorage dynamically
-    try {
-      const localData = apiService.getLocalStorageData();
-      if (localData && Array.isArray(localData.gas)) {
-        const matched = localData.gas.find(g => (g.id || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '') === cleanId);
-        if (matched) return (matched as any).name || (matched as any).title || '';
-      }
-    } catch (e) {
-      console.warn("Failed to lookup GA name from fallback DB:", e);
-    }
+    // No hardcoded/offline GA fallback
 
     // 3. Perfect fallback mapped to actual Computing Department GAs
     const gaNames: Record<string, string> = {
@@ -840,17 +822,19 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
     setError(null);
     try {
       // 1. Get programs, courses, departments
+      // 1. Get programs, courses, departments strictly from backend
       let obData;
       try {
         obData = await apiService.getAllData();
-      } catch (err) {
-        obData = apiService.getLocalStorageData();
+      } catch (err: any) {
+        console.warn("Failed to load data for student dashboard:", err);
+        setError("Failed to load academic records from backend server. Please verify connection.");
+        obData = { departments: [], programs: [], courses: [], gas: [] };
       }
-       setDepartments(obData.departments || []);
+      setDepartments(obData.departments || []);
       setPrograms(obData.programs || []);
       setCourses(obData.courses || []);
       setGas(obData.gas || []);
-
       // 1b. Skip hitting admin endpoints for students (predefined semester plans)
       setSemesterPlans([]);
 
@@ -867,8 +851,8 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
               regNo: regToUse,
               name: parsedUser.name || regToUse.split('.').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
               email: parsedUser.email || '',
-              departmentId: parsedUser.departmentId || parsedUser.department_id || 'computing',
-              programId: parsedUser.programId || parsedUser.program_id || 'bscs',
+              departmentId: parsedUser.departmentId || parsedUser.department_id || '',
+              programId: parsedUser.programId || parsedUser.program_id || '',
               batch: parsedDetails?.batch || parsedUser.batch || 'SP23',
               semester: parsedDetails?.semester || parsedUser.semester || '7th'
             };
@@ -888,8 +872,8 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
           regNo: studentRegNo,
           name: studentRegNo.split('.').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
           email: '',
-          departmentId: 'computing',
-          programId: 'bscs',
+          departmentId: '',
+          programId: '',
           batch: parsedDetails?.batch || 'SP23',
           semester: parsedDetails?.semester || '7th'
         }];
@@ -1144,13 +1128,13 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
               const standardUnitsData = sc.unitsData || matchedIC?.unitsData || {};
               const obeQuestions = sc.obeQuestions || matchedIC?.obeQuestions || [];
 
-              const pId = sc.programId || sc.program_id || matchingStudent?.programId || 'bscs';
+              const pId = sc.programId || sc.program_id || matchingStudent?.programId || '';
               const prog = loadedProgs.find((p: any) => p.id === pId);
-              const pName = prog ? prog.name : 'Bachelor of Science in Computer Science (BSCS)';
+              const pName = prog ? prog.name : (pId ? String(pId).toUpperCase() : '');
               
-              const dId = sc.departmentId || sc.department_id || prog?.departmentId || matchingStudent?.departmentId || 'computing';
+              const dId = sc.departmentId || sc.department_id || prog?.departmentId || matchingStudent?.departmentId || '';
               const dept = loadedDepts.find((d: any) => d.id === dId);
-              const dName = dept ? dept.name : 'Department of Computing and Technology';
+              const dName = dept ? dept.name : (dId ? String(dId).toUpperCase() : '');
 
               const sRec = matchedIC?.students?.find(s => areStudentsEqual(s.regNo, regToUse));
               const localStudentMarks = sRec?.marks || (sRec as any)?.student_marks || {};
@@ -2101,7 +2085,7 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
     if (!activeStudent || gas.length === 0) return [];
     
     // Filter by the student's department
-    const studentDeptId = (activeStudent.departmentId || 'computing').toLowerCase();
+    const studentDeptId = (activeStudent.departmentId || '').toLowerCase();
     const filtered = gas.filter(g => (g.departmentId || '').toLowerCase() === studentDeptId);
     
     console.log("[STUDENT_MARKS_DEBUG] Filtered programGAs for department", studentDeptId, ":", filtered);
@@ -2636,6 +2620,16 @@ export default function StudentDashboard({ onLogout, studentRegNo }: StudentDash
                       </button>
                     </div>
 
+                                        {/* Empty state when no courses enrolled */}
+                    {Object.keys(coursesBySemester).length === 0 && (
+                      <div className="bg-white border border-slate-200 rounded-xl p-12 text-center shadow-xs">
+                        <BookOpen className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                        <h3 className="text-base font-bold text-slate-700 mb-1">No Enrolled Courses Found</h3>
+                        <p className="text-xs text-slate-500 max-w-md mx-auto">
+                          No academic course records or registrations were found for your student profile from the database.
+                        </p>
+                      </div>
+                    )}
                     {/* Semesters list */}
                     {Object.keys(coursesBySemester)
                       .filter(semesterKey => selectedSemester === 'all' || selectedSemester === semesterKey)

@@ -167,185 +167,6 @@ interface DeptAdminDashboardProps {
   adminName?: string;
 }
 
-const DEFAULT_TEACHERS: Teacher[] = [
-  { id: 'INS-CS-001', employeeId: 'INS-CS-001', name: 'Prof. Dr. Jameel Ahmed', email: 'jameel@iqra.edu.pk', designation: 'Professor', departmentId: 'computing' },
-  { id: 'INS-CS-002', employeeId: 'INS-CS-002', name: 'Dr. Asim Imdad', email: 'asim@iqra.edu.pk', designation: 'Associate Professor', departmentId: 'computing' },
-  { id: 'INS-CS-003', employeeId: 'INS-CS-003', name: 'Dr. Tariq Soomro', email: 'tariq.soomro@iqra.edu.pk', designation: 'Professor', departmentId: 'computing' },
-  { id: 'INS-CS-004', employeeId: 'INS-CS-004', name: 'Dr. Sajjad Ahmad', email: 'sajjad@iqra.edu.pk', designation: 'Assistant Professor', departmentId: 'computing' },
-  { id: 'INS-CS-005', employeeId: 'INS-CS-005', name: 'Dr. Farhan Shaikh', email: 'farhan@iqra.edu.pk', designation: 'Associate Professor', departmentId: 'business' },
-  { id: 'INS-CS-006', employeeId: 'INS-CS-006', name: 'Prof. Dr. Kamran Raza', email: 'kamran.raza@iqra.edu.pk', designation: 'Professor', departmentId: 'computing' }
-];
-
-const DEFAULT_SEMESTER_PLANS: SemesterPlan[] = [
-  // BSCS Plans
-  {
-    programId: 'bscs',
-    semester: '1st',
-    courseCodes: ['CMC111', 'GER111', 'GER121', 'GER131', 'GER141', 'GER151']
-  },
-  {
-    programId: 'bscs',
-    semester: '2nd',
-    courseCodes: ['MTE111', 'OP216', 'CMC121', 'GER122', 'GER132', 'GER142']
-  },
-  {
-    programId: 'bscs',
-    semester: '3rd',
-    courseCodes: ['MTE212', 'CMC222', 'CMC251', 'CSC252', 'CMC261']
-  },
-  {
-    programId: 'bscs',
-    semester: '4th',
-    courseCodes: ['MTE213', 'MTE221', 'CSC223', 'CMC241', 'CMC253', 'GER261']
-  },
-  {
-    programId: 'bscs',
-    semester: '5th',
-    courseCodes: ['CMC331', 'CSC354', 'CMC362', 'CMC371', 'CSC332']
-  },
-  {
-    programId: 'bscs',
-    semester: '6th',
-    courseCodes: ['CMC381', 'CSC382', 'ESC311']
-  },
-  {
-    programId: 'bscs',
-    semester: '7th',
-    courseCodes: ['CSC442', 'GER462', 'CMC491', 'GER443']
-  },
-  {
-    programId: 'bscs',
-    semester: '8th',
-    courseCodes: ['GER463', 'CMC492']
-  },
-
-  // BSAI Plans
-  {
-    programId: 'bsai',
-    semester: '1st',
-    courseCodes: ['CMC111', 'GER111', 'GER151', 'GER131', 'GER121', 'GER141']
-  },
-  {
-    programId: 'bsai',
-    semester: '2nd',
-    courseCodes: ['OP216', 'GER132', 'CMC121', 'GER142', 'GER122', 'MTE111']
-  },
-  {
-    programId: 'bsai',
-    semester: '3rd',
-    courseCodes: ['CMC251', 'CMC222', 'AIC211', 'CMC261', 'MTE212']
-  },
-  {
-    programId: 'bsai',
-    semester: '4th',
-    courseCodes: ['CMC241', 'AIC212', 'MTE213', 'CMC252', 'MTE221', 'GER261']
-  },
-  {
-    programId: 'bsai',
-    semester: '5th',
-    courseCodes: ['AIC221', 'CMC362', 'CMC331', 'CMC371']
-  },
-  {
-    programId: 'bsai',
-    semester: '6th',
-    courseCodes: ['AIC323', 'AIE423', 'AIC331', 'ESC311']
-  },
-  {
-    programId: 'bsai',
-    semester: '7th',
-    courseCodes: ['CMC491', 'CSC442', 'GER462', 'GER443']
-  },
-  {
-    programId: 'bsai',
-    semester: '8th',
-    courseCodes: ['GER463', 'CMC492']
-  },
-
-  // BSSE Plans
-  {
-    programId: 'bsse',
-    semester: '1st',
-    courseCodes: ['CMC111', 'GER111', 'GER121', 'GER131', 'GER141', 'GER151']
-  },
-  {
-    programId: 'bsse',
-    semester: '2nd',
-    courseCodes: ['MTE111', 'OP216', 'CMC121', 'GER122', 'GER132', 'GER142']
-  },
-  {
-    programId: 'bsse',
-    semester: '3rd',
-    courseCodes: ['MTE212', 'CMC222', 'CMC251', 'CSC252', 'CMC261']
-  },
-  {
-    programId: 'bsse',
-    semester: '4th',
-    courseCodes: ['MTE213', 'MTE221', 'CSC223', 'CMC241', 'CMC253', 'GER261']
-  },
-  {
-    programId: 'bsse',
-    semester: '5th',
-    courseCodes: ['CMC331', 'CSC354', 'CMC362', 'CMC371', 'CSC332']
-  },
-  {
-    programId: 'bsse',
-    semester: '6th',
-    courseCodes: ['CMC381', 'CSC382', 'ESC311']
-  },
-  {
-    programId: 'bsse',
-    semester: '7th',
-    courseCodes: ['CSC442', 'GER462', 'CMC491', 'GER443']
-  },
-  {
-    programId: 'bsse',
-    semester: '8th',
-    courseCodes: ['GER463', 'CMC492']
-  },
-
-  // BSCY Plans
-  {
-    programId: 'bscy',
-    semester: '1st',
-    courseCodes: ['CMC111', 'GER111', 'GER121', 'GER131', 'GER141', 'GER151']
-  },
-  {
-    programId: 'bscy',
-    semester: '2nd',
-    courseCodes: ['MTE111', 'OP216', 'CMC121', 'GER122', 'GER132', 'GER142']
-  },
-  {
-    programId: 'bscy',
-    semester: '3rd',
-    courseCodes: ['MTE212', 'CMC222', 'CMC251', 'CSC252', 'CMC261']
-  },
-  {
-    programId: 'bscy',
-    semester: '4th',
-    courseCodes: ['MTE213', 'MTE221', 'CSC223', 'CMC241', 'CMC253', 'GER261']
-  },
-  {
-    programId: 'bscy',
-    semester: '5th',
-    courseCodes: ['CMC331', 'CSC354', 'CMC362', 'CMC371', 'CSC332']
-  },
-  {
-    programId: 'bscy',
-    semester: '6th',
-    courseCodes: ['CMC381', 'CSC382', 'ESC311']
-  },
-  {
-    programId: 'bscy',
-    semester: '7th',
-    courseCodes: ['CSC442', 'GER462', 'CMC491', 'GER443']
-  },
-  {
-    programId: 'bscy',
-    semester: '8th',
-    courseCodes: ['GER463', 'CMC492']
-  }
-];
-
 export default function DeptAdminDashboard({ onLogout, adminName = "Department Administrator" }: DeptAdminDashboardProps) {
   // Global Data
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -368,26 +189,17 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
       return departments[0].id;
     }
     const nameLower = adminName.toLowerCase();
-    if (nameLower.includes('computing') || nameLower.includes('cs') || nameLower.includes('ai') || nameLower.includes('se') || nameLower.includes('tech')) {
-      return 'computing';
-    }
-    if (nameLower.includes('business') || nameLower.includes('bba') || nameLower.includes('management') || nameLower.includes('finance')) {
-      return 'business';
-    }
-    if (nameLower.includes('engineering') || nameLower.includes('ee') || nameLower.includes('electronic')) {
-      return 'engineering';
-    }
-    if (nameLower.includes('fashion') || nameLower.includes('design') || nameLower.includes('media')) {
-      return 'fashion_design';
-    }
-    if (nameLower.includes('humanities') || nameLower.includes('sciences')) {
-      return 'humanities';
-    }
+    const matched = departments.find(d => {
+      const dName = (d.name || '').toLowerCase();
+      const dId = (d.id || '').toLowerCase();
+      return (dId && nameLower.includes(dId)) || (dName && nameLower.includes(dName));
+    });
+    if (matched) return matched.id;
     const saved = localStorage.getItem('IQRA_OBE_ADMIN_MANAGED_DEPT');
     if (saved && departments.some(d => d.id === saved)) {
       return saved;
     }
-    return departments[0]?.id || 'computing';
+    return departments[0]?.id || '';
   }, [departments, adminName, adminProfile]);
 
   const activeDeptId = selectedDeptId || managedDeptId;
@@ -419,7 +231,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
   } | null>(null);
 
   // Tab 6: Reports State
-  const [selectedReportProg, setSelectedReportProg] = useState<string>('bscs');
+  const [selectedReportProg, setSelectedReportProg] = useState<string>('');
   const [selectedReportCourseCode, setSelectedReportCourseCode] = useState<string>('');
   const [programGAReport, setProgramGAReport] = useState<any>(null);
   const [courseAttainmentReport, setCourseAttainmentReport] = useState<any>(null);
@@ -441,7 +253,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
   const [cohortGaId, setCohortGaId] = useState<string>('GA-1');
 
   // Tab 1: Semester Plans Edit State
-  const [selectedPlanProg, setSelectedPlanProg] = useState<string>('bscs');
+  const [selectedPlanProg, setSelectedPlanProg] = useState<string>('');
   const [selectedPlanSem, setSelectedPlanSem] = useState<string>('1st');
   const [planSearch, setPlanSearch] = useState<string>('');
 
@@ -451,19 +263,32 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
   const [courseType, setCourseType] = useState<'core' | 'elective'>('core');
   const [courseCreditHours, setCourseCreditHours] = useState<number>(3);
   const [courseSubtype, setCourseSubtype] = useState<'Theory' | 'Lab'>('Theory');
-  const [courseDept, setCourseDept] = useState('computing');
-  const [courseProg, setCourseProg] = useState('bscs');
+  const [courseDept, setCourseDept] = useState('');
+  const [courseProg, setCourseProg] = useState('');
   const [courseGAs, setCourseGAs] = useState<string[]>([]);
   const [courseSearch, setCourseSearch] = useState('');
   const [importStatus, setImportStatus] = useState<{ type: 'idle' | 'success' | 'error', message: string }>({ type: 'idle', message: '' });
   const [editingCourse, setEditingCourse] = useState<Course | null>(null);
+  // Auto-select first program and department if not already selected
+  useEffect(() => {
+    if (programs.length > 0) {
+      setSelectedReportProg(prev => prev || programs[0].id);
+      setSelectedPlanProg(prev => prev || programs[0].id);
+      setCourseProg(prev => prev || programs[0].id);
+    }
+    if (departments.length > 0) {
+      setCourseDept(prev => prev || departments[0].id);
+      setTeacherDept(prev => prev || departments[0].id);
+    }
+  }, [programs, departments]);
+
 
   // Tab 3: Teacher Creation State
   const [teacherName, setTeacherName] = useState('');
   const [teacherEmail, setTeacherEmail] = useState('');
   const [teacherEmployeeId, setTeacherEmployeeId] = useState('');
   const [teacherDesignation, setTeacherDesignation] = useState('Lecturer');
-  const [teacherDept, setTeacherDept] = useState('computing');
+  const [teacherDept, setTeacherDept] = useState('');
   const [teacherSearch, setTeacherSearch] = useState('');
 
   // Tab 4: Teacher Course Assignment State
@@ -620,13 +445,9 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
       const isBackend = !!localStorage.getItem('access');
       try {
         obData = await apiService.getAllData();
-      } catch (err) {
-        if (isBackend) {
-          obData = { departments: [], programs: [], courses: [], gas: [] };
-          setErrorMsg("Could not retrieve data from the backend server. Please make sure the server is online.");
-        } else {
-          obData = apiService.getLocalStorageData();
-        }
+      } catch (err: any) {
+        obData = { departments: [], programs: [], courses: [], gas: [] };
+        setErrorMsg(err?.message || "Could not retrieve data from the backend server. Please make sure the server is online.");
       }
       setDepartments(obData.departments || []);
       setPrograms(obData.programs || []);
@@ -659,14 +480,8 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
           }));
         }
       } catch (err) {
-        console.warn("Backend API for teachers offline. Falling back to local storage.");
-        const savedTeachers = localStorage.getItem('IQRA_OBE_TEACHERS');
-        if (savedTeachers) {
-          loadedTeachers = JSON.parse(savedTeachers);
-        } else {
-          localStorage.setItem('IQRA_OBE_TEACHERS', JSON.stringify(DEFAULT_TEACHERS));
-          loadedTeachers = DEFAULT_TEACHERS;
-        }
+        console.warn("Backend API for teachers offline:", err);
+        loadedTeachers = [];
       }
       setTeachers(loadedTeachers);
 
@@ -682,17 +497,8 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
           }));
         }
       } catch (err) {
-        console.warn("Backend API for semester plans offline. Falling back to local storage.");
-        const savedPlans = localStorage.getItem('IQRA_OBE_SEMESTER_PLANS');
-        if (savedPlans) {
-          try {
-            loadedPlans = JSON.parse(savedPlans);
-          } catch (e) {
-            loadedPlans = DEFAULT_SEMESTER_PLANS;
-          }
-        } else {
-          loadedPlans = DEFAULT_SEMESTER_PLANS;
-        }
+        console.warn("Backend API for semester plans offline:", err);
+        loadedPlans = [];
       }
       setSemesterPlans(loadedPlans);
 
@@ -765,14 +571,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
             loadedAssignments = [];
           }
         } else {
-          loadedAssignments = [
-            { teacherId: 'INS-CS-001', courseCode: 'CMC381', programId: 'bscs' },
-            { teacherId: 'INS-CS-001', courseCode: 'AIC211', programId: 'bsai' },
-            { teacherId: 'INS-CS-002', courseCode: 'CSC382', programId: 'bscs' },
-            { teacherId: 'INS-CS-003', courseCode: 'AIC212', programId: 'bsai' },
-            { teacherId: 'INS-CS-004', courseCode: 'CMC241', programId: 'bsse' }
-          ];
-          localStorage.setItem('IQRA_OBE_TEACHER_ASSIGNMENTS', JSON.stringify(loadedAssignments));
+          loadedAssignments = [];
         }
       }
       // Deduplicate loadedAssignments to guarantee no duplicate teacher assignments
@@ -843,9 +642,9 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
       const teacher = currentTeachers.find(t => matchTeacher(t, assignment.teacherId));
       const assignmentProgClean = assignment.programId ? String(assignment.programId).trim().toLowerCase() : '';
       const course = currentCourses.find(c => c.code === assignment.courseCode && (!assignmentProgClean || String(c.programId).trim().toLowerCase() === assignmentProgClean)) || currentCourses.find(c => c.code === assignment.courseCode);
-      const matchedDept = departments.find(d => d.id === (course?.departmentId || 'computing'));
+      const matchedDept = departments.find(d => d.id === (course?.departmentId || activeDeptId || ''));
       
-      const defaultDeptProgram = programs.find(p => p.departmentId === activeDeptId)?.id || 'bscs';
+      const defaultDeptProgram = programs.find(p => p.departmentId === activeDeptId)?.id || programs[0]?.id || '';
       const fallbackProgramId = course?.programId || programs.find(p => p.departmentId === course?.departmentId)?.id || defaultDeptProgram;
       const finalProgramId = assignment.programId || fallbackProgramId;
       const matchedProg = programs.find(p => p.id === finalProgramId);
@@ -968,7 +767,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
         code: assignment.courseCode,
         title: finalTitle,
         courseType: isLab ? 'Lab' : 'Theory',
-        departmentId: course?.departmentId || 'computing',
+        departmentId: course?.departmentId || activeDeptId || '',
         departmentName: matchedDept?.name || 'Department of Computing and Technology',
         programId: finalProgramId,
         programName: matchedProg?.name || 'Bachelor of Science in Computer Science',
@@ -1160,7 +959,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
             const employeeId = t?.employeeId || teacherId;
             const assignmentProgId = assignment?.programId || programId;
             const cleanCourseProg = assignmentProgId ? String(assignmentProgId).trim().toLowerCase() : '';
-            const finalProgId = assignmentProgId || courses.find(c => c.code === course.code && (!cleanCourseProg || String(c.programId).trim().toLowerCase() === cleanCourseProg))?.programId || courses.find(c => c.code === course.code)?.programId || programs.find(p => p.departmentId === activeDeptId)?.id || 'bscs';
+            const finalProgId = assignmentProgId || courses.find(c => c.code === course.code && (!cleanCourseProg || String(c.programId).trim().toLowerCase() === cleanCourseProg))?.programId || courses.find(c => c.code === course.code)?.programId || programs.find(p => p.departmentId === activeDeptId)?.id || programs[0]?.id || '';
             
             let acadYear = assignment?.academicYear || 'Fall-2024';
             acadYear = acadYear.replace(/ /g, '-');
@@ -1353,8 +1152,8 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
           const rawCode = getRowValue(row, ['course code', 'code', 'coursecode']);
           const rawTitle = getRowValue(row, ['course title', 'title', 'coursetitle']);
           const rawType = getRowValue(row, ['type', 'course type']) || 'core';
-          const rawDept = getRowValue(row, ['department id', 'departmentid', 'department', 'dept']) || 'computing';
-          const rawProg = getRowValue(row, ['program id', 'programid', 'program', 'prog']) || 'bscs';
+          const rawDept = getRowValue(row, ['department id', 'departmentid', 'department', 'dept']) || activeDeptId || '';
+          const rawProg = getRowValue(row, ['program id', 'programid', 'program', 'prog']) || programs[0]?.id || '';
           const rawCredits = getRowValue(row, ['credit hours', 'credithours', 'credits', 'credit_hours', 'credit']);
           const rawSubtype = getRowValue(row, ['course subtype', 'coursesubtype', 'subtype', 'course type', 'course_subtype', 'course_type', 'sub', 'course sub', 'course_sub']);
 
@@ -1462,7 +1261,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
             }
           } else {
             // Offline fallback / local storage only
-            const currentLocalData = apiService.getLocalStorageData();
+            const currentLocalData = ({ departments: [], programs: [], courses: [], gas: [], students: [], assessments: [], enrollments: [], peos: [] });
             let localCourses = [...currentLocalData.courses];
 
             // Apply updates
@@ -1505,10 +1304,8 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
   const downloadExcelTemplate = () => {
     const headers = [
       ["Course Code", "Course Title", "Type", "Credit Hours", "Course Subtype", "Department ID", "Program ID"],
-      ["CS-312", "Web Engineering", "core", 3, "Theory", "computing", "bscs"],
-      ["CS-312L", "Web Engineering Lab", "core", 1, "Lab", "computing", "bscs"],
-      ["SE-422", "Software Architecture", "core", 3, "Theory", "computing", "bscs"],
-      ["MKT-101", "Principles of Marketing", "core", 3, "Theory", "business", "bba"]
+      ["CS-312", "Web Engineering", "core", 3, "Theory", departments[0]?.id || "DEPT_ID", programs[0]?.id || "PROG_ID"],
+      ["CS-312L", "Web Engineering Lab", "core", 1, "Lab", departments[0]?.id || "DEPT_ID", programs[0]?.id || "PROG_ID"]
     ];
     const ws = XLSX.utils.aoa_to_sheet(headers);
     const wb = XLSX.utils.book_new();
@@ -1720,7 +1517,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
     const employeeId = t?.employeeId || teacherId;
     const assignmentProgId = assignment?.programId || programId;
     const cleanCourseProg = assignmentProgId ? String(assignmentProgId).trim().toLowerCase() : '';
-    const finalProgId = assignmentProgId || courses.find(c => c.code === courseCode && (!cleanCourseProg || String(c.programId).trim().toLowerCase() === cleanCourseProg))?.programId || courses.find(c => c.code === courseCode)?.programId || programs.find(p => p.departmentId === activeDeptId)?.id || 'bscs';
+    const finalProgId = assignmentProgId || courses.find(c => c.code === courseCode && (!cleanCourseProg || String(c.programId).trim().toLowerCase() === cleanCourseProg))?.programId || courses.find(c => c.code === courseCode)?.programId || programs.find(p => p.departmentId === activeDeptId)?.id || programs[0]?.id || '';
     
     let acadYear = assignment?.academicYear || 'Fall-2024';
     acadYear = acadYear.replace(/ /g, '-');
@@ -1765,7 +1562,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
     const teacher = teachers.find(t => matchTeacher(t, assignment.teacherId));
     const assignmentProgClean = assignment.programId ? String(assignment.programId).trim().toLowerCase() : '';
     const course = courses.find(c => c.code === assignment.courseCode && (!assignmentProgClean || String(c.programId).trim().toLowerCase() === assignmentProgClean)) || courses.find(c => c.code === assignment.courseCode);
-    const defaultDeptProgram = programs.find(p => p.departmentId === activeDeptId)?.id || 'bscs';
+    const defaultDeptProgram = programs.find(p => p.departmentId === activeDeptId)?.id || programs[0]?.id || '';
     const fallbackProgramId = course?.programId || programs.find(p => p.departmentId === course?.departmentId)?.id || defaultDeptProgram;
     const finalProgramId = assignment.programId || fallbackProgramId;
     const employeeId = teacher?.employeeId || assignment.teacherId;
@@ -1900,7 +1697,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
 
     students.forEach(student => {
       const sem = String(student.semester || '1st').trim().toLowerCase();
-      const prog = String(student.programId || 'bscs').trim().toLowerCase();
+      const prog = String(student.programId || '').trim().toLowerCase();
 
       // Find the predefined plan for this program and semester
       const plan = semesterPlans.find(p => 
@@ -2109,7 +1906,7 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
   const availableCoursesForPlan = useMemo(() => {
     return courses.filter(c => {
       // Filter by department of current plan
-      const deptMatch = c.departmentId === (programs.find(p => String(p.id).trim().toLowerCase() === String(selectedPlanProg).trim().toLowerCase())?.departmentId || 'computing');
+      const deptMatch = c.departmentId === (programs.find(p => String(p.id).trim().toLowerCase() === String(selectedPlanProg).trim().toLowerCase())?.departmentId || activeDeptId);
       
       const programMatch = !c.programId || 
         String(c.programId).trim().toLowerCase() === String(selectedPlanProg).trim().toLowerCase();

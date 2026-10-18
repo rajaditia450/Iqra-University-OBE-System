@@ -690,19 +690,7 @@ const normalizeCourse = (course: InstructorCourse): InstructorCourse => {
   };
 };
 
-export const DEPARTMENT_PROGRAMS: Record<string, { id: string; name: string }[]> = {
-  computing: [
-    { id: 'bscs', name: 'Bachelor of Science in Computer Science (BSCS)' },
-    { id: 'bsse', name: 'Bachelor of Science in Software Engineering (BSSE)' },
-    { id: 'bsai', name: 'Bachelor of Science in Artificial Intelligence (BSAI)' },
-    { id: 'bsit', name: 'BS Information Technology (BSIT)' },
-  ],
-  business: [
-    { id: 'bba', name: 'Bachelor of Business Administration (BBA)' },
-    { id: 'mba', name: 'Master of Business Administration (MBA)' },
-    { id: 'bsaf', name: 'BS Accounting & Finance (BSAF)' },
-  ]
-};
+export const DEPARTMENT_PROGRAMS: Record<string, { id: string; name: string }[]> = {};
 
 const distributeUnitWeightages = (n: number): number[] => {
   if (n <= 0) return [];
@@ -1963,19 +1951,9 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
         }
       }
     }).catch(err => {
-      console.warn("Could not load departments & programs dynamically from backend, checking offline storage...", err);
-      const offline = apiService.getLocalStorageData();
-      if (active && offline) {
-        setObeData(offline);
-        if (offline.departments && offline.departments.length > 0) {
-          const storedDept = localStorage.getItem('IQRA_OBE_USER_DEPT_ID');
-          const firstDeptId = (storedDept && offline.departments.some(d => d.id === storedDept)) ? storedDept : offline.departments[0].id;
-          setAddDeptId(firstDeptId);
-          setEditDeptId(firstDeptId);
-          const firstProg = offline.programs?.find(p => p.departmentId === firstDeptId)?.id || '';
-          setAddProgramId(firstProg);
-          setEditProgramId(firstProg);
-        }
+      console.warn("Could not load departments & programs dynamically from backend:", err);
+      if (active) {
+        setObeData({ departments: [], programs: [], courses: [], gas: [] });
       }
     });
 
@@ -2245,20 +2223,15 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
     const courseProgramId = (selectedCourse.programId || '').toLowerCase();
     const courseProgramName = (selectedCourse.programName || '').toLowerCase();
     
-    // Extract target program code (e.g. 'bscs', 'bsai', 'bsse', 'bba', 'bscy')
-    let targetProgram = '';
-    if (courseProgramId) {
-      targetProgram = courseProgramId;
-    } else if (courseProgramName.includes('computer science') || courseProgramName.includes('bscs')) {
-      targetProgram = 'bscs';
-    } else if (courseProgramName.includes('artificial intelligence') || courseProgramName.includes('bsai')) {
-      targetProgram = 'bsai';
-    } else if (courseProgramName.includes('software engineering') || courseProgramName.includes('bsse')) {
-      targetProgram = 'bsse';
-    } else if (courseProgramName.includes('cyber security') || courseProgramName.includes('bscy')) {
-      targetProgram = 'bscy';
-    } else if (courseProgramName.includes('business') || courseProgramName.includes('bba')) {
-      targetProgram = 'bba';
+    let targetProgram = courseProgramId;
+    if (!targetProgram && obeData?.programs) {
+      const matched = obeData.programs.find(p => 
+        (p.name && courseProgramName.includes(p.name.toLowerCase())) ||
+        (p.code && courseProgramName.includes(p.code.toLowerCase()))
+      );
+      if (matched) {
+        targetProgram = matched.id.toLowerCase();
+      }
     }
 
     if (targetProgram) {
@@ -2754,8 +2727,8 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
   const [unitCloValidationError, setUnitCloValidationError] = useState<boolean>(false);
 
   // Form states for creating course
-  const [addDeptId, setAddDeptId] = useState('computing');
-  const [addProgramId, setAddProgramId] = useState('bscs');
+  const [addDeptId, setAddDeptId] = useState('');
+  const [addProgramId, setAddProgramId] = useState('');
   const [addCourseCode, setAddCourseCode] = useState('');
   const [addCourseTitle, setAddCourseTitle] = useState('');
   const [addCreditHours, setAddCreditHours] = useState(3);
@@ -2765,8 +2738,8 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
   const [isEditingCourse, setIsEditingCourse] = useState(false);
   const [editCourseCode, setEditCourseCode] = useState('');
   const [editCourseTitle, setEditCourseTitle] = useState('');
-  const [editDeptId, setEditDeptId] = useState('computing');
-  const [editProgramId, setEditProgramId] = useState('bscs');
+  const [editDeptId, setEditDeptId] = useState('');
+  const [editProgramId, setEditProgramId] = useState('');
   const [editCreditHours, setEditCreditHours] = useState(3);
   const [editCourseType, setEditCourseType] = useState<'Theory' | 'Lab'>('Theory');
 
@@ -4898,24 +4871,16 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
               {(() => {
                 const departmentsList = obeData?.departments && obeData.departments.length > 0
                   ? obeData.departments
-                  : Array.from(new Set(courses.map(c => c.departmentId))).map((depId: string) => ({
+                  : Array.from(new Set(courses.map(c => c.departmentId).filter(Boolean))).map((depId: string) => ({
                       id: depId,
-                      name: depId === 'computing'
-                        ? 'Department of Computing and Technology'
-                        : depId === 'business'
-                          ? 'Department of Business Administration'
-                          : `Department of ${depId.toUpperCase()}`
+                      name: `Department ${depId}`
                     }));
 
                 return departmentsList.map((dept) => {
                   const deptCourses = courses.filter(c => c.departmentId === dept.id);
-                  const isComputing = dept.id === 'computing';
-                  const isBusiness = dept.id === 'business';
-                  
-                  // Accent color mapping
-                  const dotColor = isComputing ? 'bg-indigo-600' : isBusiness ? 'bg-amber-500' : 'bg-rose-500';
-                  const borderBorder = isComputing ? 'border-indigo-100' : isBusiness ? 'border-rose-100' : 'border-slate-150';
-                  const textHeaderColor = isComputing ? 'text-indigo-950' : isBusiness ? 'text-amber-950' : 'text-slate-800';
+                  const dotColor = 'bg-indigo-600';
+                  const borderBorder = 'border-slate-200';
+                  const textHeaderColor = 'text-slate-800';
                   
                   return (
                     <div className="space-y-2" key={dept.id}>
@@ -4928,11 +4893,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                       <div className="space-y-2">
                         {deptCourses.map(c => {
                           const isSelected = c.id === activeCourseId;
-                          const selectedStyle = isComputing 
-                            ? 'bg-indigo-50/50 border-indigo-600 text-slate-900 shadow-sm ring-1 ring-indigo-600 pl-3.5 border-l-4 border-l-indigo-600'
-                            : isBusiness
-                              ? 'bg-amber-50/15 border-amber-600 text-slate-900 shadow-sm ring-1 ring-amber-600 pl-3.5 border-l-4 border-l-amber-500'
-                              : 'bg-rose-50/15 border-rose-600 text-slate-900 shadow-sm ring-1 ring-rose-600 pl-3.5 border-l-4 border-l-rose-500';
+                          const selectedStyle = 'bg-indigo-50/50 border-indigo-600 text-slate-900 shadow-sm ring-1 ring-indigo-600 pl-3.5 border-l-4 border-l-indigo-600';
                           return (
                             <div
                               key={c.id}
@@ -4950,7 +4911,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                                 <div className="flex flex-wrap items-center gap-1.5">
                                   <span className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded-md tracking-wider ${
                                     isSelected 
-                                      ? (isComputing ? 'bg-indigo-100 text-indigo-700' : isBusiness ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-700') 
+                                      ? 'bg-indigo-100 text-indigo-700' 
                                       : 'bg-slate-200 text-slate-650'
                                   }`}>
                                     {c.code}
@@ -4958,7 +4919,7 @@ export default function InstructorDashboard({ onLogout, instructorName = 'Prof. 
                                   {c.programId && (
                                     <span className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded-md tracking-wide ${
                                       isSelected
-                                        ? (isComputing ? 'bg-indigo-100/70 text-indigo-850' : isBusiness ? 'bg-amber-100/70 text-amber-850' : 'bg-rose-100/70 text-rose-850') 
+                                        ? 'bg-indigo-100/70 text-indigo-850' 
                                         : 'bg-slate-200/75 text-slate-605'
                                     }`}>
                                       {c.programId.toUpperCase()}

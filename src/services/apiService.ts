@@ -2,491 +2,35 @@ import { OBEData, Department, Program, GA, Course, ProgramObjective, InstructorC
 
 export const BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL || 'https://zeeshanbalti.pythonanywhere.com/api';
 
-// Detailed institutional mock data for Iqra University OBE fallback
-const DEFAULT_FALLBACK_DATA: OBEData = {
-  departments: [
-    {
-      id: 'computing',
-      name: 'Department of Computing and Technology',
-      vision: 'To emerge as a global leader in computer science research and education by driving technological innovation, solving real-world challenges, and empowering future leaders',
-      mission: 'To foster academic excellence and cutting-edge research, positioning our department as a global leader in computer science innovation. By instilling ethical values, technical prowess, and interdisciplinary knowledge, we prepare students for impactful careers in the field. We strive to shape the technological landscape of tomorrow by equipping our students with professionalism, resilience, and a collaborative mindset'
-    },
-    {
-      id: 'business',
-      name: 'Department of Business Administration',
-      vision: 'To be a leading business school recognized globally for nurturing entrepreneurial mindsets and ethical leadership in the corporate world.',
-      mission: 'To empower students with innovative business education, pioneering research capabilities, and ethical principles designed to create future business leaders.'
-    },
-    {
-      id: 'engineering',
-      name: 'Department of Engineering and Applied Sciences',
-      vision: 'To foster innovation, sustainable development, and global leadership in physical, chemical, and electrical systems development.',
-      mission: 'To cultivate engineering leaders through rigorous experiential learning, research excellence, and socially responsible designs.'
-    },
-    {
-      id: 'media',
-      name: 'Department of Media and Communications',
-      vision: 'To inspire creative thinking, truth seeking, and advanced media production standards for modern media landscapes.',
-      mission: 'To prepare future journalists and digital marketers with robust storytelling, visual art principles, and ethical reporting practices.'
-    },
-    {
-      id: 'health',
-      name: 'Department of Health and Life Sciences',
-      vision: 'To be a center of clinical excellence and biotechnology research that transforms human health and well-being.',
-      mission: 'To empower practitioners and researchers through state-of-the-art clinical skills, bioethics education, and dynamic scientific inquiry.'
-    }
-  ],
-  programs: [
-    // Computing Department Programs (BSCS, BSAI, BSSE, BSCY)
-    {
-      id: 'bscs',
-      name: 'Bachelor of Science in Computer Science',
-      code: 'BSCS',
-      departmentId: 'computing',
-      pos: [
-        { id: 'PO1', text: 'Establishing in-depth understanding of theoretical concepts related to computer science.', mappedGAs: ['GA-1', 'GA-2'] },
-        { id: 'PO2', text: 'Applying core Computer Science knowledge and analytical skills to optimally solve real-world problems.', mappedGAs: ['GA-1', 'GA-2', 'GA-3', 'GA-4', 'GA-5'] },
-        { id: 'PO3', text: 'Imbuing quest for learning and engaging in continuous professional development in the field of computer science by carrying research and adopting professional practices.', mappedGAs: ['GA-3', 'GA-4', 'GA-6', 'GA-7', 'GA-8', 'GA-10'] },
-        { id: 'PO4', text: 'Developing the ability to work in a multi-disciplinary and multi cultural environment in teams incorporating soft skills and maintaining high ethical standards.', mappedGAs: ['GA-6', 'GA-7', 'GA-9'] }
-      ]
-    },
-    {
-      id: 'bsai',
-      name: 'Bachelor of Science in Artificial Intelligence',
-      code: 'BSAI',
-      departmentId: 'computing',
-      pos: [
-        { id: 'PO1', text: 'Establishing in-depth understanding of theoretical concepts related to intelligence representation and reasoning.', mappedGAs: ['GA-1', 'GA-2'] },
-        { id: 'PO2', text: 'Applying core AI systems knowledge, deep learning, and analytical skills to optimally solve real-world problems.', mappedGAs: ['GA-1', 'GA-2', 'GA-3', 'GA-4', 'GA-5'] },
-        { id: 'PO3', text: 'Imbuing quest for learning and engaging in continuous professional development in the field of artificial intelligence by carrying research and adopting professional practices.', mappedGAs: ['GA-3', 'GA-4', 'GA-6', 'GA-7', 'GA-8', 'GA-10'] },
-        { id: 'PO4', text: 'Developing the ability to work in a multi-disciplinary and multicultural environment in teams incorporating soft skills and maintaining high ethical standards in intelligent systems.', mappedGAs: ['GA-6', 'GA-7', 'GA-9'] }
-      ]
-    },
-    {
-      id: 'bsse',
-      name: 'Bachelor of Science in Software Engineering',
-      code: 'BSSE',
-      departmentId: 'computing',
-      pos: [
-        { id: 'PO1', text: 'Mastery of software design patterns and system architecture specifications.', mappedGAs: ['GA-1', 'GA-4'] },
-        { id: 'PO2', text: 'Applying software engineering lifecycles and modern testing frameworks to construct robust products.', mappedGAs: ['GA-2', 'GA-4', 'GA-5'] },
-        { id: 'PO3', text: 'Understanding of professional and ethical responsibilities in software development.', mappedGAs: ['GA-8', 'GA-9'] },
-        { id: 'PO4', text: 'Engaging in lifelong learning to adapt to emerging software frameworks and AI-assisted development tools.', mappedGAs: ['GA-10'] }
-      ]
-    },
-    {
-      id: 'bscy',
-      name: 'Bachelor of Science in Cyber Security',
-      code: 'BSCY',
-      departmentId: 'computing',
-      pos: [
-        { id: 'PO1', text: 'Analyzing security properties and identifying vulnerabilities in networks and cloud architectures.', mappedGAs: ['GA-3', 'GA-4'] },
-        { id: 'PO2', text: 'Implementing high-fidelity cryptographic models and access control measures to protect institutional infrastructure.', mappedGAs: ['GA-2', 'GA-5'] },
-        { id: 'PO3', text: 'Formulating disaster recovery protocols and ethical hacking methodologies conforming to international standards.', mappedGAs: ['GA-8', 'GA-9'] },
-        { id: 'PO4', text: 'Communicating risk profiles and policy compliance metrics effectively with executive stakeholders.', mappedGAs: ['GA-7'] }
-      ]
-    },
-
-    // Business Department Programs (BBA, BSAF, MBA)
-    {
-      id: 'bba',
-      name: 'Bachelor of Business Administration',
-      code: 'BBA',
-      departmentId: 'business',
-      pos: [
-        { id: 'PO1', text: 'Mastering Core Business Management Skills and Analytical Tools.', mappedGAs: ['GA-B1', 'GA-B4'] },
-        { id: 'PO2', text: 'Strategic planning, operations synthesis, and ethical decision modeling.', mappedGAs: ['GA-B2', 'GA-B3', 'GA-B5'] },
-        { id: 'PO3', text: 'Fostering innovative business development strategies and executive communication.', mappedGAs: ['GA-B3', 'GA-B6', 'GA-B8'] },
-        { id: 'PO4', text: 'Developing adaptive management capabilities in multi-dimensional market climates.', mappedGAs: ['GA-B2', 'GA-B7'] }
-      ]
-    },
-    {
-      id: 'bsaf',
-      name: 'Bachelor of Science in Accounting and Finance',
-      code: 'BSAF',
-      departmentId: 'business',
-      pos: [
-        { id: 'PO1', text: 'Applying advanced taxation and compliance mechanisms in financial reporting.', mappedGAs: ['GA-B1', 'GA-B4'] },
-        { id: 'PO2', text: 'Executing rigorous quantitative audit procedures and risk assessments for complex institutions.', mappedGAs: ['GA-B4', 'GA-B7'] },
-        { id: 'PO3', text: 'Synthesizing investment strategies and portfolio management structures.', mappedGAs: ['GA-B3', 'GA-B8'] },
-        { id: 'PO4', text: 'Engaging ethical leadership guidelines in corporate accounting structures.', mappedGAs: ['GA-B2', 'GA-B5'] }
-      ]
-    },
-    {
-      id: 'mba',
-      name: 'Master of Business Administration',
-      code: 'MBA',
-      departmentId: 'business',
-      pos: [
-        { id: 'PO1', text: 'Formulating high-level global market expansion strategies and supply chain management structures.', mappedGAs: ['GA-B3', 'GA-B8'] },
-        { id: 'PO2', text: 'Driving executive data-driven decision optimization via business intelligence frameworks.', mappedGAs: ['GA-B1', 'GA-B7'] },
-        { id: 'PO3', text: 'Negotiating complex stakeholder values with impeccable corporate communication.', mappedGAs: ['GA-B2', 'GA-B6'] },
-        { id: 'PO4', text: 'Championing systemic corporate social responsibility initiatives.', mappedGAs: ['GA-B5'] }
-      ]
-    },
-
-    // Engineering Department Programs (BEEE, BECE, BECIV)
-    {
-      id: 'be_ee',
-      name: 'Bachelor of Engineering in Electrical Engineering',
-      code: 'BEEE',
-      departmentId: 'engineering',
-      pos: [
-        { id: 'PO1', text: 'Designing electrical power systems and modern grid architectures.', mappedGAs: ['GA-E1', 'GA-E2'] },
-        { id: 'PO2', text: 'Applying signal processing mechanisms and embedded controls.', mappedGAs: ['GA-E2', 'GA-E3'] },
-        { id: 'PO3', text: 'Evaluating safety protocols and environmental impact of power setups.', mappedGAs: ['GA-E4'] },
-        { id: 'PO4', text: 'Leading multi-disciplinary engineering projects under stringent timelines.', mappedGAs: ['GA-E2', 'GA-E4'] }
-      ]
-    },
-    {
-      id: 'be_ce',
-      name: 'Bachelor of Engineering in Computer Engineering',
-      code: 'BECE',
-      departmentId: 'engineering',
-      pos: [
-        { id: 'PO1', text: 'Developing firmware and high-performance microprocessor architectures.', mappedGAs: ['GA-E1', 'GA-E3'] },
-        { id: 'PO2', text: 'Co-designing hardware and software systems for automated IoT systems.', mappedGAs: ['GA-E2', 'GA-E3'] },
-        { id: 'PO3', text: 'Troubleshooting integrated electronic circuits with modern laboratory instrumentation.', mappedGAs: ['GA-E3'] },
-        { id: 'PO4', text: 'Adhering to professional norms and global technical regulations.', mappedGAs: ['GA-E4'] }
-      ]
-    },
-    {
-      id: 'be_civ',
-      name: 'Bachelor of Engineering in Civil Engineering',
-      code: 'BECIV',
-      departmentId: 'engineering',
-      pos: [
-        { id: 'PO1', text: 'Analyzing structural integrity and safety standards for infrastructure project plans.', mappedGAs: ['GA-E1', 'GA-E2'] },
-        { id: 'PO2', text: 'Implementing advanced geotech and hydraulics modeling solutions.', mappedGAs: ['GA-E2', 'GA-E3'] },
-        { id: 'PO3', text: 'Pioneering sustainable smart city structures and eco-friendly building materials.', mappedGAs: ['GA-E4'] },
-        { id: 'PO4', text: 'Managing municipal budgets and public resource allocations.', mappedGAs: ['GA-E2'] }
-      ]
-    },
-
-    // Media Department Programs (BSMS, BSDM, MSJR)
-    {
-      id: 'bs_ms',
-      name: 'Bachelor of Science in Media Studies',
-      code: 'BSMS',
-      departmentId: 'media',
-      pos: [
-        { id: 'PO1', text: 'Comprehending historical theories of media consumption and social discourse.', mappedGAs: ['GA-M1'] },
-        { id: 'PO2', text: 'Mastering advanced film production, screenwriting, and cinematic lighting.', mappedGAs: ['GA-M2', 'GA-M3'] },
-        { id: 'PO3', text: 'Critically analyzing television formats and broadcast guidelines.', mappedGAs: ['GA-M1', 'GA-M4'] },
-        { id: 'PO4', text: 'Managing multi-cam productions and digital media editing workflows.', mappedGAs: ['GA-M3'] }
-      ]
-    },
-    {
-      id: 'bs_dm',
-      name: 'Bachelor of Science in Digital Marketing',
-      code: 'BSDM',
-      departmentId: 'media',
-      pos: [
-        { id: 'PO1', text: 'Formulating conversion rate optimization funnels and multi-channel ad campaigns.', mappedGAs: ['GA-M1', 'GA-M3'] },
-        { id: 'PO2', text: 'Leveraging SEO algorithms and data analytics to optimize web presence.', mappedGAs: ['GA-M2', 'GA-M3'] },
-        { id: 'PO3', text: 'Designing professional social media content and brand voice systems.', mappedGAs: ['GA-M3'] },
-        { id: 'PO4', text: 'Exercising consumer rights compliance and ethical ad placement strategies.', mappedGAs: ['GA-M4'] }
-      ]
-    },
-    {
-      id: 'ms_jr',
-      name: 'Master of Science in Journalism',
-      code: 'MSJR',
-      departmentId: 'media',
-      pos: [
-        { id: 'PO1', text: 'Executing high-impact investigative journalism projects in complex environments.', mappedGAs: ['GA-M1', 'GA-M2'] },
-        { id: 'PO2', text: 'Demonstrating complete commitment to editorial truthfulness and legal protection.', mappedGAs: ['GA-M4'] },
-        { id: 'PO3', text: 'Mastering mobile journalism and real-time live reporting procedures.', mappedGAs: ['GA-M3'] },
-        { id: 'PO4', text: 'Analyzing global news syndicates and geostrategic news framing models.', mappedGAs: ['GA-M1'] }
-      ]
-    },
-
-    // Health Department Programs (DPT, BSN, BSBT)
-    {
-      id: 'dpt',
-      name: 'Doctor of Physical Therapy',
-      code: 'DPT',
-      departmentId: 'health',
-      pos: [
-        { id: 'PO1', text: 'Executing comprehensive musculoskeletal diagnostic examinations.', mappedGAs: ['GA-H1', 'GA-H2'] },
-        { id: 'PO2', text: 'Designing customized physical rehabilitation regimens for diverse populations.', mappedGAs: ['GA-H2', 'GA-H3'] },
-        { id: 'PO3', text: 'Upholding patient confidentiality and professional clinical ethics.', mappedGAs: ['GA-H4'] },
-        { id: 'PO4', text: 'Collaborating in inter-professional healthcare units.', mappedGAs: ['GA-H2'] }
-      ]
-    },
-    {
-      id: 'bs_n',
-      name: 'Bachelor of Science in Nursing',
-      code: 'BSN',
-      departmentId: 'health',
-      pos: [
-        { id: 'PO1', text: 'Delivering holistic clinical nursing care in intensive situations.', mappedGAs: ['GA-H1', 'GA-H2'] },
-        { id: 'PO2', text: 'Administering life-saving pharmacological interventions accurately.', mappedGAs: ['GA-H3'] },
-        { id: 'PO3', text: 'Acting as an empathetic health advocate for underserved demographic units.', mappedGAs: ['GA-H4'] },
-        { id: 'PO4', text: 'Managing sterile ward operations and emergency triage guidelines.', mappedGAs: ['GA-H2', 'GA-H3'] }
-      ]
-    },
-    {
-      id: 'bs_bt',
-      name: 'Bachelor of Science in Biotechnology',
-      code: 'BSBT',
-      departmentId: 'health',
-      pos: [
-        { id: 'PO1', text: 'Isolating nucleic acids and executing advanced PCR procedures.', mappedGAs: ['GA-H1', 'GA-H3'] },
-        { id: 'PO2', text: 'Manipulating recombinant DNA systems for vaccine development.', mappedGAs: ['GA-H2', 'GA-H3'] },
-        { id: 'PO3', text: 'Evaluating chemical biohazards and clinical biosafety levels.', mappedGAs: ['GA-H4'] },
-        { id: 'PO4', text: 'Interpreting complex bio-informatics data sequences.', mappedGAs: ['GA-H2'] }
-      ]
-    }
-  ],
-  gas: [
-    // Computing Department GAs
-    { id: 'GA-1', name: 'Academic Education', description: 'Completion of an accredited program of study designed to prepare graduates as computing professionals.', departmentId: 'computing' },
-    { id: 'GA-2', name: 'Knowledge for Solving Computing Problems', description: 'Apply knowledge of computing fundamentals.', departmentId: 'computing' },
-    { id: 'GA-3', name: 'Problem Analysis', description: 'Identify and solve complex computing problems.', departmentId: 'computing' },
-    { id: 'GA-4', name: 'Design/Development of Solutions', description: 'Design and evaluate solutions for complex computing problems.', departmentId: 'computing' },
-    { id: 'GA-5', name: 'Modern Tool Usage', description: 'Create, select, or adapt and then apply appropriate modern computing tools.', departmentId: 'computing' },
-    { id: 'GA-6', name: 'Individual and Team Work', description: 'Function effectively as an individual and as a member or leader of a team.', departmentId: 'computing' },
-    { id: 'GA-7', name: 'Communication', description: 'Communicate effectively with the computing community.', departmentId: 'computing' },
-    { id: 'GA-8', name: 'Computing Professionalism and Society', description: 'Understand and assess societal, health, safety, legal, and cultural issues.', departmentId: 'computing' },
-    { id: 'GA-9', name: 'Ethics', description: 'Understand and commit to professional ethics.', departmentId: 'computing' },
-    { id: 'GA-10', name: 'Life-long Learning', description: 'Engage in independent learning for continual development.', departmentId: 'computing' },
-
-    // Business Department GAs
-    { id: 'GA-B1', name: 'Business Analytics & Decision Making', description: 'Execute comprehensive business analysis.', departmentId: 'business' },
-    { id: 'GA-B2', name: 'Leadership & Teamwork', description: 'Foster strong collaborative performance.', departmentId: 'business' },
-    { id: 'GA-B3', name: 'Strategic Thinking', description: 'Synthesize market trends to deploy agile business vision.', departmentId: 'business' },
-    { id: 'GA-B4', name: 'Financial Literacy', description: 'Evaluate balance sheets and financial statements.', departmentId: 'business' },
-    { id: 'GA-B5', name: 'Corporate Social Responsibility & Ethics', description: 'Demonstrate deep compliance and transparency.', departmentId: 'business' },
-    { id: 'GA-B6', name: 'Communication & Presenting', description: 'Deliver highly structured business communications.', departmentId: 'business' },
-    { id: 'GA-B7', name: 'Critical Advisory', description: 'Troubleshoot complex business cases.', departmentId: 'business' },
-    { id: 'GA-B8', name: 'Business Enterprise', description: 'Exhibit high entrepreneurial alertness.', departmentId: 'business' },
-
-    // Engineering Department GAs
-    { id: 'GA-E1', name: 'Engineering Knowledge', description: 'Apply mathematics, science, and engineering fundamentals.', departmentId: 'engineering' },
-    { id: 'GA-E2', name: 'Design & Investigation', description: 'Formulate system parameters and conduct valid experiment designs.', departmentId: 'engineering' },
-    { id: 'GA-E3', name: 'Modern Engineering Tools', description: 'Deploy state-of-the-art computational simulation designs.', departmentId: 'engineering' },
-    { id: 'GA-E4', name: 'Ethics & Environment', description: 'Mitigate ecological hazards and adhere to professional codes.', departmentId: 'engineering' },
-
-    // Media Department GAs
-    { id: 'GA-M1', name: 'Media Literacy', description: 'Analyze structural paradigms in mass communication streams.', departmentId: 'media' },
-    { id: 'GA-M2', name: 'Content Strategy', description: 'Optimize user attention dynamics and narrative engagement loops.', departmentId: 'media' },
-    { id: 'GA-M3', name: 'Digital Tools Production', description: 'Design premium multimedia vectors and software configurations.', departmentId: 'media' },
-    { id: 'GA-M4', name: 'Acoustic & Media Ethics', description: 'Defend journalism integrity standards.', departmentId: 'media' },
-
-    // Health Department GAs
-    { id: 'GA-H1', name: 'Medical Knowledge', description: 'Demonstrate rigorous understanding of biological mechanics.', departmentId: 'health' },
-    { id: 'GA-H2', name: 'Clinical Excellence', description: 'Perform diagnostic inquiries and execute treatment designs safely.', departmentId: 'health' },
-    { id: 'GA-H3', name: 'Scientific Research', description: 'Formulate bio-informatics queries and test chemical hypotheses.', departmentId: 'health' },
-    { id: 'GA-H4', name: 'Bioethics & Patient Advocacy', description: 'Enforce patient rights and medical ethics codes.', departmentId: 'health' }
-  ],
-  courses: [
-    // 37 BSCS Core Courses + 7 Electives (Total 44 as shown exactly in photos!)
-    { id: 'C1', code: 'CMC111', title: 'Programming Fundamentals', type: 'core', mappedGAs: ['GA-1', 'GA-2', 'GA-4'], departmentId: 'computing' },
-    { id: 'C2', code: 'GER111', title: 'Application of Information & Communication Technologies', type: 'core', mappedGAs: ['GA-1', 'GA-2', 'GA-5'], departmentId: 'computing' },
-    { id: 'C3', code: 'GER121', title: 'Functional English', type: 'core', mappedGAs: ['GA-1', 'GA-7'], departmentId: 'computing' },
-    { id: 'C4', code: 'GER131', title: 'Calculus and Analytic Geometry', type: 'core', mappedGAs: ['GA-1', 'GA-2', 'GA-3'], departmentId: 'computing' },
-    { id: 'C5', code: 'GER141', title: 'Islamic Studies', type: 'core', mappedGAs: ['GA-1', 'GA-6', 'GA-8', 'GA-9'], departmentId: 'computing' },
-    { id: 'C6', code: 'GER151', title: 'Natural Science (Applied Physics)', type: 'core', mappedGAs: ['GA-1', 'GA-2'], departmentId: 'computing' },
-    { id: 'C7', code: 'MTE111', title: 'Multivariable Calculus', type: 'core', mappedGAs: ['GA-1', 'GA-2', 'GA-3'], departmentId: 'computing' },
-    { id: 'C8', code: 'OP216', title: 'Object Oriented Programming', type: 'core', mappedGAs: ['GA-1', 'GA-2', 'GA-4'], departmentId: 'computing' },
-    { id: 'C9', code: 'CMC121', title: 'Digital Logic Design', type: 'core', mappedGAs: ['GA-1', 'GA-2', 'GA-3'], departmentId: 'computing' },
-    { id: 'C10', code: 'GER122', title: 'Expository Writing', type: 'core', mappedGAs: ['GA-1', 'GA-6', 'GA-7'], departmentId: 'computing' },
-    { id: 'C11', code: 'GER132', title: 'Discrete Structures', type: 'core', mappedGAs: ['GA-1', 'GA-2', 'GA-3'], departmentId: 'computing' },
-    { id: 'C12', code: 'GER142', title: 'Ideology and Constitution of Pakistan', type: 'core', mappedGAs: ['GA-1', 'GA-8', 'GA-9', 'GA-10'], departmentId: 'computing' },
-    { id: 'C13', code: 'MTE212', title: 'Probability & Statistics', type: 'core', mappedGAs: ['GA-1', 'GA-2', 'GA-3'], departmentId: 'computing' },
-    { id: 'C14', code: 'CMC222', title: 'Computer Organization & Assembly Language', type: 'core', mappedGAs: ['GA-1', 'GA-2', 'GA-3'], departmentId: 'computing' },
-    { id: 'C15', code: 'CMC251', title: 'Data Structures', type: 'core', mappedGAs: ['GA-1', 'GA-2', 'GA-3', 'GA-5'], departmentId: 'computing' },
-    { id: 'C16', code: 'CSC252', title: 'Theory of Automata', type: 'core', mappedGAs: ['GA-1', 'GA-2', 'GA-3', 'GA-4'], departmentId: 'computing' },
-    { id: 'C17', code: 'CMC261', title: 'Computer Networks', type: 'core', mappedGAs: ['GA-1', 'GA-2', 'GA-3'], departmentId: 'computing' },
-    { id: 'C18', code: 'MTE213', title: 'Linear Algebra', type: 'core', mappedGAs: ['GA-1', 'GA-2', 'GA-3'], departmentId: 'computing' },
-    { id: 'C19', code: 'MTE221', title: 'Technical & Business Writing', type: 'core', mappedGAs: ['GA-1', 'GA-6', 'GA-8'], departmentId: 'computing' },
-    { id: 'C20', code: 'CSC223', title: 'Computer Architecture', type: 'core', mappedGAs: ['GA-1', 'GA-2', 'GA-5'], departmentId: 'computing' },
-    { id: 'C21', code: 'CMC241', title: 'Operating Systems', type: 'core', mappedGAs: ['GA-1', 'GA-2', 'GA-3'], departmentId: 'computing' },
-    { id: 'C22', code: 'CMC253', title: 'Analysis of Algorithms', type: 'core', mappedGAs: ['GA-1', 'GA-2', 'GA-3', 'GA-4'], departmentId: 'computing' },
-    { id: 'C23', code: 'GER261', title: 'Introduction to Management', type: 'core', mappedGAs: ['GA-1', 'GA-3', 'GA-6'], departmentId: 'computing' },
-    { id: 'C24', code: 'CMC331', title: 'Database Systems', type: 'core', mappedGAs: ['GA-1', 'GA-2', 'GA-3', 'GA-5'], departmentId: 'computing' },
-    { id: 'C25', code: 'CSC354', title: 'Compiler Construction', type: 'core', mappedGAs: ['GA-1', 'GA-2', 'GA-3', 'GA-4'], departmentId: 'computing' },
-    { id: 'C26', code: 'CMC362', title: 'Information Security', type: 'core', mappedGAs: ['GA-1', 'GA-2', 'GA-3', 'GA-4'], departmentId: 'computing' },
-    { id: 'C27', code: 'CMC371', title: 'Software Engineering', type: 'core', mappedGAs: ['GA-1', 'GA-2', 'GA-3'], departmentId: 'computing' },
-    { id: 'C28', code: 'CSC332', title: 'Advance Database Management Systems', type: 'core', mappedGAs: ['GA-1', 'GA-2', 'GA-3', 'GA-5'], departmentId: 'computing' },
-    { id: 'C29', code: 'CMC381', title: 'Artificial Intelligence', type: 'core', mappedGAs: ['GA-1', 'GA-2', 'GA-3', 'GA-4', 'GA-5'], departmentId: 'computing' },
-    { id: 'C30', code: 'CSC382', title: 'HCI & Computer Graphics', type: 'core', mappedGAs: ['GA-1', 'GA-3', 'GA-4', 'GA-5'], departmentId: 'computing' },
-    { id: 'C31', code: 'ESC311', title: 'Introduction to Marketing', type: 'core', mappedGAs: ['GA-1', 'GA-7', 'GA-8', 'GA-9'], departmentId: 'computing' },
-    { id: 'C32', code: 'CSC442', title: 'Parallel & Distributed Computing', type: 'core', mappedGAs: ['GA-1', 'GA-2', 'GA-4', 'GA-5'], departmentId: 'computing' },
-    { id: 'C33', code: 'GER462', title: 'Technopreneurship', type: 'core', mappedGAs: ['GA-1', 'GA-7', 'GA-9', 'GA-10'], departmentId: 'computing' },
-    { id: 'C34', code: 'CMC491', title: 'Final Year Project - I', type: 'core', mappedGAs: ['GA-1'], departmentId: 'computing' },
-    { id: 'C35', code: 'GER443', title: 'Civics and Community Engagement', type: 'core', mappedGAs: ['GA-1', 'GA-7', 'GA-8', 'GA-9'], departmentId: 'computing' },
-    { id: 'C36', code: 'GER463', title: 'Professional Practices', type: 'core', mappedGAs: ['GA-1', 'GA-8', 'GA-9', 'GA-10'], departmentId: 'computing' },
-    { id: 'C37', code: 'CMC492', title: 'Final Year Project - II', type: 'core', mappedGAs: ['GA-1', 'GA-2', 'GA-3', 'GA-4', 'GA-5', 'GA-6', 'GA-7', 'GA-8', 'GA-9', 'GA-10'], departmentId: 'computing' },
-    
-    // Electives
-    { id: 'C38', code: 'CSC467', title: 'Internet of Things', type: 'elective', mappedGAs: ['GA-1', 'GA-2', 'GA-3', 'GA-4'], departmentId: 'computing' },
-    { id: 'C39', code: 'CMC381-E', title: 'Artificial Intelligence (Elective)', type: 'elective', mappedGAs: ['GA-1', 'GA-2', 'GA-4', 'GA-5'], departmentId: 'computing' },
-    { id: 'C40', code: 'CSC436', title: 'Data Warehousing & Data Mining', type: 'elective', mappedGAs: ['GA-1', 'GA-2', 'GA-3', 'GA-7', 'GA-10'], departmentId: 'computing' },
-    { id: 'C41', code: 'CSC479', title: 'Machine Learning', type: 'elective', mappedGAs: ['GA-1', 'GA-2', 'GA-4', 'GA-5'], departmentId: 'computing' },
-    { id: 'C42', code: 'CSC435', title: 'Mobile Application Development', type: 'elective', mappedGAs: ['GA-1', 'GA-2', 'GA-3'], departmentId: 'computing' },
-    { id: 'C43', code: 'CSC321', title: 'Embedded Systems', type: 'elective', mappedGAs: ['GA-1', 'GA-2', 'GA-5'], departmentId: 'computing' },
-    { id: 'C44', code: 'CSC478', title: 'Routing and Switching', type: 'elective', mappedGAs: ['GA-1', 'GA-2', 'GA-3', 'GA-4'], departmentId: 'computing' },
-
-    // BSAI Core & Elective Courses
-    { id: 'C45', code: 'AIC211', title: 'Artificial Intelligence', type: 'core', mappedGAs: ['GA-1', 'GA-2', 'GA-4', 'GA-5'], departmentId: 'computing' },
-    { id: 'C46', code: 'AIC212', title: 'Programming For AI', type: 'core', mappedGAs: ['GA-1', 'GA-2', 'GA-4', 'GA-5'], departmentId: 'computing' },
-    { id: 'C47', code: 'CMC252', title: 'Analysis of Algorithms', type: 'core', mappedGAs: ['GA-1', 'GA-2', 'GA-3', 'GA-4'], departmentId: 'computing' },
-    { id: 'C48', code: 'AIC221', title: 'Introduction to Machine Learning', type: 'core', mappedGAs: ['GA-1', 'GA-2', 'GA-3', 'GA-4', 'GA-5'], departmentId: 'computing' },
-    { id: 'C49', code: 'AIC323', title: 'Artificial Neural Network & Deep Learning', type: 'core', mappedGAs: ['GA-1', 'GA-3', 'GA-4', 'GA-5'], departmentId: 'computing' },
-    { id: 'C50', code: 'AIE423', title: 'Computer vision', type: 'core', mappedGAs: ['GA-1', 'GA-2', 'GA-4'], departmentId: 'computing' },
-    { id: 'C51', code: 'AIC331', title: 'Knowledge Representation & Reasoning', type: 'core', mappedGAs: ['GA-1', 'GA-2', 'GA-3', 'GA-4'], departmentId: 'computing' },
-    { id: 'C52', code: 'AIE441', title: 'Natural Language Processing', type: 'elective', mappedGAs: ['GA-1', 'GA-2', 'GA-4', 'GA-5'], departmentId: 'computing' },
-    { id: 'C53', code: 'CSE384', title: 'Data Science', type: 'elective', mappedGAs: ['GA-1', 'GA-2', 'GA-7'], departmentId: 'computing' },
-    { id: 'C54', code: 'SEN352', title: 'HCI & Computer Graphics', type: 'elective', mappedGAs: ['GA-1', 'GA-3', 'GA-4'], departmentId: 'computing' },
-    { id: 'C55', code: 'AINX7X', title: 'Image Processing & Analysis', type: 'elective', mappedGAs: ['GA-1', 'GA-2', 'GA-4'], departmentId: 'computing' },
-    { id: 'C56', code: 'AIE341', title: 'Deep Learning', type: 'elective', mappedGAs: ['GA-1', 'GA-2', 'GA-3', 'GA-4'], departmentId: 'computing' },
-    { id: 'C57', code: 'AINX7X', title: 'Big Data', type: 'elective', mappedGAs: ['GA-1', 'GA-2', 'GA-3', 'GA-4'], departmentId: 'computing' },
-    { id: 'C58', code: 'AINX7X', title: 'Artificial Intelligence For Robotics', type: 'elective', mappedGAs: ['GA-1', 'GA-2', 'GA-3', 'GA-4'], departmentId: 'computing' },
-
-    // Business Department Courses (BBA)
-    { id: 'CB1', code: 'BUS101', title: 'Principles of Management', type: 'core', mappedGAs: ['GA-B2', 'GA-B3', 'GA-B6'], departmentId: 'business' },
-    { id: 'CB2', code: 'MKT111', title: 'Principles of Marketing', type: 'core', mappedGAs: ['GA-B3', 'GA-B6', 'GA-B8'], departmentId: 'business' },
-    { id: 'CB3', code: 'ACC121', title: 'Financial Accounting', type: 'core', mappedGAs: ['GA-B1', 'GA-B4'], departmentId: 'business' },
-    { id: 'CB4', code: 'HRM211', title: 'Human Resource Management', type: 'core', mappedGAs: ['GA-B2', 'GA-B5', 'GA-B6'], departmentId: 'business' },
-    { id: 'CB5', code: 'ECO131', title: 'Microeconomics', type: 'core', mappedGAs: ['GA-B1', 'GA-B3'], departmentId: 'business' },
-    { id: 'CB6', code: 'MGT222', title: 'Organizational Behavior', type: 'core', mappedGAs: ['GA-B2', 'GA-B5', 'GA-B6'], departmentId: 'business' },
-    { id: 'CB7', code: 'FIN311', title: 'Business Finance', type: 'core', mappedGAs: ['GA-B1', 'GA-B4'], departmentId: 'business' },
-    { id: 'CB8', code: 'MGT331', title: 'Strategic Management', type: 'core', mappedGAs: ['GA-B3', 'GA-B5', 'GA-B7', 'GA-B8'], departmentId: 'business' },
-    { id: 'CB9', code: 'BUS491', title: 'BBA Capstone Project - I', type: 'core', mappedGAs: ['GA-B1', 'GA-B2', 'GA-B3', 'GA-B6'], departmentId: 'business' },
-    { id: 'CB10', code: 'BUS492', title: 'BBA Capstone Project - II', type: 'core', mappedGAs: ['GA-B1', 'GA-B2', 'GA-B3', 'GA-B4', 'GA-B5', 'GA-B6', 'GA-B7', 'GA-B8'], departmentId: 'business' },
-    { id: 'CB11', code: 'ENTR451', title: 'Social Entrepreneurship', type: 'elective', mappedGAs: ['GA-B5', 'GA-B8'], departmentId: 'business' },
-    { id: 'CB12', code: 'FIN462', title: 'Investment Portfolio Analysis', type: 'elective', mappedGAs: ['GA-B1', 'GA-B4', 'GA-B7'], departmentId: 'business' }
-  ]
+const EMPTY_OBE_DATA: OBEData = {
+  departments: [],
+  programs: [],
+  gas: [],
+  courses: []
 };
 
-// Lazy initialization helper for localStorage DB
+// Client-side cached data accessor. Strictly NEVER injects hardcoded/mock entities.
 const getLocalStorageData = (): OBEData => {
   const dataStr = localStorage.getItem('IQRA_OBE_FALLBACK_DB');
   if (dataStr) {
     try {
       const parsed = JSON.parse(dataStr);
-      let migrated = false;
-
-      // Force reset or migrate departments if they have old dataset
-      const hasBsai = parsed.programs && parsed.programs.some((p: any) => p.id === 'bsai');
-      if (!parsed.departments || parsed.departments.length < 5 || !hasBsai) {
-        parsed.departments = DEFAULT_FALLBACK_DATA.departments;
-        parsed.programs = DEFAULT_FALLBACK_DATA.programs;
-        parsed.gas = DEFAULT_FALLBACK_DATA.gas;
-        parsed.courses = DEFAULT_FALLBACK_DATA.courses;
-        migrated = true;
+      // Clean legacy mock dataset if previously cached in browser
+      if (Array.isArray(parsed.departments) && parsed.departments.some((d: any) => d.id === 'computing' && d.name?.includes('Department of Computing and Technology'))) {
+        localStorage.removeItem('IQRA_OBE_FALLBACK_DB');
+        return { ...EMPTY_OBE_DATA };
       }
-
-      if (Array.isArray(parsed.courses)) {
-        parsed.courses = parsed.courses.map((c: any) => {
-          if (c.departmentId === 'computing' && !c.programId) {
-            migrated = true;
-            return { ...c, programId: 'bscs' };
-          }
-          return c;
-        });
-      }
-      if (Array.isArray(parsed.gas) && parsed.gas.length > 0 && parsed.departments && parsed.departments.length >= 5) {
-        // Ensure GAs are migrated/present for all departments
-        const hasEngineeringGAs = parsed.gas.some((g: any) => g.departmentId === 'engineering');
-        if (!hasEngineeringGAs) {
-          parsed.gas = DEFAULT_FALLBACK_DATA.gas;
-          migrated = true;
-        }
-      } else {
-        migrated = true;
-        parsed.gas = DEFAULT_FALLBACK_DATA.gas.map(g => {
-          if (g.departmentId === 'computing') return { ...g, programId: 'bscs' };
-          if (g.departmentId === 'business') return { ...g, programId: 'bba' };
-          return g;
-        });
-      }
-      if (Array.isArray(parsed.programs)) {
-        parsed.programs = parsed.programs.map((p: any) => {
-          if (p.id === 'bscs') {
-            if (!p.vision) {
-              migrated = true;
-              p.vision = 'To produce computer science graduates of international standards with state-of-the-art skills.';
-            }
-            if (!p.mission) {
-              migrated = true;
-              p.mission = 'To empower students with deep scientific computer knowledge, preparing them for leading-edge industry roles.';
-            }
-          }
-          return p;
-        });
-      }
-      if (migrated) {
-        localStorage.setItem('IQRA_OBE_FALLBACK_DB', JSON.stringify(parsed));
-      }
-      
-      const deletedKeysStr = localStorage.getItem('IQRA_OBE_DELETED_COURSES');
-      if (deletedKeysStr && Array.isArray(parsed.courses)) {
-        try {
-          const deletedKeys = JSON.parse(deletedKeysStr);
-          parsed.courses = parsed.courses.filter((c: any) => {
-            const key1 = `${c.code}-${c.programId || ''}`.toLowerCase().trim();
-            const key2 = String(c.id).toLowerCase().trim();
-            return !deletedKeys.includes(key1) && !deletedKeys.includes(key2);
-          });
-        } catch (e) {
-          console.error(e);
-        }
-      }
-      return parsed;
-    } catch (e) {
-      console.error("Failed to parse local storage fallback, resetting to default.", e);
-    }
-  }
-
-  const base = { ...DEFAULT_FALLBACK_DATA };
-  base.courses = base.courses.map(c => {
-    if (c.departmentId === 'computing' && !c.programId) {
-      return { ...c, programId: 'bscs' };
-    }
-    return c;
-  });
-  base.gas = base.gas.map(g => {
-    if (g.departmentId === 'computing') {
-      return { ...g, programId: 'bscs' };
-    }
-    if (g.departmentId === 'business') {
-      return { ...g, programId: 'bba' };
-    }
-    return g;
-  });
-  base.programs = base.programs.map(p => {
-    const cleanedPos = Array.isArray(p.pos) ? p.pos.map(po => ({ ...po, mappedGAs: [] })) : [];
-    if (p.id === 'bscs') {
       return {
-        ...p,
-        pos: cleanedPos,
-        vision: 'To produce computer science graduates of international standards with state-of-the-art skills.',
-        mission: 'To empower students with deep scientific computer knowledge, preparing them for leading-edge industry roles.'
+        departments: Array.isArray(parsed.departments) ? parsed.departments : [],
+        programs: Array.isArray(parsed.programs) ? parsed.programs : [],
+        gas: Array.isArray(parsed.gas) ? parsed.gas : [],
+        courses: Array.isArray(parsed.courses) ? parsed.courses : []
       };
-    }
-    return { ...p, pos: cleanedPos };
-  });
-
-  const deletedKeysStrBase = localStorage.getItem('IQRA_OBE_DELETED_COURSES');
-  if (deletedKeysStrBase && Array.isArray(base.courses)) {
-    try {
-      const deletedKeys = JSON.parse(deletedKeysStrBase);
-      base.courses = base.courses.filter((c: any) => {
-        const key1 = `${c.code}-${c.programId || ''}`.toLowerCase().trim();
-        const key2 = String(c.id).toLowerCase().trim();
-        return !deletedKeys.includes(key1) && !deletedKeys.includes(key2);
-      });
     } catch (e) {
-      console.error(e);
+      console.error('Failed to parse cached local data', e);
     }
   }
-
-  localStorage.setItem('IQRA_OBE_FALLBACK_DB', JSON.stringify(base));
-  
-  return base;
+  return { ...EMPTY_OBE_DATA };
 };
 
 const saveLocalStorageData = (data: OBEData) => {
@@ -859,6 +403,48 @@ export const apiService = {
     return isBackendUser();
   },
 
+  async getDepartments(): Promise<Department[]> {
+    const res = await fetchWithTimeout(`${BASE_URL}/departments/`, { headers: getHeaders() });
+    if (!res.ok) throw new Error(`Failed to fetch departments: Status ${res.status}`);
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
+  },
+
+  async getPrograms(departmentId?: string): Promise<Program[]> {
+    const url = departmentId
+      ? `${BASE_URL}/programs/?department=${encodeURIComponent(departmentId)}`
+      : `${BASE_URL}/programs/`;
+    const res = await fetchWithTimeout(url, { headers: getHeaders() });
+    if (!res.ok) throw new Error(`Failed to fetch programs: Status ${res.status}`);
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
+  },
+
+  async getGAs(departmentId?: string, programId?: string): Promise<GA[]> {
+    let url = `${BASE_URL}/gas/`;
+    const params = new URLSearchParams();
+    if (departmentId) params.append('department', departmentId);
+    if (programId) params.append('program', programId);
+    if (params.toString()) url += `?${params.toString()}`;
+    const res = await fetchWithTimeout(url, { headers: getHeaders() });
+    if (!res.ok) throw new Error(`Failed to fetch Graduate Attributes (GAs): Status ${res.status}`);
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
+  },
+
+  async getCourses(programId?: string, departmentId?: string): Promise<Course[]> {
+    let url = `${BASE_URL}/courses/`;
+    const params = new URLSearchParams();
+    if (programId) params.append('program', programId);
+    if (departmentId) params.append('department', departmentId);
+    if (params.toString()) url += `?${params.toString()}`;
+    const res = await fetchWithTimeout(url, { headers: getHeaders() });
+    if (!res.ok) throw new Error(`Failed to fetch courses: Status ${res.status}`);
+    const data = await res.json();
+    const list = Array.isArray(data) ? data : [];
+    return list.map(normalizeCourse);
+  },
+
   async getAllData(): Promise<OBEData> {
     const [deptsRes, programsRes, gasRes, coursesRes] = await Promise.all([
       fetchWithTimeout(`${BASE_URL}/departments/`, { headers: getHeaders() }),
@@ -896,237 +482,124 @@ export const apiService = {
       }
     }
 
-    const resultData = {
+    const resultData: OBEData = {
       departments: Array.isArray(depts) ? depts : [],
       programs: Array.isArray(programs) ? programs : [],
       gas: Array.isArray(gas) ? gas : [],
-      courses: filteredCourses,
+      courses: filteredCourses
     };
 
-    // Keep the local fallback database completely updated with real server data
     try {
       localStorage.setItem('IQRA_OBE_FALLBACK_DB', JSON.stringify(resultData));
     } catch (e) {
-      console.warn("Failed to update IQRA_OBE_FALLBACK_DB in localStorage", e);
+      console.warn('Failed to update IQRA_OBE_FALLBACK_DB in localStorage', e);
     }
 
     return resultData;
   },
 
   async updateDepartment(id: string, data: Partial<Department>): Promise<Department> {
-    try {
-      const response = await fetchWithTimeout(`${BASE_URL}/departments/${id}/`, {
-        method: 'PATCH',
-        headers: getHeaders(),
-        body: JSON.stringify(data),
-      }, 8000);
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.detail || errData.error || errData.message || 'Failed to update department on server');
-      }
-      return response.json();
-    } catch (err) {
-      if (isBackendUser()) {
-        throw err;
-      }
-      console.warn("Saving department changes strictly in client-side storage (mock fallback active).");
-      const localData = getLocalStorageData();
-      const updatedDepts = localData.departments.map(d => {
-        if (d.id === id) {
-          return { ...d, ...data };
-        }
-        return d;
-      });
-      const updatedLocalData = { ...localData, departments: updatedDepts };
-      saveLocalStorageData(updatedLocalData);
-      return updatedDepts.find(d => d.id === id)!;
+    const response = await fetchWithTimeout(`${BASE_URL}/departments/${id}/`, {
+      method: 'PATCH',
+      headers: getHeaders(),
+      body: JSON.stringify(data),
+    }, 8000);
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      throw new Error(errData.detail || errData.error || errData.message || 'Failed to update department on server');
     }
+    return response.json();
   },
 
   async updateProgram(id: string, data: Partial<Program>): Promise<Program> {
-    try {
-      const response = await fetchWithTimeout(`${BASE_URL}/programs/${id}/`, {
-        method: 'PATCH',
-        headers: getHeaders(),
-        body: JSON.stringify(data),
-      }, 8000);
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.detail || errData.error || errData.message || 'Failed to update program on server');
-      }
-      return response.json();
-    } catch (err) {
-      if (isBackendUser()) {
-        throw err;
-      }
-      console.warn("Saving program changes strictly in client-side storage (mock fallback active).");
-      const localData = getLocalStorageData();
-      const updatedPrograms = localData.programs.map(p => {
-        if (p.id === id) {
-          return { ...p, ...data };
-        }
-        return p;
-      });
-      const updatedLocalData = { ...localData, programs: updatedPrograms };
-      saveLocalStorageData(updatedLocalData);
-      return updatedPrograms.find(p => p.id === id)!;
+    const response = await fetchWithTimeout(`${BASE_URL}/programs/${id}/`, {
+      method: 'PATCH',
+      headers: getHeaders(),
+      body: JSON.stringify(data),
+    }, 8000);
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      throw new Error(errData.detail || errData.error || errData.message || 'Failed to update program on server');
     }
+    return response.json();
   },
 
-  // Save Course Mapping (allows updating course to GA tick marks in local storage / server mock fallback!)
   async updateCourse(id: string, data: Partial<Course>, programId?: string): Promise<Course> {
-    // Merge data with existing course details to avoid missing required fields like title, code, etc.
-    const localData = getLocalStorageData();
-    const existingCourse = localData.courses.find(c => c.id === id);
-    const mergedCourse = {
-      ...existingCourse,
-      ...data,
-      id
-    } as Course;
-
-    const queryProg = programId || mergedCourse.programId;
-    try {
-      const isBackend = isBackendUser();
-      const mappedData = mapCourseToBackend(mergedCourse);
-      let url = `${BASE_URL}/courses/${id}/`;
-      if (queryProg) {
-        const cleanProg = String(queryProg).trim();
-        url += `?programId=${encodeURIComponent(cleanProg)}&program_id=${encodeURIComponent(cleanProg)}`;
-      }
-      const response = await fetchWithTimeout(url, {
-        method: 'PATCH',
-        headers: getHeaders(),
-        body: JSON.stringify(mappedData),
-      }, 8000);
-      if (response.ok) {
-        const responseData = await response.json();
-        const normalized = normalizeCourse(responseData);
-        
-        // Keep local cache always in sync with backend normalized data
-        const updatedCourses = localData.courses.map(c => c.id === id ? normalized : c);
-        saveLocalStorageData({ ...localData, courses: updatedCourses });
-        
-        return normalized;
-      }
+    const queryProg = programId || data.programId;
+    const mappedData = mapCourseToBackend({ ...data, id } as Course);
+    let url = `${BASE_URL}/courses/${id}/`;
+    if (queryProg) {
+      const cleanProg = String(queryProg).trim();
+      url += `?programId=${encodeURIComponent(cleanProg)}&program_id=${encodeURIComponent(cleanProg)}`;
+    }
+    const response = await fetchWithTimeout(url, {
+      method: 'PATCH',
+      headers: getHeaders(),
+      body: JSON.stringify(mappedData),
+    }, 8000);
+    if (!response.ok) {
       const errData = await response.json().catch(() => ({}));
       throw new Error(errData.detail || errData.error || errData.message || 'Failed to update course on server');
-    } catch (err) {
-      if (isBackendUser()) {
-        throw err;
-      }
     }
-    const updatedCourses = localData.courses.map(c => {
-      if (c.id === id) {
-        return normalizeCourse(mergedCourse);
-      }
-      return c;
-    });
-    const updatedLocalData = { ...localData, courses: updatedCourses };
-    saveLocalStorageData(updatedLocalData);
-    return updatedCourses.find(c => c.id === id)!;
+    const responseData = await response.json();
+    return normalizeCourse(responseData);
   },
 
   async deleteCourse(id: string, programId?: string): Promise<boolean> {
-    try {
-      const isBackend = isBackendUser();
-      let url = `${BASE_URL}/courses/${id}/`;
-      if (programId) {
-        const cleanProg = String(programId).trim();
-        url += `?programId=${encodeURIComponent(cleanProg)}&program_id=${encodeURIComponent(cleanProg)}`;
-      }
-      const response = await fetchWithTimeout(url, {
-        method: 'DELETE',
-        headers: getHeaders(),
-      }, 8000);
-      if (response.ok) {
-        if (!isBackend) {
-          const localData = getLocalStorageData();
-          const updatedCourses = localData.courses.filter(c => c.id !== id);
-          saveLocalStorageData({ ...localData, courses: updatedCourses });
-        }
-        return true;
-      } else {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.detail || errData.error || errData.message || 'Failed to delete course on server');
-      }
-    } catch (err) {
-      if (isBackendUser()) {
-        throw err;
-      }
+    let url = `${BASE_URL}/courses/${id}/`;
+    if (programId) {
+      const cleanProg = String(programId).trim();
+      url += `?programId=${encodeURIComponent(cleanProg)}&program_id=${encodeURIComponent(cleanProg)}`;
     }
-    const localData = getLocalStorageData();
-    const updatedCourses = localData.courses.filter(c => c.id !== id);
-    saveLocalStorageData({ ...localData, courses: updatedCourses });
+    const response = await fetchWithTimeout(url, {
+      method: 'DELETE',
+      headers: getHeaders(),
+    }, 8000);
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      throw new Error(errData.detail || errData.error || errData.message || 'Failed to delete course on server');
+    }
     return true;
   },
 
   async createProgram(data: Program, associatedGAs?: GA[]): Promise<Program> {
-    try {
-      if (associatedGAs && associatedGAs.length > 0) {
-        try {
-          await Promise.all(associatedGAs.map(async (ga) => {
-            await fetchWithTimeout(`${BASE_URL}/gas/`, {
-              method: 'POST',
-              headers: getHeaders(),
-              body: JSON.stringify(ga),
-            }, 3000).catch(e => {
-              if (isBackendUser()) throw e;
-              console.warn("Failed to save GA to backend", ga.id, e);
-            });
-          }));
-        } catch (gaErr) {
-          if (isBackendUser()) throw gaErr;
-          console.warn("Failed to batch save GAs to backend", gaErr);
+    if (associatedGAs && associatedGAs.length > 0) {
+      await Promise.all(associatedGAs.map(async (ga) => {
+        const gaRes = await fetchWithTimeout(`${BASE_URL}/gas/`, {
+          method: 'POST',
+          headers: getHeaders(),
+          body: JSON.stringify(ga),
+        }, 5000);
+        if (!gaRes.ok) {
+          const errData = await gaRes.json().catch(() => ({}));
+          throw new Error(errData.detail || errData.error || errData.message || `Failed to save GA: ${ga.name}`);
         }
-      }
-
-      const response = await fetchWithTimeout(`${BASE_URL}/programs/`, {
-        method: 'POST',
-        headers: getHeaders(),
-        body: JSON.stringify(data),
-      }, 8000);
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.detail || errData.error || errData.message || 'Failed to create program on server');
-      }
-      const responseData = await response.json();
-
-      const localData = getLocalStorageData();
-      const updatedPrograms = [...localData.programs, responseData];
-      const updatedGAs = associatedGAs ? [...localData.gas, ...associatedGAs] : localData.gas;
-      saveLocalStorageData({ ...localData, programs: updatedPrograms, gas: updatedGAs });
-
-      return responseData;
-    } catch (err) {
-      throw err;
+      }));
     }
+    const response = await fetchWithTimeout(`${BASE_URL}/programs/`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify(data),
+    }, 8000);
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      throw new Error(errData.detail || errData.error || errData.message || 'Failed to create program on server');
+    }
+    return response.json();
   },
 
   async createCourse(data: Course): Promise<Course> {
-    try {
-      const isBackend = isBackendUser();
-      const response = await fetchWithTimeout(`${BASE_URL}/courses/`, {
-        method: 'POST',
-        headers: getHeaders(),
-        body: JSON.stringify(mapCourseToBackend(data)),
-      }, 8000);
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.detail || errData.error || errData.message || 'Failed to create course on server');
-      }
-      const responseData = await response.json();
-      const normalized = normalizeCourse(responseData);
-
-      if (!isBackend) {
-        const localData = getLocalStorageData();
-        const updatedCourses = [...localData.courses, normalized];
-        saveLocalStorageData({ ...localData, courses: updatedCourses });
-      }
-
-      return normalized;
-    } catch (err) {
-      throw err;
+    const response = await fetchWithTimeout(`${BASE_URL}/courses/`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify(mapCourseToBackend(data)),
+    }, 8000);
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      throw new Error(errData.detail || errData.error || errData.message || 'Failed to create course on server');
     }
+    const responseData = await response.json();
+    return normalizeCourse(responseData);
   },
 
   getLocalInstructorCourses(): InstructorCourse[] {
@@ -1845,203 +1318,6 @@ export const apiService = {
     saveLocalStorageData(data);
   }
 };
-
-// Pre-populated high-fidelity dummy courses as placeholders if backend is down
-const DUMMY_PLAYGROUND_COURSES: InstructorCourse[] = [
-  {
-    id: "course-demo-1",
-    code: "SE-311",
-    title: "Software Engineering",
-    departmentId: "computing",
-    departmentName: "Department of Computing and Technology",
-    programId: "bscs",
-    programName: "Bachelor of Science in Computer Science (BSCS)",
-    creditHours: 3,
-    categories: [
-      { name: "Assignments", percentage: 15, units: 3 },
-      { name: "Quizzes", percentage: 10, units: 3 },
-      { name: "Class Participation", percentage: 5, units: 1 },
-      { name: "Class Project", percentage: 15, units: 1 },
-      { name: "Presentation", percentage: 5, units: 1 },
-      { name: "Lab Project", percentage: 0, units: 0 },
-      { name: "Problem Based Learning", percentage: 0, units: 0 },
-      { name: "Complex Problem", percentage: 0, units: 0 },
-      { name: "Other Activities", percentage: 0, units: 0 },
-      { name: "Viva", percentage: 0, units: 0 },
-      { name: "Lab Performance", percentage: 0, units: 0 },
-      { name: "Lab Reports", percentage: 0, units: 0 },
-      { name: "Mid Term", percentage: 20, units: 1 },
-      { name: "Final", percentage: 30, units: 1 }
-    ],
-    unitsData: {
-      "Assignments": [
-        { unitNo: 1, passing: 5, totalMarks: 10, weightage: 33.3 },
-        { unitNo: 2, passing: 5, totalMarks: 10, weightage: 33.3 },
-        { unitNo: 3, passing: 5, totalMarks: 10, weightage: 33.4 }
-      ],
-      "Quizzes": [
-        { unitNo: 1, passing: 5, totalMarks: 10, weightage: 33.3 },
-        { unitNo: 2, passing: 5, totalMarks: 10, weightage: 33.3 },
-        { unitNo: 3, passing: 5, totalMarks: 10, weightage: 33.4 }
-      ],
-      "Class Participation": [
-        { unitNo: 1, passing: 5, totalMarks: 10, weightage: 100 }
-      ],
-      "Class Project": [
-        { unitNo: 1, passing: 15, totalMarks: 30, weightage: 100 }
-      ],
-      "Presentation": [
-        { unitNo: 1, passing: 5, totalMarks: 10, weightage: 100 }
-      ],
-      "Mid Term": [
-        { unitNo: 1, passing: 15, totalMarks: 30, weightage: 100 }
-      ],
-      "Final": [
-        { unitNo: 1, passing: 20, totalMarks: 40, weightage: 100 }
-      ]
-    },
-    students: [
-      {
-        regNo: "012-fa22-22012",
-        name: "Abdur Rehman Khalid",
-        marks: {
-          "Assignments-1": 8.5,
-          "Assignments-2": 9.0,
-          "Assignments-3": 7.5,
-          "Quizzes-1": 7.0,
-          "Quizzes-2": 8.5,
-          "Quizzes-3": 9.0,
-          "Class Participation-1": 9.0,
-          "Class Project-1": 26.5,
-          "Presentation-1": 8.0,
-          "Mid Term-1": 24.5,
-          "Final-1": 34.0
-        }
-      },
-      {
-        regNo: "045-fa22-22045",
-        name: "Wajahat Bine Saif",
-        marks: {
-          "Assignments-1": 9.0,
-          "Assignments-2": 8.0,
-          "Assignments-3": 8.5,
-          "Quizzes-1": 8.0,
-          "Quizzes-2": 7.5,
-          "Quizzes-3": 6.5,
-          "Class Participation-1": 8.0,
-          "Class Project-1": 25.0,
-          "Presentation-1": 9.0,
-          "Mid Term-1": 22.0,
-          "Final-1": 32.5
-        }
-      },
-      {
-        regNo: "089-fa22-22089",
-        name: "Zayan Ahmed Khan",
-        marks: {
-          "Assignments-1": 7.5,
-          "Assignments-2": 7.0,
-          "Assignments-3": 8.0,
-          "Quizzes-1": 6.0,
-          "Quizzes-2": 5.0,
-          "Quizzes-3": 7.0,
-          "Class Participation-1": 7.0,
-          "Class Project-1": 22.0,
-          "Presentation-1": 7.5,
-          "Mid Term-1": 19.5,
-          "Final-1": 28.0
-        }
-      }
-    ],
-    obeQuestions: [],
-    obeMarks: {}
-  },
-  {
-    id: "course-demo-2",
-    code: "AI-381",
-    title: "Artificial Intelligence",
-    departmentId: "computing",
-    departmentName: "Department of Computing and Technology",
-    programId: "bscs",
-    programName: "Bachelor of Science in Computer Science (BSCS)",
-    creditHours: 3,
-    categories: [
-      { name: "Assignments", percentage: 10, units: 2 },
-      { name: "Quizzes", percentage: 10, units: 2 },
-      { name: "Class Participation", percentage: 5, units: 1 },
-      { name: "Class Project", percentage: 20, units: 1 },
-      { name: "Presentation", percentage: 5, units: 1 },
-      { name: "Lab Project", percentage: 0, units: 0 },
-      { name: "Problem Based Learning", percentage: 0, units: 0 },
-      { name: "Complex Problem", percentage: 0, units: 0 },
-      { name: "Other Activities", percentage: 0, units: 0 },
-      { name: "Viva", percentage: 0, units: 0 },
-      { name: "Lab Performance", percentage: 0, units: 0 },
-      { name: "Lab Reports", percentage: 0, units: 0 },
-      { name: "Mid Term", percentage: 20, units: 1 },
-      { name: "Final", percentage: 30, units: 1 }
-    ],
-    unitsData: {
-      "Assignments": [
-        { unitNo: 1, passing: 5, totalMarks: 10, weightage: 50 },
-        { unitNo: 2, passing: 5, totalMarks: 10, weightage: 50 }
-      ],
-      "Quizzes": [
-        { unitNo: 1, passing: 5, totalMarks: 10, weightage: 50 },
-        { unitNo: 2, passing: 5, totalMarks: 10, weightage: 50 }
-      ],
-      "Class Participation": [
-        { unitNo: 1, passing: 5, totalMarks: 10, weightage: 100 }
-      ],
-      "Class Project": [
-        { unitNo: 1, passing: 15, totalMarks: 30, weightage: 100 }
-      ],
-      "Presentation": [
-        { unitNo: 1, passing: 5, totalMarks: 10, weightage: 100 }
-      ],
-      "Mid Term": [
-        { unitNo: 1, passing: 15, totalMarks: 30, weightage: 100 }
-      ],
-      "Final": [
-        { unitNo: 1, passing: 20, totalMarks: 40, weightage: 100 }
-      ]
-    },
-    students: [
-      {
-        regNo: "012-fa22-22012",
-        name: "Abdur Rehman Khalid",
-        marks: {
-          "Assignments-1": 9.0,
-          "Assignments-2": 8.5,
-          "Quizzes-1": 8.0,
-          "Quizzes-2": 9.0,
-          "Class Participation-1": 9.0,
-          "Class Project-1": 27.0,
-          "Presentation-1": 8.5,
-          "Mid Term-1": 25.0,
-          "Final-1": 35.0
-        }
-      },
-      {
-        regNo: "104-fa22-22104",
-        name: "Misha Farooq",
-        marks: {
-          "Assignments-1": 8.0,
-          "Assignments-2": 8.0,
-          "Quizzes-1": 7.0,
-          "Quizzes-2": 7.5,
-          "Class Participation-1": 8.0,
-          "Class Project-1": 24.0,
-          "Presentation-1": 8.0,
-          "Mid Term-1": 21.0,
-          "Final-1": 31.0
-        }
-      }
-    ],
-    obeQuestions: [],
-    obeMarks: {}
-  }
-];
 
 const getLocalInstructorCourses = (): InstructorCourse[] => {
   try {

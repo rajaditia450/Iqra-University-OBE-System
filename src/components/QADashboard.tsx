@@ -194,7 +194,7 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
 
   // Core navigation selectors directly in header
   const [activeDeptId, setActiveDeptId] = useState<string>(() => {
-    return localStorage.getItem('IQRA_OBE_USER_DEPT_ID') || 'computing';
+    return localStorage.getItem('IQRA_OBE_USER_DEPT_ID') || '';
   });
   const [activeProgramId, setActiveProgramId] = useState<string>('');
   const [activeModule, setActiveModule] = useState<ActiveViewModule>('vision_mission');
@@ -257,16 +257,16 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
   const [newCourseCode, setNewCourseCode] = useState('');
   const [newCourseTitle, setNewCourseTitle] = useState('');
   const [newCourseType, setNewCourseType] = useState<'core' | 'elective'>('core');
-  const [newCourseDeptId, setNewCourseDeptId] = useState<string>('computing');
-  const [newCourseProgramId, setNewCourseProgramId] = useState<string>('bscs');
+  const [newCourseDeptId, setNewCourseDeptId] = useState<string>('');
+  const [newCourseProgramId, setNewCourseProgramId] = useState<string>('');
 
   // Course Editing states
   const [editingCourse, setEditingCourse] = useState<Course | null>(null);
   const [editCourseCode, setEditCourseCode] = useState('');
   const [editCourseTitle, setEditCourseTitle] = useState('');
   const [editCourseType, setEditCourseType] = useState<'core' | 'elective'>('core');
-  const [editCourseDeptId, setEditCourseDeptId] = useState('computing');
-  const [editCourseProgramId, setEditCourseProgramId] = useState('bscs');
+  const [editCourseDeptId, setEditCourseDeptId] = useState('');
+  const [editCourseProgramId, setEditCourseProgramId] = useState('');
 
   // Load backend or fallback mockups
   useEffect(() => {
@@ -299,34 +299,28 @@ export default function QADashboard({ onLogout }: QADashboardProps) {
         gas: res.gas || []
       });
       setError(null);
-    } catch (err) {
-      if (isBackend) {
-        setError("Could not retrieve data from the backend server. Please make sure the server is online.");
-        setData({
-          departments: [],
-          programs: [],
-          courses: [],
-          gas: []
-        });
-      } else {
-        console.warn("Backend server offline, loading local storage sandbox database...", err);
-        const localData = apiService.getLocalStorageData();
-
-        const filteredDepts = (localData.departments || []);
-        const filteredProgs = (localData.programs || []).filter((p: any) => p.departmentId === activeDeptId);
-        const filteredCourses = (localData.courses || []).filter((c: any) => c.departmentId === activeDeptId);
-
-        setData({
-          departments: filteredDepts,
-          programs: filteredProgs,
-          courses: filteredCourses,
-          gas: localData.gas || []
-        });
-      }
+    } catch (err: any) {
+      console.warn("Backend server error or offline:", err);
+      setError(err?.message || "Could not retrieve data from the backend server. Please make sure the server is online.");
+      setData({
+        departments: [],
+        programs: [],
+        courses: [],
+        gas: []
+      });
     } finally {
       setLoading(false);
     }
   };
+
+  // Auto-sync activeDeptId when departments load
+  useEffect(() => {
+    if (data?.departments && data.departments.length > 0) {
+      if (!activeDeptId || !data.departments.some(d => d.id === activeDeptId)) {
+        setActiveDeptId(data.departments[0].id);
+      }
+    }
+  }, [data]);
 
   // Synchronize department states when selected department changes
   const activeDepartment = useMemo(() => {

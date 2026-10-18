@@ -92,9 +92,13 @@ export default function StudentDirectory({
               className="w-full pl-8 pr-4 py-2.5 bg-white border border-slate-200 focus:ring-2 focus:ring-indigo-600/10 focus:border-indigo-600 rounded-xl font-sans text-xs text-slate-700 outline-none cursor-pointer transition-all appearance-none font-bold"
             >
               <option value="all">All Departments</option>
-              {departments.map(d => (
-                <option key={d.id} value={d.id}>{d.name}</option>
-              ))}
+              {departments.length === 0 ? (
+                <option value="" disabled>No departments found in database</option>
+              ) : (
+                departments.map(d => (
+                  <option key={d.id} value={d.id}>{d.name}</option>
+                ))
+              )}
             </select>
             <Building className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-3.5" />
           </div>
@@ -108,9 +112,13 @@ export default function StudentDirectory({
               className="w-full pl-8 pr-4 py-2.5 bg-white border border-slate-200 focus:ring-2 focus:ring-indigo-600/10 focus:border-indigo-600 rounded-xl font-sans text-xs text-slate-700 outline-none cursor-pointer transition-all appearance-none font-bold"
             >
               <option value="all">All Programs</option>
-              {filterPrograms.map(p => (
-                <option key={p.id} value={p.id}>{p.code} — {p.name}</option>
-              ))}
+              {filterPrograms.length === 0 ? (
+                <option value="" disabled>No programs found in database</option>
+              ) : (
+                filterPrograms.map(p => (
+                  <option key={p.id} value={p.id}>{p.code} — {p.name}</option>
+                ))
+              )}
             </select>
             <BookOpen className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-3.5" />
           </div>

@@ -165,24 +165,23 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
       setLoading(true);
       setError(null);
       
-      // Load departments & programs from apiService falling back to client-side storage
-      let dbData;
-      try {
-        dbData = await apiService.getAllData();
-      } catch (e) {
-        dbData = apiService.getLocalStorageData();
-      }
+      // Fetch departments & programs strictly from backend
+      const [fetchedDepts, fetchedPrograms] = await Promise.all([
+        apiService.getDepartments(),
+        apiService.getPrograms()
+      ]);
+      setDepartments(fetchedDepts || []);
+      setPrograms(fetchedPrograms || []);
       
-      setDepartments(dbData.departments || []);
-      setPrograms(dbData.programs || []);
-      
-      // Fetch students via the apiService (with offline localStorage fallback)
+      // Fetch students strictly from backend
       const studentList = await apiService.getStudents();
-      setStudents(studentList);
+      setStudents(studentList || []);
     } catch (err: any) {
       console.error("Error loading admission dashboard data", err);
-      setError("Failed to load records. Resetting system parameters.");
-    } finally {
+      setError(err?.message || "Failed to load data from backend server. Please verify backend connection.");
+      setDepartments([]);
+      setPrograms([]);
+      setStudents([]);
       setLoading(false);
     }
   };
@@ -521,11 +520,11 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
   };
 
   const handleDownloadTemplate = () => {
+    const sampleDept = departments[0]?.id || "DEPT_ID";
+    const sampleProg = programs[0]?.id || "PROG_ID";
     const headers = [
       ["Registration Number", "Student Name", "Email Address", "Department ID", "Program ID"],
-      ["045-fa22-22045", "Wajahat Bine Saif", "045-fa22-22045@iqra.edu.pk", "computing", "bscs"],
-      ["120-sp23-23120", "Zayan Ahmed Khan", "120-sp23-23120@iqra.edu.pk", "business", "bba"],
-      ["010-fa25-25010", "Abdur Rehman Khalid", "010-fa25-25010@iqra.edu.pk", "engineering", "be_ce"]
+      ["045-fa22-22045", "Wajahat Bine Saif", "045-fa22-22045@iqra.edu.pk", sampleDept, sampleProg]
     ];
     
     const ws = XLSX.utils.aoa_to_sheet(headers);
