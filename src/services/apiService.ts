@@ -1,4 +1,5 @@
 import { OBEData, Department, Program, GA, Course, ProgramObjective, InstructorCourse, Student } from '../types';
+import { DEFAULT_TEMP_PASSWORD } from '../utils/config';
 
 export const BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL || 'https://zeeshanbalti.pythonanywhere.com/api';
 
@@ -536,10 +537,17 @@ export const apiService = {
       method: 'PATCH',
       headers: getHeaders(),
       body: JSON.stringify(mappedData),
-    }, 8000);
+    }, 12000);
     if (!response.ok) {
       const errData = await response.json().catch(() => ({}));
-      throw new Error(errData.detail || errData.error || errData.message || 'Failed to update course on server');
+      const errMsg =
+        errData.detail ||
+        errData.error ||
+        errData.message ||
+        (errData.code ? (Array.isArray(errData.code) ? errData.code.join(', ') : errData.code) : null) ||
+        (errData.non_field_errors ? (Array.isArray(errData.non_field_errors) ? errData.non_field_errors.join(', ') : errData.non_field_errors) : null) ||
+        `Failed to update course "${id}" on server (Status ${response.status})`;
+      throw new Error(errMsg);
     }
     const responseData = await response.json();
     return normalizeCourse(responseData);
@@ -593,10 +601,37 @@ export const apiService = {
       method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify(mapCourseToBackend(data)),
-    }, 8000);
+    }, 12000);
     if (!response.ok) {
       const errData = await response.json().catch(() => ({}));
-      throw new Error(errData.detail || errData.error || errData.message || 'Failed to create course on server');
+      const errStr = JSON.stringify(errData).toLowerCase();
+      const isAlreadyExists =
+        response.status === 409 ||
+        (response.status === 400 && (
+          errStr.includes('already exist') ||
+          errStr.includes('unique') ||
+          errStr.includes('duplicate')
+        ));
+
+      if (isAlreadyExists) {
+        try {
+          const targetId = data.code || data.id;
+          return await this.updateCourse(targetId, data, data.programId);
+        } catch {
+          // If fallback update fails, fall through to detailed error
+        }
+      }
+
+      const errMsg =
+        errData.detail ||
+        errData.error ||
+        errData.message ||
+        (errData.code ? (Array.isArray(errData.code) ? errData.code.join(', ') : errData.code) : null) ||
+        (errData.title ? (Array.isArray(errData.title) ? errData.title.join(', ') : errData.title) : null) ||
+        (errData.program ? (Array.isArray(errData.program) ? errData.program.join(', ') : errData.program) : null) ||
+        (errData.non_field_errors ? (Array.isArray(errData.non_field_errors) ? errData.non_field_errors.join(', ') : errData.non_field_errors) : null) ||
+        `Failed to create course "${data.code || data.title}" on server (Status ${response.status})`;
+      throw new Error(errMsg);
     }
     const responseData = await response.json();
     return normalizeCourse(responseData);
@@ -830,7 +865,7 @@ export const apiService = {
         reg_no: s.regNo,
         regNo: s.regNo,
         name: s.name,
-        email: s.email,
+        email: (s.email || "").trim().toLowerCase(),
         department_id: s.departmentId,
         departmentId: s.departmentId,
         department: s.departmentId,
@@ -838,7 +873,8 @@ export const apiService = {
         programId: s.programId,
         program: s.programId,
         batch: s.batch,
-        semester: s.semester
+        semester: s.semester,
+        password: (s as any).password || DEFAULT_TEMP_PASSWORD
       };
     };
 
@@ -901,6 +937,7 @@ export const apiService = {
       }
       if ('batch' in s) mapped.batch = s.batch;
       if ('semester' in s) mapped.semester = s.semester;
+      mapped.password = (s as any).password || DEFAULT_TEMP_PASSWORD;
       return mapped;
     };
 

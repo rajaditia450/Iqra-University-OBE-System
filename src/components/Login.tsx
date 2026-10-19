@@ -38,11 +38,13 @@ export default function Login({ onLogin }: LoginProps) {
     const timeoutId = setTimeout(() => controller.abort(), 12000);
 
     try {
+      const cleanEmail = email.trim().toLowerCase();
+      const cleanPassword = password.trim();
       const res = await fetch(`${BASE_URL}/auth/login/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         signal: controller.signal,
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: cleanEmail, password: cleanPassword }),
       });
       clearTimeout(timeoutId);
 

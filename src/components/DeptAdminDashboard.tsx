@@ -1211,20 +1211,34 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
                 skippedCount++;
               }
             } else {
-              // Completely new course
-              const newC: Course = {
-                id: `course-imported-${Date.now()}-${idx}`,
-                code: codeClean,
-                title: titleClean,
-                type: typeClean,
-                departmentId: deptClean,
-                programId: progClean,
-                mappedGAs: [],
-                creditHours: creditHours,
-                courseType: parsedSubtype
-              };
-              coursesToCreate.push(newC);
-              importedCount++;
+              // Completely new course or duplicate in current file
+              const existingPendingIdx = coursesToCreate.findIndex(
+                c => c.code === codeClean && String(c.programId).trim().toLowerCase() === progClean
+              );
+              if (existingPendingIdx >= 0) {
+                // Merge/update duplicate row in the file
+                coursesToCreate[existingPendingIdx] = {
+                  ...coursesToCreate[existingPendingIdx],
+                  title: titleClean,
+                  type: typeClean,
+                  creditHours: creditHours,
+                  courseType: parsedSubtype
+                };
+              } else {
+                const newC: Course = {
+                  id: `course-imported-${Date.now()}-${idx}`,
+                  code: codeClean,
+                  title: titleClean,
+                  type: typeClean,
+                  departmentId: deptClean,
+                  programId: progClean,
+                  mappedGAs: [],
+                  creditHours: creditHours,
+                  courseType: parsedSubtype
+                };
+                coursesToCreate.push(newC);
+                importedCount++;
+              }
             }
           }
         });
@@ -1235,29 +1249,76 @@ export default function DeptAdminDashboard({ onLogout, adminName = "Department A
 
           if (isBackend) {
             setImportStatus({ type: 'idle', message: `Syncing ${importedCount} courses with backend server...` });
-            try {
-              // 1. Create new courses
-              const createdCourses = await Promise.all(coursesToCreate.map(async (c) => {
-                return await apiService.createCourse(c);
-              }));
+            
+            const createdCourses: Course[] = [];
+            const updatedCourses: Course[] = [];
+            const failedCourses: { code: string; title: string; reason: string }[] = [];
 
-              // 2. Update existing changed courses
-              const updatedCourses = await Promise.all(coursesToUpdate.map(async (up) => {
-                return await apiService.updateCourse(up.id, up.data, up.programId);
-              }));
+            // Process courses in batches of 3 to avoid overwhelming single-worker backend servers
+            const BATCH_SIZE = 3;
 
-              // 3. Assemble the updated state list
-              const updatedIds = new Set(coursesToUpdate.map(up => up.id));
-              const unaffectedCourses = courses.filter(c => !updatedIds.has(c.id));
-              finalCourseList = [...unaffectedCourses, ...createdCourses, ...updatedCourses];
-            } catch (backendErr: any) {
-              console.error("Backend bulk sync failed:", backendErr);
+            // 1. Create new courses in controlled batches
+            for (let i = 0; i < coursesToCreate.length; i += BATCH_SIZE) {
+              const chunk = coursesToCreate.slice(i, i + BATCH_SIZE);
+              await Promise.all(chunk.map(async (c) => {
+                try {
+                  const res = await apiService.createCourse(c);
+                  createdCourses.push(res);
+                } catch (cErr: any) {
+                  console.warn(`Failed to create course ${c.code}:`, cErr);
+                  // Attempt update as fallback if creation failed (e.g. course already exists in backend DB)
+                  try {
+                    const resUp = await apiService.updateCourse(c.code, c, c.programId);
+                    updatedCourses.push(resUp);
+                  } catch (upErr: any) {
+                    failedCourses.push({
+                      code: c.code,
+                      title: c.title,
+                      reason: cErr.message || 'Server rejected course'
+                    });
+                  }
+                }
+              }));
+            }
+
+            // 2. Update existing changed courses in controlled batches
+            for (let i = 0; i < coursesToUpdate.length; i += BATCH_SIZE) {
+              const chunk = coursesToUpdate.slice(i, i + BATCH_SIZE);
+              await Promise.all(chunk.map(async (up) => {
+                try {
+                  const res = await apiService.updateCourse(up.id, up.data, up.programId);
+                  updatedCourses.push(res);
+                } catch (upErr: any) {
+                  console.warn(`Failed to update course ${up.id}:`, upErr);
+                  failedCourses.push({
+                    code: up.id,
+                    title: up.data.title || up.id,
+                    reason: upErr.message || 'Server rejected update'
+                  });
+                }
+              }));
+            }
+
+            // 3. Assemble the updated state list incorporating all successes
+            const updatedCodes = new Set([
+              ...coursesToUpdate.map(up => up.id),
+              ...createdCourses.map(c => c.id),
+              ...createdCourses.map(c => c.code),
+              ...updatedCourses.map(c => c.id),
+              ...updatedCourses.map(c => c.code)
+            ]);
+            const unaffectedCourses = courses.filter(c => !updatedCodes.has(c.id) && !updatedCodes.has(c.code));
+            finalCourseList = [...unaffectedCourses, ...createdCourses, ...updatedCourses];
+
+            if (failedCourses.length > 0) {
+              const sampleFail = failedCourses.slice(0, 2).map(f => `${f.code} (${f.reason})`).join(', ');
+              const moreText = failedCourses.length > 2 ? ` and ${failedCourses.length - 2} other(s)` : '';
+              console.warn("Backend bulk sync finished with partial failures:", failedCourses);
               setImportStatus({
                 type: 'error',
-                message: `Failed to register imported courses on backend database. Error: ${backendErr.message || backendErr}`
+                message: `Synced ${createdCourses.length + updatedCourses.length} courses. ${failedCourses.length} course(s) could not be registered: ${sampleFail}${moreText}.`
               });
-              triggerNotification("Failed to sync imported courses to backend", true);
-              return;
+              triggerNotification(`Synced ${createdCourses.length + updatedCourses.length} courses (${failedCourses.length} failed).`, true);
             }
           } else {
             // Offline fallback / local storage only

@@ -30,15 +30,19 @@ import StudentDirectory from './admission/StudentDirectory';
 import StudentDelete from './admission/StudentDelete';
 
 export const getRegNoPreview = (regNo: string) => {
-  const match = regNo.trim().match(/(FA|SP)(\d{2})/i);
+  const match = regNo.trim().match(/(FA|SP|SU|SM|WI)(\d{2,4})/i);
   if (!match) {
     return null;
   }
   const prefix = match[1].toUpperCase();
-  const yearDigits = parseInt(match[2]);
+  let yearDigits = parseInt(match[2], 10);
+  if (yearDigits >= 1000) {
+    yearDigits = yearDigits % 100;
+  }
   const startYear = 2000 + yearDigits;
-  const startSemesterName = prefix === 'SP' ? 'Spring' : 'Fall';
-  const batchCode = `${prefix}${match[2]}`;
+  const startSemesterName: 'Spring' | 'Summer' | 'Fall' =
+    prefix === 'SP' ? 'Spring' : (prefix === 'SU' || prefix === 'SM') ? 'Summer' : 'Fall';
+  const batchCode = `${prefix}${yearDigits.toString().padStart(2, '0')}`;
 
   // Calculate Semester
   // Spring starts in February (Month 1), Fall starts in September (Month 8)
@@ -182,6 +186,7 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
       setDepartments([]);
       setPrograms([]);
       setStudents([]);
+    } finally {
       setLoading(false);
     }
   };
@@ -294,10 +299,10 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
       return;
     }
 
-    // Check pattern for registration number e.g. 052-sp23-22055
-    const regPattern = /^\d{3}-(sp|fa)\d{2}-\d{5}$/i;
+    // Check pattern for registration number (flexible: allows any campus/dept prefix, any semester/year, and any number of roll digits e.g. 052-SP23-1 or 052-FA24-22055)
+    const regPattern = /^[a-zA-Z0-9]+(-[a-zA-Z0-9]+)+$/i;
     if (!regPattern.test(cleanRegNo)) {
-      setFormError("Invalid registration number format. Must follow exactly: 052-sp23-22055");
+      setFormError("Invalid registration number format.");
       return;
     }
 
@@ -472,8 +477,8 @@ export default function AdmissionDashboard({ onLogout, admissionName = "Admissio
           const errors: string[] = [];
           if (!regNoVal) {
             errors.push("Missing Registration No.");
-          } else if (!/^\d{3}-(sp|fa)\d{2}-\d{5}$/i.test(regNoVal)) {
-            errors.push("Invalid registration format. Expected format: 052-sp23-22055");
+          } else if (!/^[a-zA-Z0-9]+(-[a-zA-Z0-9]+)+$/i.test(regNoVal)) {
+            errors.push("Invalid registration format.");
           }
           if (!nameVal) errors.push("Missing Student Name.");
           if (!deptVal) errors.push("Missing Department ID.");
